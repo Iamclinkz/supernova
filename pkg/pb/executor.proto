@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package api;
+
+option go_package = "api";
+
+service Executor{
+    rpc HeartBeat(HeartBeatRequest) returns (HeartBeatResponse);
+
+    rpc RunJob(RunJobRequest) returns (RunJobResponse);
+}
+
+message HeartBeatRequest{
+
+}
+
+message HeartBeatResponse{
+    int32 Cpu = 1;
+    int32 Memory = 2;
+    int32 RunningJob = 3;
+}
+
+message RunJobRequest{
+    int32 glueType = 1;
+    string glueSource = 2;
+    int64 executorExecuteTimeoutMs = 3;
+}
+
+message RunJobResponse{
+    bool ok = 1;
+    string err = 2;
+    string result = 3;
+}
