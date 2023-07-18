@@ -2,8 +2,10 @@ package util
 
 import "time"
 
-const veryLongTime = 253402300799
+func VeryLateTime() time.Time {
+	return time.Date(2030, 12, 31, 23, 59, 59, 0, time.UTC)
+}
 
-func VeryLongTime() time.Time {
-	return time.Unix(veryLongTime, 0)
+func VeryEarlyTime() time.Time {
+	return time.Date(2000, 12, 31, 23, 59, 59, 0, time.UTC)
 }

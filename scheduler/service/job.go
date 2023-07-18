@@ -42,7 +42,7 @@ func (s *JobService) AddJob(ctx context.Context, job *model.Job) error {
 }
 
 func (s *JobService) DeleteJob(ctx context.Context, jobID uint) error {
-	if err := s.jobOperator.DeleteTriggerFromID(ctx, jobID); err != nil {
+	if err := s.jobOperator.DeleteJobFromID(ctx, jobID); err != nil {
 		return err
 	}
 

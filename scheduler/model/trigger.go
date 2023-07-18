@@ -2,16 +2,18 @@ package model
 
 import (
 	"fmt"
-	"github.com/robfig/cron/v3"
-	"gorm.io/gorm"
+	"strings"
 	"supernova/pkg/constance"
 	"supernova/scheduler/util"
 	"time"
+
+	"github.com/robfig/cron/v3"
+	"gorm.io/gorm"
 )
 
 type Trigger struct {
-	gorm.Model
-	Name string `gorm:"column:name;type:varchar(64);unique"`
+	gorm.Model `json:"-"`
+	Name       string `gorm:"column:name;type:varchar(64);unique"`
 
 	//关联的任务ID
 	JobID uint `gorm:"not null;index"`
@@ -34,32 +36,64 @@ type Trigger struct {
 	// 当前状态
 	Status constance.TriggerStatus `gorm:"column:status;type:tinyint(4);not null"`
 	//关联的Job的修改时间
-	JobUpdateTime time.Time
+	//JobUpdateTime time.Time `json:"-"`
+}
+
+func (t *Trigger) String() string {
+	return fmt.Sprintf("Trigger{ID: %d, Name: %s, JobID: %d, ScheduleType: %d, ScheduleConf: %s,"+
+		" MisfireStrategy: %s, FailRetryCount: %d, TriggerTimeout: %s, TriggerLastTime: %s, TriggerNextTime: %s, Status: %s}",
+		t.ID,
+		t.Name,
+		t.JobID,
+		t.ScheduleType,
+		t.ScheduleConf,
+		t.MisfireStrategy,
+		t.FailRetryCount,
+		t.TriggerTimeout,
+		t.TriggerLastTime.Format(time.RFC3339),
+		t.TriggerNextTime.Format(time.RFC3339),
+		t.Status,
+	)
 }
 
 func (t *Trigger) TableName() string {
 	return "t_trigger"
 }
 
+// SecondParser 精确到秒的parser
+var SecondParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Second)
+
+// NextExecutionTime 获取下一次Fire的时间
 func (t *Trigger) NextExecutionTime() (time.Time, error) {
 	switch t.ScheduleType {
 	case constance.ScheduleTypeNone, constance.ScheduleTypeOnce:
-		//如果是不执行，或者只执行依次，那么下次执行时间设置为很久以后
-		return util.VeryLongTime(), nil
+		//如果是不执行，或者只执行一次，那么下次执行时间设置为很久以后
+		return util.VeryLateTime(), nil
 	case constance.ScheduleTypeCron:
-		cronParser, err := cron.ParseStandard(t.ScheduleConf)
+		cronParser, err := SecondParser.Parse(t.ScheduleConf)
 		if err != nil {
-			return util.VeryLongTime(), err
+			return util.VeryLateTime(), err
 		}
-		return cronParser.Next(time.Now()), nil
+		return cronParser.Next(t.TriggerNextTime), nil
 	default:
-		return util.VeryLongTime(), fmt.Errorf("unknown schedule type: %v", t.ScheduleType)
+		return util.VeryLateTime(), fmt.Errorf("unknown schedule type: %v", t.ScheduleType)
 	}
 }
 
+// OnFire Trigger准备被fire时调用，目前只是更新下次fire时间，并检查本次fire时间是否正确
 func (t *Trigger) OnFire() error {
 	var err error
-	t.TriggerLastTime = time.Now()
+	t.TriggerLastTime = t.TriggerNextTime
 	t.TriggerNextTime, err = t.NextExecutionTime()
 	return err
+}
+
+func TriggersToString(triggers []*Trigger) string {
+	var builder strings.Builder
+	builder.WriteString("find triggers:\n")
+	for i, trigger := range triggers {
+		builder.WriteString(fmt.Sprintf("Trigger %d: %s\n", i+1, trigger.String()))
+	}
+
+	return builder.String()
 }

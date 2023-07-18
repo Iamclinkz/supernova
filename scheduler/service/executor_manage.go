@@ -1,13 +1,14 @@
 package service
 
 import (
-	"github.com/cloudwego/kitex/pkg/klog"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/executor_operator"
 	"sync"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 type ExecutorManageService struct {
@@ -66,6 +67,9 @@ func (s *ExecutorManageService) updateExecutor() {
 
 	for _, newInstance := range newServiceInstances {
 		//合并新旧executor
+		if newInstance == nil {
+			panic("")
+		}
 		oldInstance, ok := s.executors[newInstance.InstanceId]
 
 		if ok && oldInstance.Executor.Port == newInstance.Port && oldInstance.Executor.Host == newInstance.Host {

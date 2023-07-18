@@ -9,6 +9,8 @@ import (
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/util"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 type TriggerService struct {
@@ -29,8 +31,9 @@ func (s *TriggerService) DeleteTriggerFromID(ctx context.Context, triggerID uint
 
 func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context, useTx bool) ([]*model.OnFireLog, error) {
 	var (
-		beginTriggerHandleTime = time.Now()
-		endTriggerHandleTime   = beginTriggerHandleTime.Add(s.statisticsService.GetHandleTriggerDuration())
+		now                    = time.Now()
+		beginTriggerHandleTime = now.Add(-s.statisticsService.GetHandleTriggerForwardDuration())
+		endTriggerHandleTime   = time.Now().Add(s.statisticsService.GetHandleTriggerDuration())
 		err                    error
 		txCtx                  = context.TODO()
 		onFireTriggers         []*model.OnFireLog
@@ -49,23 +52,37 @@ func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context, useTx bool)
 		goto badEnd
 	}
 
+	if len(triggers) == 0 {
+		goto emptyEnd
+	}
+
+	klog.Trace(model.TriggersToString(triggers))
+
 	onFireTriggers = make([]*model.OnFireLog, 0, len(triggers))
 	//3.依次让trigger更新自己，如果有问题的，则需要删除trigger
 	for _, trigger := range triggers {
 		//这里需要注意，如果一个trigger的触发时间很短，例如1s一次，而我们的HandleTriggerDuration较长，例如5s一次，
 		//那么需要直接OnFire这个trigger 5次，并且更新trigger的nextFireTime到6s以后
-		for true {
+		for {
+			if trigger.TriggerNextTime.Before(now) {
+				//todo 这里需要处理misfire逻辑
+				//这里赋值成fireTime，时间轮有容错。
+				//todo:这里再想一下，暂时测试方便，改一下TriggerLastTime了
+				trigger.TriggerNextTime = now
+			}
 			fireTime := trigger.TriggerNextTime
-			onFireLog := trigger.OnFire()
 
-			if onFireLog != nil {
+			onFireErr := trigger.OnFire()
+
+			if onFireErr != nil {
 				//如果fire失败，那么设置trigger的状态为error，不处理后面的了
 				trigger.Status = constance.TriggerStatusError
-				trigger.TriggerNextTime = util.VeryLongTime()
+				trigger.TriggerNextTime = util.VeryLateTime()
+				klog.Errorf("find error trigger:[%+v] when calling OnFire, err:%v", trigger, onFireErr)
 				break
 			}
 
-			onFireTriggers = append(onFireTriggers, &model.OnFireLog{
+			onFireTrigger := &model.OnFireLog{
 				TriggerID:        trigger.ID,
 				JobID:            trigger.JobID,
 				Status:           constance.OnFireStatusWaiting,
@@ -73,19 +90,26 @@ func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context, useTx bool)
 				ExecutorInstance: "",
 				TimeoutAt:        fireTime.Add(trigger.TriggerTimeout),
 				ShouldFireAt:     fireTime,
-			})
-
+			}
+			onFireTriggers = append(onFireTriggers, onFireTrigger)
+			klog.Tracef("update on fire trigger:%+v", onFireTrigger)
 			if trigger.TriggerNextTime.After(endTriggerHandleTime) {
 				break
 			}
 		}
 	}
 
-	if err = s.scheduleOperator.InsertOnFires(txCtx, onFireTriggers); err != nil {
+	//不管怎么样都需要更新一下triggers，即使某个trigger发生了错误，也需要更新trigger的status为Error
+	if err = s.scheduleOperator.UpdateTriggers(txCtx, triggers); err != nil {
 		goto badEnd
 	}
-	if err = s.scheduleOperator.UpdateTriggers(txCtx, triggers); err != nil {
-		_ = s.scheduleOperator.OnTxFail(txCtx)
+
+	if len(onFireTriggers) == 0 {
+		klog.Warnf("fetch triggers:%s, but none of them should be fired", triggers)
+		goto emptyEnd
+	}
+
+	if err = s.scheduleOperator.InsertOnFires(txCtx, onFireTriggers); err != nil {
 		goto badEnd
 	}
 
@@ -100,10 +124,16 @@ func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context, useTx bool)
 badEnd:
 	if useTx {
 		if txFailErr := s.scheduleOperator.OnTxFail(txCtx); txFailErr != nil {
-			return nil, errors.New(fmt.Sprintf("fetchUpdateMarkTrigger txFailErr:%v, originError:%v", txFailErr, err))
+			return nil, fmt.Errorf("fetchUpdateMarkTrigger txFailErr:%v, originError:%v", txFailErr, err)
 		}
 	}
 	return nil, err
+
+emptyEnd:
+	if useTx {
+		_ = s.scheduleOperator.OnTxFinish(txCtx)
+	}
+	return []*model.OnFireLog{}, nil
 }
 
 func (s *TriggerService) AddTrigger(ctx context.Context, trigger *model.Trigger) error {
@@ -145,6 +175,15 @@ func (s *TriggerService) ValidateTrigger(trigger *model.Trigger) error {
 
 	if trigger.TriggerTimeout < time.Millisecond*20 {
 		return errors.New("trigger_timeout must be greater than 20ms")
+	}
+
+	//检查对应的job是否存在
+	jobExist, err := s.scheduleOperator.IsJobIDExist(context.TODO(), trigger.JobID)
+	if err != nil {
+		return err
+	}
+	if !jobExist {
+		return fmt.Errorf("no jobID:%v", trigger.JobID)
 	}
 
 	return nil

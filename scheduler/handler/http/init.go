@@ -1,19 +1,20 @@
 package http
 
 import (
-	"github.com/gin-gonic/gin"
 	"supernova/scheduler/app"
+
+	"github.com/gin-gonic/gin"
 )
 
 func InitHttpHandler(scheduler *app.Scheduler) *gin.Engine {
-	// 创建 JobHandler 和 TriggerHandler 实例
 	jobHandler := NewJobHandler(scheduler.GetJobService())
 	triggerHandler := NewTriggerHandler(scheduler.GetTriggerService())
 
-	// 初始化 Gin 路由
 	router := gin.Default()
 
-	// 注册 Job 和 Trigger 路由
+	//todo 只是debug使用
+	//router.Use(middleware.PrintGinHeader)
+
 	jobRouter := router.Group("/")
 	jobHandler.RegisterRoutes(jobRouter)
 

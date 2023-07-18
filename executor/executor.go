@@ -1,25 +1,27 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
-	"supernova/scheduler/util"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Executor struct {
 	discoveryClient discovery.Client
 }
 
-func (e *Executor) Start() error {
+func (e *Executor) Start(tags string, healthPort string, grpcPort int) error {
 	ins := new(discovery.ServiceInstance)
 	ins.Host = GrpcHost
-	ins.Port = GrpcPort
-	ins.Meta = make(map[string]string, 3)
-	ins.Meta[constance.ExecutorTagFieldName] = util.EncodeTag([]string{"tag-shell", "tag-1"})
+	ins.Port = grpcPort
+	ins.Meta = make(map[string]string, 1)
+	//ins.Meta[constance.ExecutorTagFieldName] = util.EncodeTag([]string{"tagShell", "tagA"})
+	ins.Meta[constance.ExecutorTagFieldName] = tags
 	ins.Protoc = discovery.ProtocTypeGrpc
 	ins.ServiceName = constance.ExecutorServiceName
-	ins.MiddlewareHealthCheckUrl = "9.134.5.191:10001"
+	ins.InstanceId = "Executor-" + healthPort
+	ins.MiddlewareHealthCheckUrl = "http://9.134.5.191:" + healthPort + "/health"
 
 	router := gin.Default()
 
@@ -32,7 +34,7 @@ func (e *Executor) Start() error {
 
 	// 监听指定的 IP 地址和端口
 	go func() {
-		err := router.Run(":10001")
+		err := router.Run(":" + healthPort)
 		if err != nil {
 			panic(err)
 		}

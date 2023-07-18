@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 // 魔改的大致from：https://github.com/rfyiamcool/go-timewheel
@@ -237,6 +239,8 @@ func (tw *TimeWheel) addAny(delay time.Duration, callback func(), circle, async 
 	task.callback = callback
 	task.circle = circle
 	task.async = async
+
+	klog.Tracef("add task to timeWheel:%+v", task)
 
 	tw.put(task)
 	return task

@@ -4,9 +4,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"supernova/scheduler/model"
 	"supernova/scheduler/service"
+
+	"github.com/gin-gonic/gin"
 )
 
 type JobHandler struct {

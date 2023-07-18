@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gorm.io/gorm"
 	"supernova/pkg/constance"
 	"supernova/scheduler/dal"
 	"supernova/scheduler/model"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 var _ Operator = (*MysqlOperator)(nil)
@@ -27,6 +28,11 @@ func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
 		emptyTrigger:   &model.Trigger{},
 		emptyJob:       &model.Job{},
 	}
+
+	//todo 测试用，记得删掉
+	cli.DB().Migrator().DropTable(ret.emptyJob)
+	cli.DB().Migrator().DropTable(ret.emptyTrigger)
+	cli.DB().Migrator().DropTable(ret.emptyOnFireLog)
 
 	if err := cli.DB().AutoMigrate(ret.emptyJob); err != nil {
 		return nil, err
@@ -47,8 +53,10 @@ func (m *MysqlOperator) DeleteTriggerFromID(ctx context.Context, triggerID uint)
 		tx = m.db.DB()
 	}
 
-	if err := tx.Where("id = ?", triggerID).Delete(m.emptyTrigger).Error; err != nil {
-		return fmt.Errorf("failed to delete trigger: %w", err)
+	if result := tx.Unscoped().Where("id = ?", triggerID).Delete(m.emptyTrigger); result.Error != nil {
+		return result.Error
+	} else if result.RowsAffected == 0 {
+		return fmt.Errorf("no triggerID:%v", triggerID)
 	}
 
 	return nil
@@ -60,7 +68,7 @@ func (m *MysqlOperator) DeleteOnFireLogFromID(ctx context.Context, onFireLogID u
 		tx = m.db.DB()
 	}
 
-	if err := tx.Where("id = ?", onFireLogID).Delete(m.emptyOnFireLog).Error; err != nil {
+	if err := tx.Unscoped().Where("id = ?", onFireLogID).Delete(m.emptyOnFireLog).Error; err != nil {
 		return fmt.Errorf("failed to delete on fire log: %w", err)
 	}
 
@@ -147,14 +155,16 @@ func (m *MysqlOperator) FetchJobFromID(ctx context.Context, jobID uint) (*model.
 	}
 
 	job := new(model.Job)
-	err := db.Find(job).Where("id = ?", jobID).Error
+	err := db.Where("id = ?", jobID).Find(job).Error
+
+	if job.ID == 0 || err == gorm.ErrRecordNotFound {
+		return nil, ErrNotFound
+	}
 
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, ErrNotFound
-		}
 		return nil, err
 	}
+
 	return job, nil
 }
 
@@ -221,13 +231,43 @@ func (m *MysqlOperator) FetchTriggerFromID(ctx context.Context, triggerID uint) 
 	}
 
 	trigger := new(model.Trigger)
-	err := db.Find(trigger).Where("id = ?", triggerID).Error
+	err := db.Where("id = ?", triggerID).Find(trigger).Error
+
+	if trigger.ID == 0 || err == gorm.ErrRecordNotFound {
+		return nil, ErrNotFound
+	}
 
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, ErrNotFound
-		}
 		return nil, err
 	}
 	return trigger, nil
+}
+
+func (m *MysqlOperator) DeleteJobFromID(ctx context.Context, jobID uint) error {
+	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	if !ok {
+		tx = m.db.DB()
+	}
+
+	if result := tx.Unscoped().Where("id = ?", jobID).Delete(m.emptyJob); result.Error != nil {
+		return result.Error
+	} else if result.RowsAffected == 0 {
+		return fmt.Errorf("no jobID:%v", jobID)
+	}
+
+	return nil
+}
+
+func (m *MysqlOperator) IsJobIDExist(ctx context.Context, jobID uint) (bool, error) {
+	_, err := m.FetchJobFromID(ctx, jobID)
+
+	if err == nil {
+		return true, nil
+	}
+
+	if err == ErrNotFound {
+		return false, nil
+	}
+
+	return false, err
 }

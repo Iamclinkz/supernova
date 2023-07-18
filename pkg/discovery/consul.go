@@ -1,12 +1,13 @@
 package discovery
 
 import (
+	"strconv"
+	"sync"
+
 	"github.com/cloudwego/kitex/pkg/klog"
 	"github.com/go-kit/kit/sd/consul"
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/api/watch"
-	"strconv"
-	"sync"
 )
 
 type ConsulDiscoverClient struct {
@@ -89,7 +90,7 @@ func (consulClient *ConsulDiscoverClient) DiscoverServices(serviceName string) [
 				if !ok {
 					return
 				}
-				var instances []interface{}
+				var instances []*ServiceInstance
 				for _, entry := range v {
 					instance := convertAgentServiceToServiceInstance(entry.Service)
 					if instance != nil {
@@ -101,7 +102,7 @@ func (consulClient *ConsulDiscoverClient) DiscoverServices(serviceName string) [
 			defer plan.Stop()
 			err := plan.Run(consulClient.config.Address)
 			if err != nil {
-				klog.Error("DiscoverServices", err)
+				klog.Errorf("DiscoverServices plan err:%v", err)
 				return
 			}
 		}()
@@ -109,11 +110,11 @@ func (consulClient *ConsulDiscoverClient) DiscoverServices(serviceName string) [
 
 	entries, _, err := consulClient.client.Service(serviceName, "", false, nil)
 	if err != nil {
-		consulClient.instancesMap.Store(serviceName, []interface{}{})
+		consulClient.instancesMap.Store(serviceName, []*ServiceInstance{})
 		klog.Error("Discover ServiceInstance Error!")
 		return nil
 	}
-	instances := make([]*ServiceInstance, len(entries))
+	instances := make([]*ServiceInstance, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Checks.AggregatedStatus() == api.HealthPassing {
 			instance := convertAgentServiceToServiceInstance(entry.Service)

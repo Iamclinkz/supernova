@@ -1,6 +1,9 @@
 package service
 
-import "time"
+import (
+	"supernova/scheduler/util"
+	"time"
+)
 
 type StatisticsService struct {
 }
@@ -11,6 +14,11 @@ func NewStatisticsService() *StatisticsService {
 
 func (s *StatisticsService) GetHandleTriggerDuration() time.Duration {
 	return time.Second * 3
+}
+
+func (s *StatisticsService) GetHandleTriggerForwardDuration() time.Duration {
+	//todo 测试使用
+	return time.Since(util.VeryEarlyTime())
 }
 
 func (s *StatisticsService) GetHandleTriggerMaxCount() int {

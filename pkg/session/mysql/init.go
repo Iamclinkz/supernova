@@ -3,11 +3,12 @@ package mysql
 import (
 	"database/sql"
 	"fmt"
+	"supernova/pkg/conf"
+
 	"github.com/cloudwego/kitex/pkg/klog"
 	_ "github.com/go-sql-driver/mysql"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"supernova/pkg/conf"
 )
 
 func initMysql(host, port, userName, password, dbName string, maxIdleConns, maxOpenConns int) (*gorm.DB, error) {
@@ -43,7 +44,7 @@ func InitMysql(mysqlConf *conf.MysqlConf) (*gorm.DB, error) {
 		mysqlConf.MaxIdleConnections, mysqlConf.MaxOpenConnections); err != nil {
 		return nil, fmt.Errorf("fail to connect mysql at config:%+v, error:%v", mysqlConf, err)
 	} else {
-		klog.Info("mysql init success with config:%+v", mysqlConf)
+		klog.Infof("mysql init success with config:%+v", mysqlConf)
 		return db, nil
 	}
 }

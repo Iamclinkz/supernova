@@ -2,15 +2,16 @@ package model
 
 import (
 	"errors"
-	"gorm.io/gorm"
 	"supernova/pkg/api"
 	"supernova/pkg/constance"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type Job struct {
-	gorm.Model
-	Name string `gorm:"column:name;type:varchar(64);unique"`
+	gorm.Model `json:"-"`
+	Name       string `gorm:"column:name;type:varchar(64);unique"`
 
 	// 选择执行器的策略
 	ExecutorRouteStrategy constance.ExecutorRouteStrategyType `gorm:"column:executor_route_strategy;type:tinyint(4);not null"`
@@ -43,6 +44,14 @@ type RunJobResponse struct {
 	Ok     bool
 	Err    error
 	Result string
+}
+
+func NewRunJobRequestFromJob(job *Job) *RunJobRequest {
+	return &RunJobRequest{
+		GlueType:               job.GlueType,
+		GlueSource:             job.GlueSource,
+		ExecutorExecuteTimeout: job.ExecutorExecuteTimeout,
+	}
 }
 
 func (r *RunJobRequest) ToPb() *api.RunJobRequest {

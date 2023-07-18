@@ -1,13 +1,14 @@
 package dal
 
 import (
+	"supernova/pkg/api/executor"
+	"supernova/pkg/constance"
+	"supernova/pkg/middleware"
+
 	"github.com/cloudwego/kitex/client"
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
 	"github.com/cloudwego/kitex/transport"
 	"github.com/kitex-contrib/obs-opentelemetry/tracing"
-	"supernova/pkg/api/executor"
-	"supernova/pkg/constance"
-	"supernova/pkg/middleware"
 )
 
 type ExecutorRpcClient struct {
@@ -20,7 +21,7 @@ func NewExecutorServiceClient(host, port string) (*ExecutorRpcClient, error) {
 		client.WithHostPorts(host+":"+port),
 		client.WithSuite(tracing.NewClientSuite()),
 		client.WithClientBasicInfo(&rpcinfo.EndpointBasicInfo{ServiceName: constance.SchedulerServiceName}),
-		client.WithMiddleware(middleware.PrintRequestResponseMW),
+		client.WithMiddleware(middleware.PrintKitexRequestResponse),
 		client.WithTransportProtocol(transport.GRPC)); err != nil {
 		return nil, err
 	} else {

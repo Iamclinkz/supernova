@@ -3,12 +3,13 @@ package service
 import (
 	"context"
 	"errors"
-	"github.com/cloudwego/kitex/pkg/klog"
 	"supernova/pkg/constance"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/util"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 type ScheduleService struct {
@@ -38,6 +39,7 @@ func NewScheduleService(statisticsService *StatisticsService,
 }
 
 func (s *ScheduleService) Schedule() {
+	s.timeWheel.Start()
 	ticker := time.NewTicker(s.statisticsService.GetScheduleInterval())
 
 	for {
@@ -52,9 +54,11 @@ func (s *ScheduleService) Schedule() {
 			} else {
 				now := time.Now()
 				for _, onFireLog := range onFireLogs {
-					s.timeWheel.Add(onFireLog.ShouldFireAt.Sub(now), func() {
-						if fireErr := s.fire(onFireLog); fireErr != nil {
-							klog.Error("fire error: ", fireErr)
+					currentLog := onFireLog
+					s.timeWheel.Add(currentLog.ShouldFireAt.Sub(now), func() {
+						klog.Tracef("onFireJob:%v start fire", currentLog)
+						if fireErr := s.fire(currentLog); fireErr != nil {
+							klog.Errorf("onFireJob:%v fire error:%v", currentLog, fireErr)
 						}
 					})
 				}
@@ -99,10 +103,12 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog) error {
 	}
 
 	//todo 这里再想一下，并且要插入一下日志
-	_, err = executor.Operator.RunJob(nil, time.Now().Sub(onFireLog.TimeoutAt))
+	resp, err := executor.Operator.RunJob(model.NewRunJobRequestFromJob(job), time.Until(onFireLog.TimeoutAt))
 	if err != nil {
+		klog.Tracef("fire executor called finish with err:%v", err)
 		return err
 	}
 
+	klog.Tracef("fire executor called finish with resp:%+v", resp)
 	return nil
 }
