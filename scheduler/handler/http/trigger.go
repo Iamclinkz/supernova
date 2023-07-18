@@ -4,9 +4,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"supernova/scheduler/model"
 	"supernova/scheduler/service"
+
+	"github.com/gin-gonic/gin"
 )
 
 type TriggerHandler struct {
@@ -24,7 +25,7 @@ func (h *TriggerHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/trigger", h.AddTrigger)
 	router.DELETE("/trigger/:id", h.DeleteTrigger)
 	router.GET("/trigger", h.GetTriggerByName)
-	router.DELETE("/trigger/batch", h.AddTriggers)
+	router.POST("/trigger/batch", h.AddTriggers)
 }
 
 func (h *TriggerHandler) GetTrigger(c *gin.Context) {

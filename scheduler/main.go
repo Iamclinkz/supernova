@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	klog.SetLevel(klog.LevelTrace)
+	klog.SetLevel(klog.LevelError)
 	//todo 这里根据配置，初始化scheduler
 	cfg := conf.GetCommonConfig(conf.Dev)
 

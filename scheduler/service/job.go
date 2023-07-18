@@ -69,9 +69,9 @@ func (s *JobService) DeleteJob(ctx context.Context, jobID uint) error {
 }
 
 func (s *JobService) ValidateJob(job *model.Job) error {
-	if job.Name == "" {
-		return errors.New("name cannot be empty")
-	}
+	// if job.Name == "" {
+	// 	return errors.New("name cannot be empty")
+	// }
 
 	if !job.ExecutorRouteStrategy.Valid() {
 		return errors.New("invalid ExecutorRouteStrategy")

@@ -13,8 +13,8 @@ import (
 
 type Trigger struct {
 	gorm.Model `json:"-"`
-	Name       string `gorm:"column:name;type:varchar(64);unique"`
-
+	//Name       string `gorm:"column:name;type:varchar(64);unique"`
+	Name string `gorm:"column:name;type:varchar(64)"`
 	//关联的任务ID
 	JobID uint `gorm:"not null;index"`
 	// 选择调度的策略（None表示不触发，Cron表示使用Cron表达式，

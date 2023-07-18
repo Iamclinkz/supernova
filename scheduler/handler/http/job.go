@@ -25,7 +25,7 @@ func (h *JobHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/job", h.AddJob)
 	router.DELETE("/job/:id", h.DeleteJob)
 	router.GET("/job", h.FindJobByName)
-	router.DELETE("/job/batch", h.AddJobs)
+	router.POST("/job/batch", h.AddJobs)
 }
 
 func (h *JobHandler) GetJob(c *gin.Context) {
@@ -76,7 +76,7 @@ func (h *JobHandler) DeleteJob(c *gin.Context) {
 
 func (h *JobHandler) AddJobs(c *gin.Context) {
 	var jobs []*model.Job
-	if err := c.ShouldBindJSON(jobs); err != nil {
+	if err := c.ShouldBindJSON(&jobs); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

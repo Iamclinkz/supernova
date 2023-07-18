@@ -154,9 +154,9 @@ func (s *TriggerService) DeleteTrigger(ctx context.Context, triggerID uint) erro
 }
 
 func (s *TriggerService) ValidateTrigger(trigger *model.Trigger) error {
-	if trigger.Name == "" {
-		return errors.New("name cannot be empty")
-	}
+	// if trigger.Name == "" {
+	// 	return errors.New("name cannot be empty")
+	// }
 
 	if !trigger.ScheduleType.Valid() {
 		return errors.New("invalid ScheduleType")
@@ -200,6 +200,8 @@ func (s *TriggerService) AddTriggers(ctx context.Context, triggers []*model.Trig
 		if err := s.ValidateTrigger(trigger); err != nil {
 			return fmt.Errorf("error trigger:%+v", trigger)
 		}
+		trigger.Status = constance.TriggerStatusNormal
+		trigger.TriggerLastTime = util.VeryEarlyTime()
 	}
 
 	return s.scheduleOperator.InsertTriggers(ctx, triggers)
