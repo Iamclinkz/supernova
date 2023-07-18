@@ -19,6 +19,7 @@ type MysqlOperator struct {
 	emptyJob       *model.Job
 	emptyTrigger   *model.Trigger
 	emptyOnFireLog *model.OnFireLog
+	emptyLock      *model.Lock
 }
 
 func (m *MysqlOperator) InsertJobs(ctx context.Context, jobs []*model.Job) error {
@@ -105,12 +106,14 @@ func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
 		emptyOnFireLog: &model.OnFireLog{},
 		emptyTrigger:   &model.Trigger{},
 		emptyJob:       &model.Job{},
+		emptyLock:      &model.Lock{},
 	}
 
 	//todo 测试用，记得删掉
 	cli.DB().Migrator().DropTable(ret.emptyJob)
 	cli.DB().Migrator().DropTable(ret.emptyTrigger)
 	cli.DB().Migrator().DropTable(ret.emptyOnFireLog)
+	cli.DB().Migrator().DropTable(ret.emptyLock)
 
 	//todo 建表语句，实际上可以放到.sql文件中
 	if err := cli.DB().AutoMigrate(ret.emptyJob); err != nil {
@@ -122,6 +125,10 @@ func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
 	if err := cli.DB().AutoMigrate(ret.emptyOnFireLog); err != nil {
 		return nil, err
 	}
+	if err := cli.DB().AutoMigrate(ret.emptyLock); err != nil {
+		return nil, err
+	}
+
 	//初始化锁结构
 	cli.DB().Create(&model.Lock{LockName: constance.FetchUpdateMarkTriggerLockName})
 	return ret, nil
