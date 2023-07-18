@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
 	"time"
@@ -39,6 +40,24 @@ func (s *JobService) AddJob(ctx context.Context, job *model.Job) error {
 	}
 
 	return nil
+}
+
+func (s *JobService) AddJobs(ctx context.Context, jobs []*model.Job) error {
+	for _, job := range jobs {
+		if err := s.ValidateJob(job); err != nil {
+			return fmt.Errorf("job:%+v error:%v", job, err)
+		}
+	}
+
+	if err := s.jobOperator.InsertJobs(ctx, jobs); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *JobService) FindJobByName(ctx context.Context, name string) (*model.Job, error) {
+	return s.jobOperator.FindJobByName(ctx, name)
 }
 
 func (s *JobService) DeleteJob(ctx context.Context, jobID uint) error {

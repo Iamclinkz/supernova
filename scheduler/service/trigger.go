@@ -194,3 +194,17 @@ func (s *TriggerService) FetchTriggerFromID(ctx context.Context, triggerID uint)
 
 	return trigger, nil
 }
+
+func (s *TriggerService) AddTriggers(ctx context.Context, triggers []*model.Trigger) error {
+	for _, trigger := range triggers {
+		if err := s.ValidateTrigger(trigger); err != nil {
+			return fmt.Errorf("error trigger:%+v", trigger)
+		}
+	}
+
+	return s.scheduleOperator.InsertTriggers(ctx, triggers)
+}
+
+func (s *TriggerService) FindTriggerByName(ctx context.Context, name string) (*model.Trigger, error) {
+	return s.scheduleOperator.FindTriggerByName(ctx, name)
+}

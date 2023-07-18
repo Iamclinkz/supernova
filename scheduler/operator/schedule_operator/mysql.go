@@ -21,6 +21,74 @@ type MysqlOperator struct {
 	emptyOnFireLog *model.OnFireLog
 }
 
+func (m *MysqlOperator) InsertJobs(ctx context.Context, jobs []*model.Job) error {
+	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	if !ok {
+		tx = m.db.DB()
+	}
+
+	err := tx.Create(jobs).Error
+	if err != nil {
+		return fmt.Errorf("failed to insert job: %w", err)
+	}
+
+	return nil
+}
+
+func (m *MysqlOperator) FindJobByName(ctx context.Context, jobName string) (*model.Job, error) {
+	db, ok := ctx.Value(transactionKey).(*gorm.DB)
+	if !ok {
+		db = m.db.DB()
+	}
+
+	job := new(model.Job)
+	err := db.Where("job_name = ?", jobName).Find(job).Error
+
+	if job.ID == 0 || err == gorm.ErrRecordNotFound {
+		return nil, ErrNotFound
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return job, nil
+}
+
+func (m *MysqlOperator) InsertTriggers(ctx context.Context, triggers []*model.Trigger) error {
+	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	if !ok {
+		tx = m.db.DB()
+	}
+
+	err := tx.Create(triggers).Error
+	if err != nil {
+		return fmt.Errorf("failed to insert trigger: %w", err)
+	}
+
+	return nil
+}
+
+func (m *MysqlOperator) FindTriggerByName(ctx context.Context, triggerName string) (*model.Trigger, error) {
+	db, ok := ctx.Value(transactionKey).(*gorm.DB)
+	if !ok {
+		db = m.db.DB()
+	}
+
+	trigger := new(model.Trigger)
+	err := db.Where("trigger_name = ?", triggerName).Find(trigger).Error
+
+	if trigger.ID == 0 || err == gorm.ErrRecordNotFound {
+		return nil, ErrNotFound
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return trigger, nil
+}
+
 func (m *MysqlOperator) Lock(ctx context.Context, lockName string) error {
 	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {

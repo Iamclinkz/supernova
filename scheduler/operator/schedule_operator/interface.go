@@ -12,27 +12,43 @@ var (
 )
 
 type Operator interface {
-	//tx
+	//-------------------------------tx
 	OnTxStart(ctx context.Context) (context.Context, error)
 	OnTxFail(ctx context.Context) error
 	OnTxFinish(ctx context.Context) error
 	Lock(ctx context.Context, lockName string) error
 
-	//job
-	FetchJobFromID(ctx context.Context, jobID uint) (*model.Job, error)
-	DeleteJobFromID(ctx context.Context, jobID uint) error
+	//-------------------------------job
+	//增
 	InsertJob(ctx context.Context, job *model.Job) error
+	InsertJobs(ctx context.Context, jobID []*model.Job) error
+	//删
+	DeleteJobFromID(ctx context.Context, jobID uint) error
+	//改
+	//查
+	FetchJobFromID(ctx context.Context, jobID uint) (*model.Job, error)
 	IsJobIDExist(ctx context.Context, jobID uint) (bool, error)
+	FindJobByName(ctx context.Context, jobName string) (*model.Job, error)
 
-	//trigger
-	FetchRecentTriggers(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time) ([]*model.Trigger, error)
-	UpdateTriggers(ctx context.Context, triggers []*model.Trigger) error
-	DeleteTriggerFromID(ctx context.Context, triggerID uint) error
+	//-------------------------------trigger
+	//增
 	InsertTrigger(ctx context.Context, trigger *model.Trigger) error
+	InsertTriggers(ctx context.Context, triggers []*model.Trigger) error
+	//删
+	DeleteTriggerFromID(ctx context.Context, triggerID uint) error
+	//改
+	UpdateTriggers(ctx context.Context, triggers []*model.Trigger) error
+	//查
+	FetchRecentTriggers(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time) ([]*model.Trigger, error)
 	FetchTriggerFromID(ctx context.Context, triggerID uint) (*model.Trigger, error)
+	FindTriggerByName(ctx context.Context, triggerName string) (*model.Trigger, error)
 
-	//onFire
+	//-------------------------------onFire
+	//增
 	InsertOnFires(ctx context.Context, onFire []*model.OnFireLog) error
+	//删
 	DeleteOnFireLogFromID(ctx context.Context, onFireLogID uint) error
+	//改
 	UpdateOnFireLogExecutorStatus(ctx context.Context, onFireLog *model.OnFireLog) error
+	//查
 }

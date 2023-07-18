@@ -24,6 +24,8 @@ func (h *JobHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/job/:id", h.GetJob)
 	router.POST("/job", h.AddJob)
 	router.DELETE("/job/:id", h.DeleteJob)
+	router.GET("/job", h.FindJobByName)
+	router.DELETE("/job/batch", h.AddJobs)
 }
 
 func (h *JobHandler) GetJob(c *gin.Context) {
@@ -70,4 +72,35 @@ func (h *JobHandler) DeleteJob(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Job deleted successfully"})
+}
+
+func (h *JobHandler) AddJobs(c *gin.Context) {
+	var jobs []*model.Job
+	if err := c.ShouldBindJSON(jobs); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.jobService.AddJobs(c.Request.Context(), jobs); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Job added successfully"})
+}
+
+func (h *JobHandler) FindJobByName(c *gin.Context) {
+	name := c.Query("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing name parameter"})
+		return
+	}
+
+	job, err := h.jobService.FindJobByName(c.Request.Context(), name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, job)
 }
