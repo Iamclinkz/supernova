@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"supernova/pkg/constance"
+	"supernova/scheduler/constance"
 	"supernova/scheduler/dal"
 	"supernova/scheduler/model"
 	"time"
@@ -21,6 +21,16 @@ type MysqlOperator struct {
 	emptyOnFireLog *model.OnFireLog
 }
 
+func (m *MysqlOperator) Lock(ctx context.Context, lockName string) error {
+	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	if !ok {
+		tx = m.db.DB()
+	}
+
+	var lock model.Lock
+	return tx.Raw("SELECT * FROM t_lock WHERE lock_name = ? FOR UPDATE", "fetchUpdateMarkTrigger").Scan(&lock).Error
+}
+
 func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
 	ret := &MysqlOperator{
 		db:             cli,
@@ -34,6 +44,7 @@ func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
 	cli.DB().Migrator().DropTable(ret.emptyTrigger)
 	cli.DB().Migrator().DropTable(ret.emptyOnFireLog)
 
+	//todo 建表语句，实际上可以放到.sql文件中
 	if err := cli.DB().AutoMigrate(ret.emptyJob); err != nil {
 		return nil, err
 	}
@@ -43,7 +54,8 @@ func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
 	if err := cli.DB().AutoMigrate(ret.emptyOnFireLog); err != nil {
 		return nil, err
 	}
-
+	//初始化锁结构
+	cli.DB().Create(&model.Lock{LockName: constance.FetchUpdateMarkTriggerLockName})
 	return ret, nil
 }
 

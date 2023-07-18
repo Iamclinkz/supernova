@@ -3,7 +3,7 @@ package model
 import (
 	"errors"
 	"supernova/pkg/api"
-	"supernova/pkg/constance"
+	"supernova/scheduler/constance"
 	"time"
 
 	"gorm.io/gorm"

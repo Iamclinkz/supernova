@@ -3,7 +3,7 @@ package service
 import (
 	"errors"
 	"math/rand"
-	"supernova/pkg/constance"
+	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
 	"supernova/scheduler/util"
 	"sync"

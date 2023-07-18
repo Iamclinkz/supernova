@@ -16,6 +16,7 @@ type Operator interface {
 	OnTxStart(ctx context.Context) (context.Context, error)
 	OnTxFail(ctx context.Context) error
 	OnTxFinish(ctx context.Context) error
+	Lock(ctx context.Context, lockName string) error
 
 	//job
 	FetchJobFromID(ctx context.Context, jobID uint) (*model.Job, error)

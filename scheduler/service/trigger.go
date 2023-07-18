@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"supernova/pkg/constance"
+	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/util"
@@ -29,7 +29,7 @@ func (s *TriggerService) DeleteTriggerFromID(ctx context.Context, triggerID uint
 	return s.scheduleOperator.DeleteTriggerFromID(ctx, triggerID)
 }
 
-func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context, useTx bool) ([]*model.OnFireLog, error) {
+func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context) ([]*model.OnFireLog, error) {
 	var (
 		now                    = time.Now()
 		beginTriggerHandleTime = now.Add(-s.statisticsService.GetHandleTriggerForwardDuration())
@@ -37,30 +37,33 @@ func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context, useTx bool)
 		err                    error
 		txCtx                  = context.TODO()
 		onFireTriggers         []*model.OnFireLog
+		fetchedTriggers        []*model.Trigger
 	)
 
-	if useTx {
-		//1.开启事务，保证同时只能有一个实例拿到任务，且如果失败，则回滚
-		if txCtx, err = s.scheduleOperator.OnTxStart(ctx); err != nil {
-			return nil, err
-		}
+	//1.开启事务，保证同时只能有一个实例拿到任务，且如果失败，则回滚
+	if txCtx, err = s.scheduleOperator.OnTxStart(ctx); err != nil {
+		return nil, err
+	}
+
+	if err = s.scheduleOperator.Lock(txCtx, constance.FetchUpdateMarkTriggerLockName); err != nil {
+		goto badEnd
 	}
 
 	//2.拿到位于[beginTriggerHandleTime,endTriggerHandleTime]之间的最近要执行的trigger
-	triggers, err := s.scheduleOperator.FetchRecentTriggers(txCtx, s.statisticsService.GetHandleTriggerMaxCount(), endTriggerHandleTime, beginTriggerHandleTime)
+	fetchedTriggers, err = s.scheduleOperator.FetchRecentTriggers(txCtx, s.statisticsService.GetHandleTriggerMaxCount(), endTriggerHandleTime, beginTriggerHandleTime)
 	if err != nil {
 		goto badEnd
 	}
 
-	if len(triggers) == 0 {
+	if len(fetchedTriggers) == 0 {
 		goto emptyEnd
 	}
 
-	klog.Trace(model.TriggersToString(triggers))
+	klog.Trace(model.TriggersToString(fetchedTriggers))
 
-	onFireTriggers = make([]*model.OnFireLog, 0, len(triggers))
+	onFireTriggers = make([]*model.OnFireLog, 0, len(fetchedTriggers))
 	//3.依次让trigger更新自己，如果有问题的，则需要删除trigger
-	for _, trigger := range triggers {
+	for _, trigger := range fetchedTriggers {
 		//这里需要注意，如果一个trigger的触发时间很短，例如1s一次，而我们的HandleTriggerDuration较长，例如5s一次，
 		//那么需要直接OnFire这个trigger 5次，并且更新trigger的nextFireTime到6s以后
 		for {
@@ -100,12 +103,12 @@ func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context, useTx bool)
 	}
 
 	//不管怎么样都需要更新一下triggers，即使某个trigger发生了错误，也需要更新trigger的status为Error
-	if err = s.scheduleOperator.UpdateTriggers(txCtx, triggers); err != nil {
+	if err = s.scheduleOperator.UpdateTriggers(txCtx, fetchedTriggers); err != nil {
 		goto badEnd
 	}
 
 	if len(onFireTriggers) == 0 {
-		klog.Warnf("fetch triggers:%s, but none of them should be fired", triggers)
+		klog.Warnf("fetch fetchedTriggers:%s, but none of them should be fired", fetchedTriggers)
 		goto emptyEnd
 	}
 
@@ -113,26 +116,20 @@ func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context, useTx bool)
 		goto badEnd
 	}
 
-	if useTx {
-		if err = s.scheduleOperator.OnTxFinish(txCtx); err != nil {
-			return nil, err
-		}
+	if err = s.scheduleOperator.OnTxFinish(txCtx); err != nil {
+		return nil, err
 	}
 
 	return onFireTriggers, nil
 
 badEnd:
-	if useTx {
-		if txFailErr := s.scheduleOperator.OnTxFail(txCtx); txFailErr != nil {
-			return nil, fmt.Errorf("fetchUpdateMarkTrigger txFailErr:%v, originError:%v", txFailErr, err)
-		}
+	if txFailErr := s.scheduleOperator.OnTxFail(txCtx); txFailErr != nil {
+		return nil, fmt.Errorf("fetchUpdateMarkTrigger txFailErr:%v, originError:%v", txFailErr, err)
 	}
 	return nil, err
 
 emptyEnd:
-	if useTx {
-		_ = s.scheduleOperator.OnTxFinish(txCtx)
-	}
+	_ = s.scheduleOperator.OnTxFinish(txCtx)
 	return []*model.OnFireLog{}, nil
 }
 

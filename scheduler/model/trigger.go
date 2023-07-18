@@ -3,7 +3,7 @@ package model
 import (
 	"fmt"
 	"strings"
-	"supernova/pkg/constance"
+	"supernova/scheduler/constance"
 	"supernova/scheduler/util"
 	"time"
 

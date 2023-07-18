@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"errors"
-	"supernova/pkg/constance"
+	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/util"
@@ -48,7 +48,7 @@ func (s *ScheduleService) Schedule() {
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			onFireLogs, err := s.triggerService.fetchUpdateMarkTrigger(context.TODO(), true)
+			onFireLogs, err := s.triggerService.fetchUpdateMarkTrigger(context.TODO())
 			if err != nil {
 				klog.Errorf("Schedule Error:%v", err)
 			} else {

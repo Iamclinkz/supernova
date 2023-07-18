@@ -2,7 +2,7 @@ package model
 
 import (
 	"gorm.io/gorm"
-	"supernova/pkg/constance"
+	"supernova/scheduler/constance"
 	"time"
 )
 
