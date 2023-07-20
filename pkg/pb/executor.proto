@@ -4,10 +4,13 @@ package api;
 
 option go_package = "api";
 
+//任何一个实现了这个接口的对象，都可以作为Executor实例
 service Executor{
+    //同步检查心跳
     rpc HeartBeat(HeartBeatRequest) returns (HeartBeatResponse);
 
-    rpc RunJob(RunJobRequest) returns (RunJobResponse);
+    //异步执行任务
+    rpc RunJob(stream RunJobRequest) returns (stream RunJobResponse);
 }
 
 message HeartBeatRequest{
@@ -15,19 +18,38 @@ message HeartBeatRequest{
 }
 
 message HeartBeatResponse{
-    int32 Cpu = 1;
-    int32 Memory = 2;
-    int32 RunningJob = 3;
+    HealthStatus healthStatus = 1;
+}
+
+message HealthStatus{
+    float workload = 1;
 }
 
 message RunJobRequest{
-    int32 glueType = 1;
-    string glueSource = 2;
-    int64 executorExecuteTimeoutMs = 3;
+    uint32 onFireLogID = 1;
+    Job job = 2;
 }
 
 message RunJobResponse{
+    uint32 onFireLogID = 1;
+    JobResult result = 3;
+}
+
+message Job{
+    string glueType = 1;
+    GlueSource glueSource = 2;
+    map<string, string> param = 3;
+    int64 executorExecuteTimeoutMs = 4;
+}
+
+
+message GlueSource{
+    map<string, string> source = 1;
+}
+
+message JobResult{
     bool ok = 1;
     string err = 2;
     string result = 3;
 }
+

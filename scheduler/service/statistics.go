@@ -1,7 +1,7 @@
 package service
 
 import (
-	"supernova/scheduler/util"
+	"supernova/pkg/util"
 	"time"
 )
 
@@ -13,7 +13,7 @@ func NewStatisticsService() *StatisticsService {
 }
 
 func (s *StatisticsService) GetHandleTriggerDuration() time.Duration {
-	return time.Second * 3
+	return time.Second * 15
 }
 
 func (s *StatisticsService) GetHandleTriggerForwardDuration() time.Duration {
@@ -25,8 +25,16 @@ func (s *StatisticsService) GetHandleTriggerMaxCount() int {
 	return 100
 }
 
+func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
+	return 100
+}
+
 func (s *StatisticsService) GetScheduleInterval() time.Duration {
-	return time.Second * 2
+	return time.Second * 10
+}
+
+func (s *StatisticsService) GetCheckTimeoutOnFireLogsInterval() time.Duration {
+	return time.Second * 20
 }
 
 func (s *StatisticsService) GetExecutorHeartbeatInterval() time.Duration {

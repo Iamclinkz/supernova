@@ -32,16 +32,6 @@ func (x *HeartBeatResponse) FastRead(buf []byte, _type int8, number int32) (offs
 		if err != nil {
 			goto ReadFieldError
 		}
-	case 2:
-		offset, err = x.fastReadField2(buf, _type)
-		if err != nil {
-			goto ReadFieldError
-		}
-	case 3:
-		offset, err = x.fastReadField3(buf, _type)
-		if err != nil {
-			goto ReadFieldError
-		}
 	default:
 		offset, err = fastpb.Skip(buf, _type, number)
 		if err != nil {
@@ -56,17 +46,37 @@ ReadFieldError:
 }
 
 func (x *HeartBeatResponse) fastReadField1(buf []byte, _type int8) (offset int, err error) {
-	x.Cpu, offset, err = fastpb.ReadInt32(buf, _type)
-	return offset, err
+	var v HealthStatus
+	offset, err = fastpb.ReadMessage(buf, _type, &v)
+	if err != nil {
+		return offset, err
+	}
+	x.HealthStatus = &v
+	return offset, nil
 }
 
-func (x *HeartBeatResponse) fastReadField2(buf []byte, _type int8) (offset int, err error) {
-	x.Memory, offset, err = fastpb.ReadInt32(buf, _type)
-	return offset, err
+func (x *HealthStatus) FastRead(buf []byte, _type int8, number int32) (offset int, err error) {
+	switch number {
+	case 1:
+		offset, err = x.fastReadField1(buf, _type)
+		if err != nil {
+			goto ReadFieldError
+		}
+	default:
+		offset, err = fastpb.Skip(buf, _type, number)
+		if err != nil {
+			goto SkipFieldError
+		}
+	}
+	return offset, nil
+SkipFieldError:
+	return offset, fmt.Errorf("%T cannot parse invalid wire-format data, error: %s", x, err)
+ReadFieldError:
+	return offset, fmt.Errorf("%T read field %d '%s' error: %s", x, number, fieldIDToName_HealthStatus[number], err)
 }
 
-func (x *HeartBeatResponse) fastReadField3(buf []byte, _type int8) (offset int, err error) {
-	x.RunningJob, offset, err = fastpb.ReadInt32(buf, _type)
+func (x *HealthStatus) fastReadField1(buf []byte, _type int8) (offset int, err error) {
+	x.Workload, offset, err = fastpb.ReadFloat(buf, _type)
 	return offset, err
 }
 
@@ -79,11 +89,6 @@ func (x *RunJobRequest) FastRead(buf []byte, _type int8, number int32) (offset i
 		}
 	case 2:
 		offset, err = x.fastReadField2(buf, _type)
-		if err != nil {
-			goto ReadFieldError
-		}
-	case 3:
-		offset, err = x.fastReadField3(buf, _type)
 		if err != nil {
 			goto ReadFieldError
 		}
@@ -101,29 +106,24 @@ ReadFieldError:
 }
 
 func (x *RunJobRequest) fastReadField1(buf []byte, _type int8) (offset int, err error) {
-	x.GlueType, offset, err = fastpb.ReadInt32(buf, _type)
+	x.OnFireLogID, offset, err = fastpb.ReadUint32(buf, _type)
 	return offset, err
 }
 
 func (x *RunJobRequest) fastReadField2(buf []byte, _type int8) (offset int, err error) {
-	x.GlueSource, offset, err = fastpb.ReadString(buf, _type)
-	return offset, err
-}
-
-func (x *RunJobRequest) fastReadField3(buf []byte, _type int8) (offset int, err error) {
-	x.ExecutorExecuteTimeoutMs, offset, err = fastpb.ReadInt64(buf, _type)
-	return offset, err
+	var v Job
+	offset, err = fastpb.ReadMessage(buf, _type, &v)
+	if err != nil {
+		return offset, err
+	}
+	x.Job = &v
+	return offset, nil
 }
 
 func (x *RunJobResponse) FastRead(buf []byte, _type int8, number int32) (offset int, err error) {
 	switch number {
 	case 1:
 		offset, err = x.fastReadField1(buf, _type)
-		if err != nil {
-			goto ReadFieldError
-		}
-	case 2:
-		offset, err = x.fastReadField2(buf, _type)
 		if err != nil {
 			goto ReadFieldError
 		}
@@ -146,16 +146,180 @@ ReadFieldError:
 }
 
 func (x *RunJobResponse) fastReadField1(buf []byte, _type int8) (offset int, err error) {
-	x.Ok, offset, err = fastpb.ReadBool(buf, _type)
-	return offset, err
-}
-
-func (x *RunJobResponse) fastReadField2(buf []byte, _type int8) (offset int, err error) {
-	x.Err, offset, err = fastpb.ReadString(buf, _type)
+	x.OnFireLogID, offset, err = fastpb.ReadUint32(buf, _type)
 	return offset, err
 }
 
 func (x *RunJobResponse) fastReadField3(buf []byte, _type int8) (offset int, err error) {
+	var v JobResult
+	offset, err = fastpb.ReadMessage(buf, _type, &v)
+	if err != nil {
+		return offset, err
+	}
+	x.Result = &v
+	return offset, nil
+}
+
+func (x *Job) FastRead(buf []byte, _type int8, number int32) (offset int, err error) {
+	switch number {
+	case 1:
+		offset, err = x.fastReadField1(buf, _type)
+		if err != nil {
+			goto ReadFieldError
+		}
+	case 2:
+		offset, err = x.fastReadField2(buf, _type)
+		if err != nil {
+			goto ReadFieldError
+		}
+	case 3:
+		offset, err = x.fastReadField3(buf, _type)
+		if err != nil {
+			goto ReadFieldError
+		}
+	case 4:
+		offset, err = x.fastReadField4(buf, _type)
+		if err != nil {
+			goto ReadFieldError
+		}
+	default:
+		offset, err = fastpb.Skip(buf, _type, number)
+		if err != nil {
+			goto SkipFieldError
+		}
+	}
+	return offset, nil
+SkipFieldError:
+	return offset, fmt.Errorf("%T cannot parse invalid wire-format data, error: %s", x, err)
+ReadFieldError:
+	return offset, fmt.Errorf("%T read field %d '%s' error: %s", x, number, fieldIDToName_Job[number], err)
+}
+
+func (x *Job) fastReadField1(buf []byte, _type int8) (offset int, err error) {
+	x.GlueType, offset, err = fastpb.ReadString(buf, _type)
+	return offset, err
+}
+
+func (x *Job) fastReadField2(buf []byte, _type int8) (offset int, err error) {
+	var v GlueSource
+	offset, err = fastpb.ReadMessage(buf, _type, &v)
+	if err != nil {
+		return offset, err
+	}
+	x.GlueSource = &v
+	return offset, nil
+}
+
+func (x *Job) fastReadField3(buf []byte, _type int8) (offset int, err error) {
+	if x.Param == nil {
+		x.Param = make(map[string]string)
+	}
+	var key string
+	var value string
+	offset, err = fastpb.ReadMapEntry(buf, _type,
+		func(buf []byte, _type int8) (offset int, err error) {
+			key, offset, err = fastpb.ReadString(buf, _type)
+			return offset, err
+		},
+		func(buf []byte, _type int8) (offset int, err error) {
+			value, offset, err = fastpb.ReadString(buf, _type)
+			return offset, err
+		})
+	if err != nil {
+		return offset, err
+	}
+	x.Param[key] = value
+	return offset, nil
+}
+
+func (x *Job) fastReadField4(buf []byte, _type int8) (offset int, err error) {
+	x.ExecutorExecuteTimeoutMs, offset, err = fastpb.ReadInt64(buf, _type)
+	return offset, err
+}
+
+func (x *GlueSource) FastRead(buf []byte, _type int8, number int32) (offset int, err error) {
+	switch number {
+	case 1:
+		offset, err = x.fastReadField1(buf, _type)
+		if err != nil {
+			goto ReadFieldError
+		}
+	default:
+		offset, err = fastpb.Skip(buf, _type, number)
+		if err != nil {
+			goto SkipFieldError
+		}
+	}
+	return offset, nil
+SkipFieldError:
+	return offset, fmt.Errorf("%T cannot parse invalid wire-format data, error: %s", x, err)
+ReadFieldError:
+	return offset, fmt.Errorf("%T read field %d '%s' error: %s", x, number, fieldIDToName_GlueSource[number], err)
+}
+
+func (x *GlueSource) fastReadField1(buf []byte, _type int8) (offset int, err error) {
+	if x.Source == nil {
+		x.Source = make(map[string]string)
+	}
+	var key string
+	var value string
+	offset, err = fastpb.ReadMapEntry(buf, _type,
+		func(buf []byte, _type int8) (offset int, err error) {
+			key, offset, err = fastpb.ReadString(buf, _type)
+			return offset, err
+		},
+		func(buf []byte, _type int8) (offset int, err error) {
+			value, offset, err = fastpb.ReadString(buf, _type)
+			return offset, err
+		})
+	if err != nil {
+		return offset, err
+	}
+	x.Source[key] = value
+	return offset, nil
+}
+
+func (x *JobResult) FastRead(buf []byte, _type int8, number int32) (offset int, err error) {
+	switch number {
+	case 1:
+		offset, err = x.fastReadField1(buf, _type)
+		if err != nil {
+			goto ReadFieldError
+		}
+	case 2:
+		offset, err = x.fastReadField2(buf, _type)
+		if err != nil {
+			goto ReadFieldError
+		}
+	case 3:
+		offset, err = x.fastReadField3(buf, _type)
+		if err != nil {
+			goto ReadFieldError
+		}
+	default:
+		offset, err = fastpb.Skip(buf, _type, number)
+		if err != nil {
+			goto SkipFieldError
+		}
+	}
+	return offset, nil
+SkipFieldError:
+	return offset, fmt.Errorf("%T cannot parse invalid wire-format data, error: %s", x, err)
+ReadFieldError:
+	return offset, fmt.Errorf("%T read field %d '%s' error: %s", x, number, fieldIDToName_JobResult[number], err)
+}
+
+func (x *JobResult) fastReadField1(buf []byte, _type int8) (offset int, err error) {
+	x.Ok, offset, err = fastpb.ReadBool(buf, _type)
+	return offset, err
+}
+
+func (x *JobResult) fastReadField2(buf []byte, _type int8) (offset int, err error) {
+	x.Err, offset, err = fastpb.ReadString(buf, _type)
+	return offset, err
+}
+
+func (x *JobResult) fastReadField3(buf []byte, _type int8) (offset int, err error) {
 	x.Result, offset, err = fastpb.ReadString(buf, _type)
 	return offset, err
 }
@@ -172,32 +336,30 @@ func (x *HeartBeatResponse) FastWrite(buf []byte) (offset int) {
 		return offset
 	}
 	offset += x.fastWriteField1(buf[offset:])
-	offset += x.fastWriteField2(buf[offset:])
-	offset += x.fastWriteField3(buf[offset:])
 	return offset
 }
 
 func (x *HeartBeatResponse) fastWriteField1(buf []byte) (offset int) {
-	if x.Cpu == 0 {
+	if x.HealthStatus == nil {
 		return offset
 	}
-	offset += fastpb.WriteInt32(buf[offset:], 1, x.GetCpu())
+	offset += fastpb.WriteMessage(buf[offset:], 1, x.GetHealthStatus())
 	return offset
 }
 
-func (x *HeartBeatResponse) fastWriteField2(buf []byte) (offset int) {
-	if x.Memory == 0 {
+func (x *HealthStatus) FastWrite(buf []byte) (offset int) {
+	if x == nil {
 		return offset
 	}
-	offset += fastpb.WriteInt32(buf[offset:], 2, x.GetMemory())
+	offset += x.fastWriteField1(buf[offset:])
 	return offset
 }
 
-func (x *HeartBeatResponse) fastWriteField3(buf []byte) (offset int) {
-	if x.RunningJob == 0 {
+func (x *HealthStatus) fastWriteField1(buf []byte) (offset int) {
+	if x.Workload == 0 {
 		return offset
 	}
-	offset += fastpb.WriteInt32(buf[offset:], 3, x.GetRunningJob())
+	offset += fastpb.WriteFloat(buf[offset:], 1, x.GetWorkload())
 	return offset
 }
 
@@ -207,35 +369,126 @@ func (x *RunJobRequest) FastWrite(buf []byte) (offset int) {
 	}
 	offset += x.fastWriteField1(buf[offset:])
 	offset += x.fastWriteField2(buf[offset:])
-	offset += x.fastWriteField3(buf[offset:])
 	return offset
 }
 
 func (x *RunJobRequest) fastWriteField1(buf []byte) (offset int) {
-	if x.GlueType == 0 {
+	if x.OnFireLogID == 0 {
 		return offset
 	}
-	offset += fastpb.WriteInt32(buf[offset:], 1, x.GetGlueType())
+	offset += fastpb.WriteUint32(buf[offset:], 1, x.GetOnFireLogID())
 	return offset
 }
 
 func (x *RunJobRequest) fastWriteField2(buf []byte) (offset int) {
-	if x.GlueSource == "" {
+	if x.Job == nil {
 		return offset
 	}
-	offset += fastpb.WriteString(buf[offset:], 2, x.GetGlueSource())
-	return offset
-}
-
-func (x *RunJobRequest) fastWriteField3(buf []byte) (offset int) {
-	if x.ExecutorExecuteTimeoutMs == 0 {
-		return offset
-	}
-	offset += fastpb.WriteInt64(buf[offset:], 3, x.GetExecutorExecuteTimeoutMs())
+	offset += fastpb.WriteMessage(buf[offset:], 2, x.GetJob())
 	return offset
 }
 
 func (x *RunJobResponse) FastWrite(buf []byte) (offset int) {
+	if x == nil {
+		return offset
+	}
+	offset += x.fastWriteField1(buf[offset:])
+	offset += x.fastWriteField3(buf[offset:])
+	return offset
+}
+
+func (x *RunJobResponse) fastWriteField1(buf []byte) (offset int) {
+	if x.OnFireLogID == 0 {
+		return offset
+	}
+	offset += fastpb.WriteUint32(buf[offset:], 1, x.GetOnFireLogID())
+	return offset
+}
+
+func (x *RunJobResponse) fastWriteField3(buf []byte) (offset int) {
+	if x.Result == nil {
+		return offset
+	}
+	offset += fastpb.WriteMessage(buf[offset:], 3, x.GetResult())
+	return offset
+}
+
+func (x *Job) FastWrite(buf []byte) (offset int) {
+	if x == nil {
+		return offset
+	}
+	offset += x.fastWriteField1(buf[offset:])
+	offset += x.fastWriteField2(buf[offset:])
+	offset += x.fastWriteField3(buf[offset:])
+	offset += x.fastWriteField4(buf[offset:])
+	return offset
+}
+
+func (x *Job) fastWriteField1(buf []byte) (offset int) {
+	if x.GlueType == "" {
+		return offset
+	}
+	offset += fastpb.WriteString(buf[offset:], 1, x.GetGlueType())
+	return offset
+}
+
+func (x *Job) fastWriteField2(buf []byte) (offset int) {
+	if x.GlueSource == nil {
+		return offset
+	}
+	offset += fastpb.WriteMessage(buf[offset:], 2, x.GetGlueSource())
+	return offset
+}
+
+func (x *Job) fastWriteField3(buf []byte) (offset int) {
+	if x.Param == nil {
+		return offset
+	}
+	for k, v := range x.GetParam() {
+		offset += fastpb.WriteMapEntry(buf[offset:], 3,
+			func(buf []byte, numTagOrKey, numIdxOrVal int32) int {
+				offset := 0
+				offset += fastpb.WriteString(buf[offset:], numTagOrKey, k)
+				offset += fastpb.WriteString(buf[offset:], numIdxOrVal, v)
+				return offset
+			})
+	}
+	return offset
+}
+
+func (x *Job) fastWriteField4(buf []byte) (offset int) {
+	if x.ExecutorExecuteTimeoutMs == 0 {
+		return offset
+	}
+	offset += fastpb.WriteInt64(buf[offset:], 4, x.GetExecutorExecuteTimeoutMs())
+	return offset
+}
+
+func (x *GlueSource) FastWrite(buf []byte) (offset int) {
+	if x == nil {
+		return offset
+	}
+	offset += x.fastWriteField1(buf[offset:])
+	return offset
+}
+
+func (x *GlueSource) fastWriteField1(buf []byte) (offset int) {
+	if x.Source == nil {
+		return offset
+	}
+	for k, v := range x.GetSource() {
+		offset += fastpb.WriteMapEntry(buf[offset:], 1,
+			func(buf []byte, numTagOrKey, numIdxOrVal int32) int {
+				offset := 0
+				offset += fastpb.WriteString(buf[offset:], numTagOrKey, k)
+				offset += fastpb.WriteString(buf[offset:], numIdxOrVal, v)
+				return offset
+			})
+	}
+	return offset
+}
+
+func (x *JobResult) FastWrite(buf []byte) (offset int) {
 	if x == nil {
 		return offset
 	}
@@ -245,7 +498,7 @@ func (x *RunJobResponse) FastWrite(buf []byte) (offset int) {
 	return offset
 }
 
-func (x *RunJobResponse) fastWriteField1(buf []byte) (offset int) {
+func (x *JobResult) fastWriteField1(buf []byte) (offset int) {
 	if !x.Ok {
 		return offset
 	}
@@ -253,7 +506,7 @@ func (x *RunJobResponse) fastWriteField1(buf []byte) (offset int) {
 	return offset
 }
 
-func (x *RunJobResponse) fastWriteField2(buf []byte) (offset int) {
+func (x *JobResult) fastWriteField2(buf []byte) (offset int) {
 	if x.Err == "" {
 		return offset
 	}
@@ -261,7 +514,7 @@ func (x *RunJobResponse) fastWriteField2(buf []byte) (offset int) {
 	return offset
 }
 
-func (x *RunJobResponse) fastWriteField3(buf []byte) (offset int) {
+func (x *JobResult) fastWriteField3(buf []byte) (offset int) {
 	if x.Result == "" {
 		return offset
 	}
@@ -281,32 +534,30 @@ func (x *HeartBeatResponse) Size() (n int) {
 		return n
 	}
 	n += x.sizeField1()
-	n += x.sizeField2()
-	n += x.sizeField3()
 	return n
 }
 
 func (x *HeartBeatResponse) sizeField1() (n int) {
-	if x.Cpu == 0 {
+	if x.HealthStatus == nil {
 		return n
 	}
-	n += fastpb.SizeInt32(1, x.GetCpu())
+	n += fastpb.SizeMessage(1, x.GetHealthStatus())
 	return n
 }
 
-func (x *HeartBeatResponse) sizeField2() (n int) {
-	if x.Memory == 0 {
+func (x *HealthStatus) Size() (n int) {
+	if x == nil {
 		return n
 	}
-	n += fastpb.SizeInt32(2, x.GetMemory())
+	n += x.sizeField1()
 	return n
 }
 
-func (x *HeartBeatResponse) sizeField3() (n int) {
-	if x.RunningJob == 0 {
+func (x *HealthStatus) sizeField1() (n int) {
+	if x.Workload == 0 {
 		return n
 	}
-	n += fastpb.SizeInt32(3, x.GetRunningJob())
+	n += fastpb.SizeFloat(1, x.GetWorkload())
 	return n
 }
 
@@ -316,35 +567,126 @@ func (x *RunJobRequest) Size() (n int) {
 	}
 	n += x.sizeField1()
 	n += x.sizeField2()
-	n += x.sizeField3()
 	return n
 }
 
 func (x *RunJobRequest) sizeField1() (n int) {
-	if x.GlueType == 0 {
+	if x.OnFireLogID == 0 {
 		return n
 	}
-	n += fastpb.SizeInt32(1, x.GetGlueType())
+	n += fastpb.SizeUint32(1, x.GetOnFireLogID())
 	return n
 }
 
 func (x *RunJobRequest) sizeField2() (n int) {
-	if x.GlueSource == "" {
+	if x.Job == nil {
 		return n
 	}
-	n += fastpb.SizeString(2, x.GetGlueSource())
-	return n
-}
-
-func (x *RunJobRequest) sizeField3() (n int) {
-	if x.ExecutorExecuteTimeoutMs == 0 {
-		return n
-	}
-	n += fastpb.SizeInt64(3, x.GetExecutorExecuteTimeoutMs())
+	n += fastpb.SizeMessage(2, x.GetJob())
 	return n
 }
 
 func (x *RunJobResponse) Size() (n int) {
+	if x == nil {
+		return n
+	}
+	n += x.sizeField1()
+	n += x.sizeField3()
+	return n
+}
+
+func (x *RunJobResponse) sizeField1() (n int) {
+	if x.OnFireLogID == 0 {
+		return n
+	}
+	n += fastpb.SizeUint32(1, x.GetOnFireLogID())
+	return n
+}
+
+func (x *RunJobResponse) sizeField3() (n int) {
+	if x.Result == nil {
+		return n
+	}
+	n += fastpb.SizeMessage(3, x.GetResult())
+	return n
+}
+
+func (x *Job) Size() (n int) {
+	if x == nil {
+		return n
+	}
+	n += x.sizeField1()
+	n += x.sizeField2()
+	n += x.sizeField3()
+	n += x.sizeField4()
+	return n
+}
+
+func (x *Job) sizeField1() (n int) {
+	if x.GlueType == "" {
+		return n
+	}
+	n += fastpb.SizeString(1, x.GetGlueType())
+	return n
+}
+
+func (x *Job) sizeField2() (n int) {
+	if x.GlueSource == nil {
+		return n
+	}
+	n += fastpb.SizeMessage(2, x.GetGlueSource())
+	return n
+}
+
+func (x *Job) sizeField3() (n int) {
+	if x.Param == nil {
+		return n
+	}
+	for k, v := range x.GetParam() {
+		n += fastpb.SizeMapEntry(3,
+			func(numTagOrKey, numIdxOrVal int32) int {
+				n := 0
+				n += fastpb.SizeString(numTagOrKey, k)
+				n += fastpb.SizeString(numIdxOrVal, v)
+				return n
+			})
+	}
+	return n
+}
+
+func (x *Job) sizeField4() (n int) {
+	if x.ExecutorExecuteTimeoutMs == 0 {
+		return n
+	}
+	n += fastpb.SizeInt64(4, x.GetExecutorExecuteTimeoutMs())
+	return n
+}
+
+func (x *GlueSource) Size() (n int) {
+	if x == nil {
+		return n
+	}
+	n += x.sizeField1()
+	return n
+}
+
+func (x *GlueSource) sizeField1() (n int) {
+	if x.Source == nil {
+		return n
+	}
+	for k, v := range x.GetSource() {
+		n += fastpb.SizeMapEntry(1,
+			func(numTagOrKey, numIdxOrVal int32) int {
+				n := 0
+				n += fastpb.SizeString(numTagOrKey, k)
+				n += fastpb.SizeString(numIdxOrVal, v)
+				return n
+			})
+	}
+	return n
+}
+
+func (x *JobResult) Size() (n int) {
 	if x == nil {
 		return n
 	}
@@ -354,7 +696,7 @@ func (x *RunJobResponse) Size() (n int) {
 	return n
 }
 
-func (x *RunJobResponse) sizeField1() (n int) {
+func (x *JobResult) sizeField1() (n int) {
 	if !x.Ok {
 		return n
 	}
@@ -362,7 +704,7 @@ func (x *RunJobResponse) sizeField1() (n int) {
 	return n
 }
 
-func (x *RunJobResponse) sizeField2() (n int) {
+func (x *JobResult) sizeField2() (n int) {
 	if x.Err == "" {
 		return n
 	}
@@ -370,7 +712,7 @@ func (x *RunJobResponse) sizeField2() (n int) {
 	return n
 }
 
-func (x *RunJobResponse) sizeField3() (n int) {
+func (x *JobResult) sizeField3() (n int) {
 	if x.Result == "" {
 		return n
 	}
@@ -381,18 +723,35 @@ func (x *RunJobResponse) sizeField3() (n int) {
 var fieldIDToName_HeartBeatRequest = map[int32]string{}
 
 var fieldIDToName_HeartBeatResponse = map[int32]string{
-	1: "Cpu",
-	2: "Memory",
-	3: "RunningJob",
+	1: "HealthStatus",
+}
+
+var fieldIDToName_HealthStatus = map[int32]string{
+	1: "Workload",
 }
 
 var fieldIDToName_RunJobRequest = map[int32]string{
-	1: "GlueType",
-	2: "GlueSource",
-	3: "ExecutorExecuteTimeoutMs",
+	1: "OnFireLogID",
+	2: "Job",
 }
 
 var fieldIDToName_RunJobResponse = map[int32]string{
+	1: "OnFireLogID",
+	3: "Result",
+}
+
+var fieldIDToName_Job = map[int32]string{
+	1: "GlueType",
+	2: "GlueSource",
+	3: "Param",
+	4: "ExecutorExecuteTimeoutMs",
+}
+
+var fieldIDToName_GlueSource = map[int32]string{
+	1: "Source",
+}
+
+var fieldIDToName_JobResult = map[int32]string{
 	1: "Ok",
 	2: "Err",
 	3: "Result",

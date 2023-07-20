@@ -28,6 +28,7 @@ func NewServiceInfo() *kitex.ServiceInfo {
 	extra := map[string]interface{}{
 		"PackageName": "api",
 	}
+	extra["streaming"] = true
 	svcInfo := &kitex.ServiceInfo{
 		ServiceName:     serviceName,
 		HandlerType:     handlerType,
@@ -193,30 +194,36 @@ func (p *HeartBeatResult) GetResult() interface{} {
 }
 
 func runJobHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	switch s := arg.(type) {
-	case *streaming.Args:
-		st := s.Stream
-		req := new(api.RunJobRequest)
-		if err := st.RecvMsg(req); err != nil {
-			return err
-		}
-		resp, err := handler.(api.Executor).RunJob(ctx, req)
-		if err != nil {
-			return err
-		}
-		if err := st.SendMsg(resp); err != nil {
-			return err
-		}
-	case *RunJobArgs:
-		success, err := handler.(api.Executor).RunJob(ctx, s.Req)
-		if err != nil {
-			return err
-		}
-		realResult := result.(*RunJobResult)
-		realResult.Success = success
-	}
-	return nil
+	st := arg.(*streaming.Args).Stream
+	stream := &executorRunJobServer{st}
+	return handler.(api.Executor).RunJob(stream)
 }
+
+type executorRunJobClient struct {
+	streaming.Stream
+}
+
+func (x *executorRunJobClient) Send(m *api.RunJobRequest) error {
+	return x.Stream.SendMsg(m)
+}
+func (x *executorRunJobClient) Recv() (*api.RunJobResponse, error) {
+	m := new(api.RunJobResponse)
+	return m, x.Stream.RecvMsg(m)
+}
+
+type executorRunJobServer struct {
+	streaming.Stream
+}
+
+func (x *executorRunJobServer) Send(m *api.RunJobResponse) error {
+	return x.Stream.SendMsg(m)
+}
+
+func (x *executorRunJobServer) Recv() (*api.RunJobRequest, error) {
+	m := new(api.RunJobRequest)
+	return m, x.Stream.RecvMsg(m)
+}
+
 func newRunJobArgs() interface{} {
 	return &RunJobArgs{}
 }
@@ -365,12 +372,16 @@ func (p *kClient) HeartBeat(ctx context.Context, Req *api.HeartBeatRequest) (r *
 	return _result.GetSuccess(), nil
 }
 
-func (p *kClient) RunJob(ctx context.Context, Req *api.RunJobRequest) (r *api.RunJobResponse, err error) {
-	var _args RunJobArgs
-	_args.Req = Req
-	var _result RunJobResult
-	if err = p.c.Call(ctx, "RunJob", &_args, &_result); err != nil {
-		return
+func (p *kClient) RunJob(ctx context.Context) (Executor_RunJobClient, error) {
+	streamClient, ok := p.c.(client.Streaming)
+	if !ok {
+		return nil, fmt.Errorf("client not support streaming")
 	}
-	return _result.GetSuccess(), nil
+	res := new(streaming.Result)
+	err := streamClient.Stream(ctx, "RunJob", nil, res)
+	if err != nil {
+		return nil, err
+	}
+	stream := &executorRunJobClient{res.Stream}
+	return stream, nil
 }

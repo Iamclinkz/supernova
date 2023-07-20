@@ -7,21 +7,28 @@ import (
 )
 
 type OnFireService struct {
-	jobOperator       schedule_operator.Operator
+	scheduleOperator  schedule_operator.Operator
 	statisticsService *StatisticsService
 }
 
 func NewOnFireService(jobOperator schedule_operator.Operator, statisticsService *StatisticsService) *OnFireService {
 	return &OnFireService{
-		jobOperator:       jobOperator,
+		scheduleOperator:  jobOperator,
 		statisticsService: statisticsService,
 	}
 }
-
-func (s *OnFireService) DeleteOnFireLogFromID(ctx context.Context, onFireLogID uint) error {
-	return s.jobOperator.DeleteOnFireLogFromID(ctx, onFireLogID)
+func (s *OnFireService) UpdateOnFireLogExecutorStatus(ctx context.Context, onFireLog *model.OnFireLog) error {
+	return s.scheduleOperator.UpdateOnFireLogExecutorStatus(ctx, onFireLog)
 }
 
-func (s *JobService) UpdateOnFireLogExecutorStatus(ctx context.Context, onFireLog *model.OnFireLog) error {
-	return s.jobOperator.UpdateOnFireLogExecutorStatus(ctx, onFireLog)
+func (s *OnFireService) UpdateOnFireLogFail(ctx context.Context, id uint) error {
+	return s.scheduleOperator.UpdateOnFireLogFail(ctx, id)
+}
+
+func (s *OnFireService) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID uint, result string) error {
+	return s.scheduleOperator.UpdateOnFireLogSuccess(ctx, onFireLogID, result)
+}
+
+func (s *OnFireService) UpdateOnFireLogStop(ctx context.Context, onFireLogID uint, msg string) error {
+	return s.scheduleOperator.UpdateOnFireLogStop(ctx, onFireLogID, msg)
 }

@@ -5,10 +5,10 @@ import "strconv"
 type ScheduleType int8
 
 const (
-	ScheduleTypeMin ScheduleType = iota
-	ScheduleTypeNone
-	ScheduleTypeOnce
-	ScheduleTypeCron
+	ScheduleTypeMin  ScheduleType = iota
+	ScheduleTypeNone              //一次都不执行（等待用户手动执行）
+	ScheduleTypeOnce              //执行一次
+	ScheduleTypeCron              //cron表达式
 	ScheduleTypeMax
 )
 
@@ -32,10 +32,10 @@ func (t ScheduleType) Valid() bool {
 type MisfireStrategyType int8
 
 const (
-	MisfireStrategyTypeMin MisfireStrategyType = iota
-	MisfireStrategyTypeDoNothing
-	MisfireStrategyTypeFireNow
-	MisfireStrategyTypeFireNormal
+	MisfireStrategyTypeMin        MisfireStrategyType = iota
+	MisfireStrategyTypeDoNothing                      //错过了本次就不fire了
+	MisfireStrategyTypeFireNow                        //加急，直接fire
+	MisfireStrategyTypeFireNormal                     //正常fire，扔到定时器中，下次tick正常fire
 	MisfireStrategyTypeMax
 )
 
@@ -59,10 +59,10 @@ func (t MisfireStrategyType) Valid() bool {
 type ExecutorRouteStrategyType int8
 
 const (
-	ExecutorRouteStrategyTypeMin ExecutorRouteStrategyType = iota
-	ExecutorRouteStrategyTypeRandom
-	ExecutorRouteStrategyTypeTag
-	ExecutorRouteStrategyTypeBroadcast
+	ExecutorRouteStrategyTypeMin       ExecutorRouteStrategyType = iota
+	ExecutorRouteStrategyTypeRandom                              //随机选择一个执行器
+	ExecutorRouteStrategyTypeHash                                //一致性路由，本trigger最好分到同一个执行器实例执行
+	ExecutorRouteStrategyTypeBroadcast                           //分给全部执行器执行
 	ExecutorRouteStrategyTypeMax
 )
 
@@ -70,8 +70,8 @@ func (t ExecutorRouteStrategyType) String() string {
 	switch t {
 	case ExecutorRouteStrategyTypeRandom:
 		return "ExecutorRouteStrategyTypeRandom"
-	case ExecutorRouteStrategyTypeTag:
-		return "ExecutorRouteStrategyTypeTag"
+	case ExecutorRouteStrategyTypeHash:
+		return "ExecutorRouteStrategyTypeHash"
 	case ExecutorRouteStrategyTypeBroadcast:
 		return "ExecutorRouteStrategyTypeBroadcast"
 	default:
@@ -83,64 +83,13 @@ func (t ExecutorRouteStrategyType) Valid() bool {
 	return t > ExecutorRouteStrategyTypeMin && t < ExecutorRouteStrategyTypeMax
 }
 
-type GlueType int8
-
-const (
-	GlueTypeMin GlueType = iota
-	GlueTypeShell
-	GlueTypePython
-	GlueTypeGo
-	GlueTypeMax
-)
-
-func (t GlueType) String() string {
-	switch t {
-	case GlueTypeShell:
-		return "GlueTypeShell"
-	case GlueTypePython:
-		return "GlueTypePython"
-	case GlueTypeGo:
-		return "GlueTypeGo"
-	default:
-		return "UnknownGlueType" + strconv.Itoa(int(t))
-	}
-}
-
-func (t GlueType) Valid() bool {
-	return t > GlueTypeMin && t < GlueTypeMax
-}
-
-type ExecutorBlockStrategy int8
-
-const (
-	ExecutorBlockStrategyMin ExecutorBlockStrategy = iota
-	ExecutorBlockStrategyBlock
-	ExecutorBlockStrategyNoBlock
-	ExecutorBlockStrategyMax
-)
-
-func (t ExecutorBlockStrategy) String() string {
-	switch t {
-	case ExecutorBlockStrategyBlock:
-		return "ExecutorBlockStrategyBlock"
-	case ExecutorBlockStrategyNoBlock:
-		return "ExecutorBlockStrategyNoBlock"
-	default:
-		return "UnknownExecutorBlockStrategy" + strconv.Itoa(int(t))
-	}
-}
-
-func (t ExecutorBlockStrategy) Valid() bool {
-	return t > ExecutorBlockStrategyMin && t < ExecutorBlockStrategyMax
-}
-
 type JobStatus int8
 
 const (
-	JobStatusMin JobStatus = iota
-	JobStatusStopped
-	JobStatusWaiting
-	JobStatusAcquired
+	JobStatusMin     JobStatus = iota
+	JobStatusNormal            //正常等待执行
+	JobStatusStopped           //用户手动停止。这种情况下只有失败的任务还可以重试，正常的trigger暂停执行
+	JobStatusDeleted           //用户手动删掉了任务，但是选择了正在执行的重试trigger不受影响
 	JobStatusMax
 )
 
@@ -148,9 +97,9 @@ func (t JobStatus) String() string {
 	switch t {
 	case JobStatusStopped:
 		return "JobStatusStopped"
-	case JobStatusWaiting:
-		return "JobStatusWaiting"
-	case JobStatusAcquired:
+	case JobStatusNormal:
+		return "JobStatusNormal"
+	case JobStatusDeleted:
 		return "JobStatusAcquired"
 	default:
 		return "UnknownJobStatus" + strconv.Itoa(int(t))
@@ -164,11 +113,10 @@ func (t JobStatus) Valid() bool {
 type OnFireStatus int8
 
 const (
-	OnFireStatusMin OnFireStatus = iota
-	OnFireStatusWaiting
-	OnFireStatusExecuting
-	OnFireStatusFinished
-	OnFireStatusFailed
+	OnFireStatusMin       OnFireStatus = iota
+	OnFireStatusWaiting                //已经被某个Scheduler取走，正在等待分配执行器
+	OnFireStatusExecuting              //正在被某个Executor执行
+	OnFireStatusFinished               //执行结束（可能是执行成功，也可能是执行失败，且重试次数用光）
 	OnFireStatusMax
 )
 
@@ -180,8 +128,6 @@ func (t OnFireStatus) String() string {
 		return "OnFireStatusExecuting"
 	case OnFireStatusFinished:
 		return "OnFireStatusFinished"
-	case OnFireStatusFailed:
-		return "OnFireStatusFailed"
 	default:
 		return "UnknownOnFireStatus" + strconv.Itoa(int(t))
 	}
@@ -194,10 +140,10 @@ func (t OnFireStatus) Valid() bool {
 type TriggerStatus int8
 
 const (
-	TriggerStatusMin TriggerStatus = iota
-	TriggerStatusNormal
-	TriggerStatusError
-	TriggerStatusPause
+	TriggerStatusMin    TriggerStatus = iota
+	TriggerStatusNormal               //正常状态
+	TriggerStatusError                //出错（例如用户指定了错误的Cron表达式）
+	TriggerStatusPause                //用户手动停止
 	TriggerStatusMax
 )
 

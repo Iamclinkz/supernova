@@ -217,13 +217,13 @@ func (tw *TimeWheel) handleTick() {
 }
 
 // Add add an task
-func (tw *TimeWheel) Add(delay time.Duration, callback func()) *Task {
-	return tw.addAny(delay, callback, modeNotCircle, modeIsAsync)
+func (tw *TimeWheel) Add(delay time.Duration, callback func(), async bool) *Task {
+	return tw.addAny(delay, callback, modeNotCircle, async)
 }
 
 // AddCron add interval task
-func (tw *TimeWheel) AddCron(delay time.Duration, callback func()) *Task {
-	return tw.addAny(delay, callback, modeIsCircle, modeIsAsync)
+func (tw *TimeWheel) AddCron(delay time.Duration, callback func(), async bool) *Task {
+	return tw.addAny(delay, callback, modeIsCircle, async)
 }
 
 func (tw *TimeWheel) addAny(delay time.Duration, callback func(), circle, async bool) *Task {
@@ -285,10 +285,9 @@ func (tw *TimeWheel) calculateIndex(delay time.Duration) (index int) {
 	return
 }
 
-func (tw *TimeWheel) Remove(task *Task) error {
+func (tw *TimeWheel) Remove(task *Task) {
 	// tw.removeC <- task
 	tw.remove(task)
-	return nil
 }
 
 func (tw *TimeWheel) remove(task *Task) {

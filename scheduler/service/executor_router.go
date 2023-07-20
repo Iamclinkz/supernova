@@ -3,9 +3,9 @@ package service
 import (
 	"errors"
 	"math/rand"
+	"supernova/pkg/util"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
-	"supernova/scheduler/util"
 	"sync"
 )
 
@@ -77,7 +77,6 @@ func (s *ExecutorRouteService) findMatchingExecutorsForJob(job *model.Job) ([]*E
 
 // OnExecutorUpdate 在更新Executor时，刷新当前的倒排索引
 func (s *ExecutorRouteService) OnExecutorUpdate(newExecutors map[string]*ExecutorWrapper) {
-	//todo 注册到executorManageService中
 	newInvertedIndex := make(map[string][]*ExecutorWrapper, len(newExecutors))
 	for _, newExecutor := range newExecutors {
 		for _, tag := range newExecutor.Executor.Tags {
@@ -85,6 +84,7 @@ func (s *ExecutorRouteService) OnExecutorUpdate(newExecutors map[string]*Executo
 		}
 	}
 
+	//加锁保证这俩一起更新
 	s.mu.Lock()
 	s.invertedIndex = newInvertedIndex
 	s.executors = newExecutors

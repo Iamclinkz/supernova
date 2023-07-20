@@ -1,6 +1,9 @@
 package discovery
 
 import (
+	"context"
+	"fmt"
+	"net/http"
 	"strconv"
 	"sync"
 
@@ -17,6 +20,7 @@ type ConsulDiscoverClient struct {
 	config       *api.Config
 	mutex        sync.Mutex
 	instancesMap sync.Map
+	httpServer   *http.Server
 }
 
 func newConsulDiscoverClient(consulHost string, consulPort int) (Client, error) {
@@ -56,10 +60,30 @@ func (consulClient *ConsulDiscoverClient) Register(instance *ServiceInstance) er
 		},
 	}
 
+	consulClient.httpServer = &http.Server{
+		Addr: fmt.Sprintf(":" + strconv.Itoa(instance.Port)),
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("OK"))
+		}),
+	}
+
+	go func() {
+		if err := consulClient.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			klog.Errorf("Error starting HTTP server for health check: %v", err)
+		}
+	}()
+
 	return consulClient.client.Register(serviceRegistration)
 }
 
 func (consulClient *ConsulDiscoverClient) DeRegister(instanceId string) error {
+	if consulClient.httpServer != nil {
+		if err := consulClient.httpServer.Shutdown(context.Background()); err != nil {
+			klog.Errorf("Error stopping HTTP server for health check: %v", err)
+		}
+	}
+
 	serviceRegistration := &api.AgentServiceRegistration{
 		ID: instanceId,
 	}
@@ -135,10 +159,12 @@ func convertAgentServiceToServiceInstance(agentService *api.AgentService) *Servi
 	return &ServiceInstance{
 		ServiceName: agentService.Service,
 		InstanceId:  agentService.ID,
-		Host:        agentService.Address,
-		Port:        agentService.Port,
-		Protoc:      ProtocType(agentService.Meta[serviceProtocFieldName]),
-		Meta:        agentService.Meta,
+		ServiceServeConf: ServiceServeConf{
+			Protoc: ProtocType(agentService.Meta[serviceProtocFieldName]),
+			Host:   agentService.Address,
+			Port:   agentService.Port,
+		},
+		Meta: agentService.Meta,
 	}
 }
 

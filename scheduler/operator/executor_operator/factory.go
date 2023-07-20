@@ -2,6 +2,7 @@ package executor_operator
 
 import (
 	"errors"
+	"supernova/pkg/api"
 	"supernova/pkg/discovery"
 	"supernova/scheduler/model"
 	"time"
@@ -9,7 +10,8 @@ import (
 
 type Operator interface {
 	CheckStatus(timeout time.Duration) (*model.ExecutorStatus, error)
-	RunJob(request *model.RunJobRequest, timeout time.Duration) (response *model.RunJobResponse, err error)
+	RunJob(request *api.RunJobRequest) (err error)
+	Alive() bool
 }
 
 func NewOperatorByProtoc(protoc discovery.ProtocType, host string, port int) (Operator, error) {

@@ -6,23 +6,22 @@ import (
 	"fmt"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
-	"time"
 )
 
 type JobService struct {
-	jobOperator       schedule_operator.Operator
+	scheduleOperator  schedule_operator.Operator
 	statisticsService *StatisticsService
 }
 
 func NewJobService(jobOperator schedule_operator.Operator, statisticsService *StatisticsService) *JobService {
 	return &JobService{
-		jobOperator:       jobOperator,
+		scheduleOperator:  jobOperator,
 		statisticsService: statisticsService,
 	}
 }
 
 func (s *JobService) FetchJobFromID(ctx context.Context, jobID uint) (*model.Job, error) {
-	job, err := s.jobOperator.FetchJobFromID(ctx, jobID)
+	job, err := s.scheduleOperator.FetchJobFromID(ctx, jobID)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +34,7 @@ func (s *JobService) AddJob(ctx context.Context, job *model.Job) error {
 		return err
 	}
 
-	if err := s.jobOperator.InsertJob(ctx, job); err != nil {
+	if err := s.scheduleOperator.InsertJob(ctx, job); err != nil {
 		return err
 	}
 
@@ -49,7 +48,7 @@ func (s *JobService) AddJobs(ctx context.Context, jobs []*model.Job) error {
 		}
 	}
 
-	if err := s.jobOperator.InsertJobs(ctx, jobs); err != nil {
+	if err := s.scheduleOperator.InsertJobs(ctx, jobs); err != nil {
 		return err
 	}
 
@@ -57,11 +56,11 @@ func (s *JobService) AddJobs(ctx context.Context, jobs []*model.Job) error {
 }
 
 func (s *JobService) FindJobByName(ctx context.Context, name string) (*model.Job, error) {
-	return s.jobOperator.FindJobByName(ctx, name)
+	return s.scheduleOperator.FindJobByName(ctx, name)
 }
 
 func (s *JobService) DeleteJob(ctx context.Context, jobID uint) error {
-	if err := s.jobOperator.DeleteJobFromID(ctx, jobID); err != nil {
+	if err := s.scheduleOperator.DeleteJobFromID(ctx, jobID); err != nil {
 		return err
 	}
 
@@ -77,16 +76,12 @@ func (s *JobService) ValidateJob(job *model.Job) error {
 		return errors.New("invalid ExecutorRouteStrategy")
 	}
 
-	if !job.GlueType.Valid() {
+	if job.GlueType == "" {
 		return errors.New("invalid GlueType")
 	}
 
-	if job.GlueSource == "" {
+	if job.GlueSource == nil {
 		return errors.New("glue_source cannot be empty")
-	}
-
-	if job.ExecutorExecuteTimeout < time.Millisecond*20 {
-		return errors.New("executor_execute_timeout must be greater than 20ms")
 	}
 
 	return nil

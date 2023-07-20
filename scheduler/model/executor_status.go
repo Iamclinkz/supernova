@@ -8,10 +8,9 @@ type ExecutorStatus struct {
 	RunningJob int
 	Cpu        int
 	Memory     int
+	Workload   float32
 }
 
 func (s *ExecutorStatus) FromPb(response *api.HeartBeatResponse) {
-	s.RunningJob = int(response.Cpu)
-	s.Memory = int(response.Memory)
-	s.RunningJob = int(response.RunningJob)
+	s.Workload = response.HealthStatus.Workload
 }

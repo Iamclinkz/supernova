@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
-	"supernova/scheduler/util"
+	"supernova/pkg/util"
 )
 
 type Executor struct {

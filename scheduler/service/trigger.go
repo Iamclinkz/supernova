@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"supernova/pkg/util"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
-	"supernova/scheduler/util"
 	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
@@ -25,11 +25,11 @@ func NewTriggerService(scheduleOperator schedule_operator.Operator, statisticsSe
 	}
 }
 
-func (s *TriggerService) DeleteTriggerFromID(ctx context.Context, triggerID uint) error {
-	return s.scheduleOperator.DeleteTriggerFromID(ctx, triggerID)
+func (s *TriggerService) DeleteTriggerFromID(triggerID uint) error {
+	return s.scheduleOperator.DeleteTriggerFromID(context.TODO(), triggerID)
 }
 
-func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context) ([]*model.OnFireLog, error) {
+func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 	var (
 		now                    = time.Now()
 		beginTriggerHandleTime = now.Add(-s.statisticsService.GetHandleTriggerForwardDuration())
@@ -41,7 +41,7 @@ func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context) ([]*model.O
 	)
 
 	//1.开启事务，保证同时只能有一个实例拿到任务，且如果失败，则回滚
-	if txCtx, err = s.scheduleOperator.OnTxStart(ctx); err != nil {
+	if txCtx, err = s.scheduleOperator.OnTxStart(context.TODO()); err != nil {
 		return nil, err
 	}
 
@@ -50,7 +50,8 @@ func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context) ([]*model.O
 	}
 
 	//2.拿到位于[beginTriggerHandleTime,endTriggerHandleTime]之间的最近要执行的trigger
-	fetchedTriggers, err = s.scheduleOperator.FetchRecentTriggers(txCtx, s.statisticsService.GetHandleTriggerMaxCount(), endTriggerHandleTime, beginTriggerHandleTime)
+	fetchedTriggers, err = s.scheduleOperator.FetchRecentTriggers(txCtx,
+		s.statisticsService.GetHandleTriggerMaxCount(), endTriggerHandleTime, beginTriggerHandleTime)
 	if err != nil {
 		goto badEnd
 	}
@@ -75,13 +76,13 @@ func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context) ([]*model.O
 			}
 			fireTime := trigger.TriggerNextTime
 
-			onFireErr := trigger.OnFire()
+			prepareFireErr := trigger.PrepareFire()
 
-			if onFireErr != nil {
-				//如果fire失败，那么设置trigger的状态为error，不处理后面的了
+			if prepareFireErr != nil {
+				//如果失败，那么设置trigger的状态为error，现在不执行，以后也不执行，直到用户手动处理
 				trigger.Status = constance.TriggerStatusError
 				trigger.TriggerNextTime = util.VeryLateTime()
-				klog.Errorf("find error trigger:[%+v] when calling OnFire, err:%v", trigger, onFireErr)
+				klog.Errorf("find error trigger:[%+v] when calling PrepareFire, err:%v", trigger, prepareFireErr)
 				break
 			}
 
@@ -91,8 +92,9 @@ func (s *TriggerService) fetchUpdateMarkTrigger(ctx context.Context) ([]*model.O
 				Status:           constance.OnFireStatusWaiting,
 				RetryCount:       trigger.FailRetryCount,
 				ExecutorInstance: "",
-				TimeoutAt:        fireTime.Add(trigger.TriggerTimeout),
+				RedoAt:           fireTime.Add(trigger.ExecuteTimeout),
 				ShouldFireAt:     fireTime,
+				ExecuteTimeout:   trigger.ExecuteTimeout,
 			}
 			onFireTriggers = append(onFireTriggers, onFireTrigger)
 			klog.Tracef("update on fire trigger:%+v", onFireTrigger)
@@ -133,20 +135,20 @@ emptyEnd:
 	return []*model.OnFireLog{}, nil
 }
 
-func (s *TriggerService) AddTrigger(ctx context.Context, trigger *model.Trigger) error {
+func (s *TriggerService) AddTrigger(trigger *model.Trigger) error {
 	if err := s.ValidateTrigger(trigger); err != nil {
 		return err
 	}
 
-	if err := s.scheduleOperator.InsertTrigger(ctx, trigger); err != nil {
+	if err := s.scheduleOperator.InsertTrigger(context.TODO(), trigger); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (s *TriggerService) DeleteTrigger(ctx context.Context, triggerID uint) error {
-	if err := s.scheduleOperator.DeleteTriggerFromID(ctx, triggerID); err != nil {
+func (s *TriggerService) DeleteTrigger(triggerID uint) error {
+	if err := s.scheduleOperator.DeleteTriggerFromID(context.TODO(), triggerID); err != nil {
 		return err
 	}
 
@@ -170,7 +172,7 @@ func (s *TriggerService) ValidateTrigger(trigger *model.Trigger) error {
 		return errors.New("fail_retry_count must be greater than or equal to 0")
 	}
 
-	if trigger.TriggerTimeout < time.Millisecond*20 {
+	if trigger.ExecuteTimeout < time.Millisecond*20 {
 		return errors.New("trigger_timeout must be greater than 20ms")
 	}
 
@@ -186,8 +188,8 @@ func (s *TriggerService) ValidateTrigger(trigger *model.Trigger) error {
 	return nil
 }
 
-func (s *TriggerService) FetchTriggerFromID(ctx context.Context, triggerID uint) (*model.Trigger, error) {
-	trigger, err := s.scheduleOperator.FetchTriggerFromID(ctx, triggerID)
+func (s *TriggerService) FetchTriggerFromID(triggerID uint) (*model.Trigger, error) {
+	trigger, err := s.scheduleOperator.FetchTriggerFromID(context.TODO(), triggerID)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +197,7 @@ func (s *TriggerService) FetchTriggerFromID(ctx context.Context, triggerID uint)
 	return trigger, nil
 }
 
-func (s *TriggerService) AddTriggers(ctx context.Context, triggers []*model.Trigger) error {
+func (s *TriggerService) AddTriggers(triggers []*model.Trigger) error {
 	for _, trigger := range triggers {
 		if err := s.ValidateTrigger(trigger); err != nil {
 			return fmt.Errorf("error trigger:%+v", trigger)
@@ -204,9 +206,34 @@ func (s *TriggerService) AddTriggers(ctx context.Context, triggers []*model.Trig
 		trigger.TriggerLastTime = util.VeryEarlyTime()
 	}
 
-	return s.scheduleOperator.InsertTriggers(ctx, triggers)
+	return s.scheduleOperator.InsertTriggers(context.TODO(), triggers)
 }
 
-func (s *TriggerService) FindTriggerByName(ctx context.Context, name string) (*model.Trigger, error) {
-	return s.scheduleOperator.FindTriggerByName(ctx, name)
+func (s *TriggerService) FindTriggerByName(name string) (*model.Trigger, error) {
+	return s.scheduleOperator.FindTriggerByName(context.TODO(), name)
+}
+
+func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog, error) {
+	var (
+		now             = time.Now()
+		beginHandleTime = now.Add(-s.statisticsService.GetHandleTriggerForwardDuration()) //最多到之前的多长时间
+	)
+
+	onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(),
+		s.statisticsService.GetHandleTimeoutOnFireLogMaxCount(), now, beginHandleTime)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := make([]*model.OnFireLog, 0, len(onFireLogs))
+	for _, onFireLog := range ret {
+		if err = s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog.ID, onFireLog.RedoAt); err == nil {
+			//因为不考虑极端的情况下，失败的应该不多？且各个Scheduler动态调整捞取过期OnFireLog时间+捞取间隔较长，
+			//所以这里用了乐观锁，取到过期的OnFireLog之后，尝试更新RedoAt字段。如果更新成功，则自己执行。更新失败则说明要不
+			//成功了，要不让另一个进程抢先了，总之不是自己执行。
+			ret = append(ret, onFireLog)
+		}
+	}
+
+	return ret, nil
 }

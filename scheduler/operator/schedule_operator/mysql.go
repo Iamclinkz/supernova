@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"supernova/pkg/util"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/dal"
 	"supernova/scheduler/model"
@@ -20,6 +21,100 @@ type MysqlOperator struct {
 	emptyTrigger   *model.Trigger
 	emptyOnFireLog *model.OnFireLog
 	emptyLock      *model.Lock
+}
+
+var (
+	updateRedoAtExpr = gorm.Expr("redo_at + INTERVAL (retry_count - left_retry_count + 1) * 10 SECOND")
+	reduceRedoAtExpr = gorm.Expr("left_retry_count - 1")
+)
+
+func (m *MysqlOperator) UpdateOnFireLogRedoAt(ctx context.Context, onFireLogID uint, oldRedoAt time.Time) error {
+	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	if !ok {
+		tx = m.db.DB()
+	}
+
+	return tx.Model(m.emptyOnFireLog).
+		Where("id = ? AND status != ? AND redo_at = ?", onFireLogID, constance.OnFireStatusFinished, oldRedoAt).
+		Updates(map[string]interface{}{
+			"redo_at": updateRedoAtExpr,
+		}).Error
+}
+
+func (m *MysqlOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time) ([]*model.OnFireLog, error) {
+	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	if !ok {
+		tx = m.db.DB()
+	}
+
+	var logs []*model.OnFireLog
+
+	err := tx.Select("id, trigger_id, job_id, executor_instance, param").
+		Where("redo_at > ? AND redo_at < ? AND status != ? AND left_retry_count > 0", noEarlyThan, noLaterThan, constance.OnFireStatusFinished).
+		Limit(maxCount).Find(&logs).Error
+	return logs, err
+}
+
+func (m *MysqlOperator) UpdateOnFireLogStop(ctx context.Context, onFireLogID uint, msg string) error {
+	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	if !ok {
+		tx = m.db.DB()
+	}
+
+	// 更新满足条件的记录
+	return tx.Model(m.emptyOnFireLog).
+		Where("id = ? AND status != ?", onFireLogID, constance.OnFireStatusFinished).
+		Updates(map[string]interface{}{
+			"status":  constance.OnFireStatusFinished,
+			"result":  msg,
+			"redo_at": util.VeryLateTime(),
+		}).Error
+}
+
+func (m *MysqlOperator) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID uint, result string) error {
+	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	if !ok {
+		tx = m.db.DB()
+	}
+
+	// 更新满足条件的记录
+	return tx.Model(m.emptyOnFireLog).
+		Where("id = ? AND status != ?", onFireLogID, constance.OnFireStatusFinished).
+		Updates(map[string]interface{}{
+			"success": true,
+			"status":  constance.OnFireStatusFinished,
+			"result":  result,
+			"redo_at": util.VeryLateTime(),
+		}).Error
+}
+
+func (m *MysqlOperator) UpdateOnFireLogFail(ctx context.Context, onFireLogID uint) error {
+	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	if !ok {
+		tx = m.db.DB()
+	}
+
+	// 更新满足条件的记录
+	return tx.Model(m.emptyOnFireLog).
+		Where("id = ? AND status != ? AND left_retry_count > 0", onFireLogID, constance.OnFireStatusFinished).
+		Updates(map[string]interface{}{
+			"left_retry_count": reduceRedoAtExpr,
+		}).Error
+}
+
+func (m *MysqlOperator) FindOnFireLogByJobID(ctx context.Context, jobID uint) ([]*model.OnFireLog, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MysqlOperator) FetchOnFireLogByID(ctx context.Context, jobID uint) (*model.OnFireLog, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MysqlOperator) FindOnFireLogByTriggerID(ctx context.Context, triggerID uint) ([]*model.OnFireLog, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (m *MysqlOperator) InsertJobs(ctx context.Context, jobs []*model.Job) error {
@@ -97,7 +192,7 @@ func (m *MysqlOperator) Lock(ctx context.Context, lockName string) error {
 	}
 
 	var lock model.Lock
-	return tx.Raw("SELECT * FROM t_lock WHERE lock_name = ? FOR UPDATE", "fetchUpdateMarkTrigger").Scan(&lock).Error
+	return tx.Raw("SELECT * FROM t_lock WHERE lock_name = ? FOR UPDATE", lockName).Scan(&lock).Error
 }
 
 func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {

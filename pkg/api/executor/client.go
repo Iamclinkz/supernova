@@ -6,19 +6,29 @@ import (
 	"context"
 	client "github.com/cloudwego/kitex/client"
 	callopt "github.com/cloudwego/kitex/client/callopt"
+	streaming "github.com/cloudwego/kitex/pkg/streaming"
+	transport "github.com/cloudwego/kitex/transport"
 	"supernova/pkg/api"
 )
 
 // Client is designed to provide IDL-compatible methods with call-option parameter for kitex framework.
 type Client interface {
 	HeartBeat(ctx context.Context, Req *api.HeartBeatRequest, callOptions ...callopt.Option) (r *api.HeartBeatResponse, err error)
-	RunJob(ctx context.Context, Req *api.RunJobRequest, callOptions ...callopt.Option) (r *api.RunJobResponse, err error)
+	RunJob(ctx context.Context, callOptions ...callopt.Option) (stream Executor_RunJobClient, err error)
+}
+
+type Executor_RunJobClient interface {
+	streaming.Stream
+	Send(*api.RunJobRequest) error
+	Recv() (*api.RunJobResponse, error)
 }
 
 // NewClient creates a client for the service defined in IDL.
 func NewClient(destService string, opts ...client.Option) (Client, error) {
 	var options []client.Option
 	options = append(options, client.WithDestService(destService))
+
+	options = append(options, client.WithTransportProtocol(transport.GRPC))
 
 	options = append(options, opts...)
 
@@ -49,7 +59,7 @@ func (p *kExecutorClient) HeartBeat(ctx context.Context, Req *api.HeartBeatReque
 	return p.kClient.HeartBeat(ctx, Req)
 }
 
-func (p *kExecutorClient) RunJob(ctx context.Context, Req *api.RunJobRequest, callOptions ...callopt.Option) (r *api.RunJobResponse, err error) {
+func (p *kExecutorClient) RunJob(ctx context.Context, callOptions ...callopt.Option) (stream Executor_RunJobClient, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.RunJob(ctx, Req)
+	return p.kClient.RunJob(ctx)
 }

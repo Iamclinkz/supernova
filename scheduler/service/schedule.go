@@ -3,52 +3,66 @@ package service
 import (
 	"context"
 	"errors"
+	"supernova/pkg/api"
+	"supernova/pkg/util"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
-	"supernova/scheduler/util"
+	"sync"
 	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 type ScheduleService struct {
-	shutdownCh            chan struct{}
+	stopCh                chan struct{}
 	statisticsService     *StatisticsService
 	jobService            *JobService
 	triggerService        *TriggerService
 	onFireService         *OnFireService
 	executorSelectService *ExecutorRouteService
-	//这里不用cron.Cron，因为触发时间确定且只触发一次且距离触发时间较短，所以用时间轮定时器了
-	timeWheel *util.TimeWheel
+	timeWheel             *util.TimeWheel //这里不用cron.Cron，因为触发时间确定，且只触发一次，且距离触发时间较短，所以用时间轮定时器了
+	timeWheelTaskCh       chan *model.OnFireLog
+	overtimeOnFireLogCh   chan *model.OnFireLog
+	jobResponseTaskCh     chan *api.RunJobResponse
+	wg                    sync.WaitGroup
+	workerCount           int
 }
 
 func NewScheduleService(statisticsService *StatisticsService,
 	jobService *JobService, triggerService *TriggerService, onFireService *OnFireService,
-	executorSelectService *ExecutorRouteService) *ScheduleService {
+	executorSelectService *ExecutorRouteService,
+	workerCount int) *ScheduleService {
 	tw, _ := util.NewTimeWheel(time.Millisecond*20, 512, util.TickSafeMode())
 	return &ScheduleService{
-		shutdownCh:            make(chan struct{}),
+		stopCh:                make(chan struct{}),
 		statisticsService:     statisticsService,
 		jobService:            jobService,
 		triggerService:        triggerService,
 		onFireService:         onFireService,
 		executorSelectService: executorSelectService,
 		timeWheel:             tw,
+		//todo 想一下大小
+		timeWheelTaskCh:   make(chan *model.OnFireLog, workerCount*2),
+		jobResponseTaskCh: make(chan *api.RunJobResponse, workerCount*2),
+		wg:                sync.WaitGroup{},
+		workerCount:       workerCount,
 	}
 }
 
 func (s *ScheduleService) Schedule() {
 	s.timeWheel.Start()
+	s.startWorker()
 	ticker := time.NewTicker(s.statisticsService.GetScheduleInterval())
 
 	for {
 		select {
-		case <-s.shutdownCh:
+		case <-s.stopCh:
+			klog.Infof("schedule go routine stopped")
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			onFireLogs, err := s.triggerService.fetchUpdateMarkTrigger(context.TODO())
+			onFireLogs, err := s.triggerService.fetchUpdateMarkTrigger()
 			if err != nil {
 				klog.Errorf("Schedule Error:%v", err)
 			} else {
@@ -56,11 +70,8 @@ func (s *ScheduleService) Schedule() {
 				for _, onFireLog := range onFireLogs {
 					currentLog := onFireLog
 					s.timeWheel.Add(currentLog.ShouldFireAt.Sub(now), func() {
-						klog.Tracef("onFireJob:%v start fire", currentLog)
-						if fireErr := s.fire(currentLog); fireErr != nil {
-							klog.Errorf("onFireJob:%v fire error:%v", currentLog, fireErr)
-						}
-					})
+						s.timeWheelTaskCh <- currentLog
+					}, false)
 				}
 			}
 			ticker.Reset(s.statisticsService.GetScheduleInterval())
@@ -69,46 +80,135 @@ func (s *ScheduleService) Schedule() {
 }
 
 func (s *ScheduleService) Stop() {
-	//同步等待
-	s.shutdownCh <- struct{}{}
+	close(s.stopCh)
 	s.timeWheel.Stop()
+	s.wg.Wait()
+	klog.Infof("ScheduleService worker, timeWheel, scheduler stopped")
 
-	//todo 怎么优雅退出？
+	//todo 怎么优雅退出？要不要处理完管道里的所有消息？
 }
 
-func (s *ScheduleService) fire(onFireLog *model.OnFireLog) error {
+// fire 执行一次任务。force表示是否强制执行。目前为true只是表示用户删掉了任务，但是指示失败的OnFireLog仍然执行
+func (s *ScheduleService) fire(onFireLog *model.OnFireLog, force bool) error {
 	job, err := s.jobService.FetchJobFromID(context.TODO(), onFireLog.JobID)
 	if err != nil {
 		if err == schedule_operator.ErrNotFound {
-			//job找不到了，只可能说明被删了。这种情况下，本trigger应该被删掉，同时onFireLog中的内容也没啥用了，也删掉
-			_ = s.onFireService.DeleteOnFireLogFromID(context.TODO(), onFireLog.ID)
-			_ = s.triggerService.DeleteTriggerFromID(context.TODO(), onFireLog.TriggerID)
-			return errors.New("job was deleted")
+			//job找不到了，说明被删且用户不希望失败的任务再执行了。
+			//这种情况下，尝试更新一下这条OnFireLog，标记成执行结束了。不让其他进程再取了
+			//更新不成功可能是已经成功了或者其他原因，不需要处理
+			_ = s.onFireService.UpdateOnFireLogStop(context.TODO(), onFireLog.ID, "user cancel")
+			return nil
 		} else {
 			//其他情况，可能是网络不通？先不操作了
 			return errors.New("fetch db failed:" + err.Error())
 		}
 	}
 
-	executor, err := s.executorSelectService.ChooseJobExecutor(job)
+	if job.Status == constance.JobStatusDeleted && !force {
+		//如果job已经删除了，那么只有重试才能执行。否则不执行
+		return nil
+	}
+
+	executorWrapper, err := s.executorSelectService.ChooseJobExecutor(job)
 	if err != nil {
 		return err
 	}
 
-	//更新db中的onFireLog
-	onFireLog.ExecutorInstance = executor.Executor.InstanceId
+	//更新db中的onFireLog的状态，以及ExecutorInstance实例信息
+	onFireLog.ExecutorInstance = executorWrapper.Executor.InstanceId
 	onFireLog.Status = constance.OnFireStatusExecuting
-	if err = s.jobService.UpdateOnFireLogExecutorStatus(context.TODO(), onFireLog); err != nil {
+	if err = s.onFireService.UpdateOnFireLogExecutorStatus(context.TODO(), onFireLog); err != nil {
 		return err
 	}
 
-	//todo 这里再想一下，并且要插入一下日志
-	resp, err := executor.Operator.RunJob(model.NewRunJobRequestFromJob(job), time.Until(onFireLog.TimeoutAt))
-	if err != nil {
-		klog.Tracef("fire executor called finish with err:%v", err)
+	if err = executorWrapper.Operator.RunJob(model.GenRunJobRequest(onFireLog, job)); err != nil {
+		//如果执行出错，说明是executor错误。不扣除RetryCount。等下次再执行
 		return err
 	}
-
-	klog.Tracef("fire executor called finish with resp:%+v", resp)
 	return nil
+}
+
+func (s *ScheduleService) handleRunJobResponse(response *api.RunJobResponse) {
+	if !response.Result.Ok {
+		//如果执行出现了错误，那么需要扣除RetryCount，并且根据总重试次数，和当前重试次数更新下次的执行时间。
+		//这里的思考是这样的：
+		//如果收到一个失败，那么一定是执行失败（因为Executor一致性路由只能防止任务重复执行成功任务，而如果失败，肯定是经过了一次执行，然后失败了）
+		//所以这里收到一个错误，扣除一次RetryCount肯定是没问题的。即使收到错误的顺序和派发任务的顺序可能会不一样。
+		//这里更新失败了，有可能是已经成功了，我们收到了落后的失败消息，也可能已经失败了，或者数据库连接失败。
+		//对于这几种情况，已经成功/已经失败不需要处理。数据库连接失败最多也就是多尝试执行一次这个失败的任务。
+		//总之不是很严重的问题，先不处理了。
+		_ = s.onFireService.UpdateOnFireLogFail(context.TODO(), uint(response.OnFireLogID))
+		klog.Warnf("PrepareFire:%v execute failed", response.OnFireLogID)
+		return
+	}
+
+	//如果执行成功，更新OnFireLog
+	//todo 更新失败的话，除了一致性路由保底，这里也需要处理下
+	_ = s.onFireService.UpdateOnFireLogSuccess(context.TODO(), uint(response.OnFireLogID), response.Result.Result)
+	klog.Tracef("PrepareFire:%v execute successes", response.OnFireLogID)
+}
+
+func (s *ScheduleService) onReceiveJobResponse(response *api.RunJobResponse) {
+	s.jobResponseTaskCh <- response
+}
+
+func (s *ScheduleService) startWorker() {
+	if s.workerCount <= 0 {
+		panic("")
+	}
+
+	s.wg.Add(s.workerCount)
+	for i := 0; i < s.workerCount; i++ {
+		go s.work()
+	}
+	klog.Infof("ScheduleService worker started, count:%v", s.workerCount)
+}
+
+// 执行消息的发送和接收
+func (s *ScheduleService) work() {
+	for {
+		select {
+		case onFireJob := <-s.timeWheelTaskCh:
+			if fireErr := s.fire(onFireJob, false); fireErr != nil {
+				klog.Errorf("onFireJob:%v fire error:%v", onFireJob, fireErr)
+			}
+			break
+		case response := <-s.jobResponseTaskCh:
+			s.handleRunJobResponse(response)
+			break
+		case overtimeOnFireLog := <-s.overtimeOnFireLogCh:
+			if fireErr := s.fire(overtimeOnFireLog, true); fireErr != nil {
+				klog.Errorf("onFireJob:%v fire error:%v", overtimeOnFireLog, fireErr)
+			}
+			break
+		case <-s.stopCh:
+			klog.Infof("ScheduleService worker stop working")
+			s.wg.Done()
+			return
+		}
+	}
+}
+
+// checkTimeoutOnFireLogs 从数据库中捞取超时的OnFireLogs，尝试再次执行
+func (s *ScheduleService) checkTimeoutOnFireLogs() {
+	ticker := time.NewTicker(s.statisticsService.GetScheduleInterval())
+
+	for {
+		select {
+		case <-s.stopCh:
+			klog.Infof("checkTimeoutOnFireLogs go routine stopped")
+			ticker.Stop()
+			return
+		case <-ticker.C:
+			onFireLogs, err := s.triggerService.fetchTimeoutAndRefreshOnFireLogs()
+			if err != nil {
+				klog.Errorf("checkTimeoutOnFireLogs Error:%v", err)
+			} else {
+				for _, onFireLog := range onFireLogs {
+					s.overtimeOnFireLogCh <- onFireLog
+				}
+			}
+			ticker.Reset(s.statisticsService.GetScheduleInterval())
+		}
+	}
 }

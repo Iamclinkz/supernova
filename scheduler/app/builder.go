@@ -9,9 +9,10 @@ import (
 )
 
 type SchedulerBuilder struct {
-	scheduleOperator schedule_operator.Operator
-	discoveryClient  discovery.Client
-	err              error
+	scheduleOperator     schedule_operator.Operator
+	discoveryClient      discovery.Client
+	schedulerWorkerCount int
+	err                  error
 }
 
 func NewSchedulerBuilder() *SchedulerBuilder {
@@ -19,7 +20,8 @@ func NewSchedulerBuilder() *SchedulerBuilder {
 }
 
 func (b *SchedulerBuilder) WithConsulDiscovery(config *conf.ConsulConf) *SchedulerBuilder {
-	discoveryClient, err := discovery.NewDiscoveryClient(discovery.TypeConsul, &discovery.Config{
+	discoveryClient, err := discovery.NewDiscoveryClient(&discovery.MiddlewareConfig{
+		Type: discovery.TypeConsul,
 		Host: config.Host,
 		Port: config.Port,
 	})
@@ -46,6 +48,16 @@ func (b *SchedulerBuilder) WithMysqlStore(config *conf.MysqlConf) *SchedulerBuil
 	return b
 }
 
+func (b *SchedulerBuilder) WithSchedulerWorkerCount(count int) *SchedulerBuilder {
+	if count <= 0 || count > 100 {
+		b.err = errors.New("scheduler worker should be range in [1,100]")
+	} else {
+		b.schedulerWorkerCount = count
+	}
+
+	return b
+}
+
 func (b *SchedulerBuilder) Build() (*Scheduler, error) {
 	if b.err != nil {
 		return nil, b.err
@@ -56,6 +68,9 @@ func (b *SchedulerBuilder) Build() (*Scheduler, error) {
 	if b.discoveryClient == nil {
 		return nil, errors.New("no select discovery")
 	}
+	if b.schedulerWorkerCount == 0 {
+		b.schedulerWorkerCount = 20
+	}
 
-	return genScheduler(b.scheduleOperator, b.discoveryClient)
+	return genScheduler(b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)
 }

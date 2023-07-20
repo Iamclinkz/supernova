@@ -3,8 +3,8 @@ package model
 import (
 	"fmt"
 	"strings"
+	"supernova/pkg/util"
 	"supernova/scheduler/constance"
-	"supernova/scheduler/util"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -25,23 +25,22 @@ type Trigger struct {
 	// 例如Scheduler有太多任务做不过来等原因，使得调度到本trigger的时候，已经错过了本trigger的执行时间。
 	//todo 待实现
 	MisfireStrategy constance.MisfireStrategyType `gorm:"column:misfire_strategy;type:tinyint(4);not null"`
-	// 如果出错，最大重试次数
+	// 如果出错，最大重试次数。
 	FailRetryCount int `gorm:"column:executor_fail_retry_count;not null"`
-	// 在t_on_fire表中呆多长时间，算超时
-	TriggerTimeout time.Duration `gorm:"column:executor_timeout;type:bigint;not null"`
+	// executor执行的最大时间。要求用户一定指定。如果超时，则减少OnFireLog中的RetryCount字段
+	ExecuteTimeout time.Duration `gorm:"column:execute_timeout;type:bigint;not null"`
 	// 上次触发时间
 	TriggerLastTime time.Time `gorm:"column:trigger_last_time;type:timestamp;not null"`
 	// 下次触发时间
 	TriggerNextTime time.Time `gorm:"column:trigger_next_time;type:timestamp;not null;index"`
 	// 当前状态
 	Status constance.TriggerStatus `gorm:"column:status;type:tinyint(4);not null"`
-	//关联的Job的修改时间
-	//JobUpdateTime time.Time `json:"-"`
+	Param  map[string]string       `gorm:"type:json"`
 }
 
 func (t *Trigger) String() string {
 	return fmt.Sprintf("Trigger{ID: %d, Name: %s, JobID: %d, ScheduleType: %d, ScheduleConf: %s,"+
-		" MisfireStrategy: %s, FailRetryCount: %d, TriggerTimeout: %s, TriggerLastTime: %s, TriggerNextTime: %s, Status: %s}",
+		" MisfireStrategy: %s, FailRetryCount: %d, ExecuteTimeout: %s, TriggerLastTime: %s, TriggerNextTime: %s, Status: %s}",
 		t.ID,
 		t.Name,
 		t.JobID,
@@ -49,7 +48,7 @@ func (t *Trigger) String() string {
 		t.ScheduleConf,
 		t.MisfireStrategy,
 		t.FailRetryCount,
-		t.TriggerTimeout,
+		t.ExecuteTimeout,
 		t.TriggerLastTime.Format(time.RFC3339),
 		t.TriggerNextTime.Format(time.RFC3339),
 		t.Status,
@@ -80,8 +79,8 @@ func (t *Trigger) NextExecutionTime() (time.Time, error) {
 	}
 }
 
-// OnFire Trigger准备被fire时调用，目前只是更新下次fire时间，并检查本次fire时间是否正确
-func (t *Trigger) OnFire() error {
+// PrepareFire Trigger准备被fire时调用，目前只是更新下次fire时间，并检查本次fire时间是否正确
+func (t *Trigger) PrepareFire() error {
 	var err error
 	t.TriggerLastTime = t.TriggerNextTime
 	t.TriggerNextTime, err = t.NextExecutionTime()
