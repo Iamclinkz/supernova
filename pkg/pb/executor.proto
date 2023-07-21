@@ -37,14 +37,9 @@ message RunJobResponse{
 
 message Job{
     string glueType = 1;
-    GlueSource glueSource = 2;
+    map<string, string> source = 2;
     map<string, string> param = 3;
     int64 executorExecuteTimeoutMs = 4;
-}
-
-
-message GlueSource{
-    map<string, string> source = 1;
 }
 
 message JobResult{

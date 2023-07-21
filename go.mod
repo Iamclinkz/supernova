@@ -3,6 +3,7 @@ module supernova
 go 1.20
 
 require (
+	github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e
 	github.com/cloudwego/fastpb v0.0.4
 	github.com/cloudwego/kitex v0.6.1
 	github.com/gin-gonic/gin v1.9.1
@@ -11,7 +12,9 @@ require (
 	github.com/google/wire v0.5.0
 	github.com/hashicorp/consul/api v1.22.0
 	github.com/kitex-contrib/obs-opentelemetry v0.2.3
+	github.com/mattn/go-shellwords v1.0.12
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/stretchr/testify v1.8.3
 	google.golang.org/protobuf v1.30.0
 	gorm.io/driver/mysql v1.5.1
 	gorm.io/gorm v1.25.2
@@ -30,6 +33,7 @@ require (
 	github.com/cloudwego/frugal v0.1.6 // indirect
 	github.com/cloudwego/netpoll v0.4.0 // indirect
 	github.com/cloudwego/thriftgo v0.2.11 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fatih/color v1.14.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
@@ -64,6 +68,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/oleiade/lane v1.0.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/tidwall/gjson v1.9.3 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect

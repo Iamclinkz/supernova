@@ -37,8 +37,8 @@ func GenRunJobRequest(onFireLog *OnFireLog, job *Job) *api.RunJobRequest {
 	return &api.RunJobRequest{
 		OnFireLogID: uint32(onFireLog.ID),
 		Job: &api.Job{
-			GlueType:                 string(job.GlueType),
-			GlueSource:               &api.GlueSource{Source: job.GlueSource},
+			GlueType:                 job.GlueType,
+			Source:                   job.GlueSource,
 			Param:                    onFireLog.Param,
 			ExecutorExecuteTimeoutMs: onFireLog.ExecuteTimeout.Milliseconds(),
 		},

@@ -4,6 +4,7 @@
     <option name="excludedDirectories">
       <list>
         <option value="$PROJECT_DIR$/pkg/api" />
+        <option value="$PROJECT_DIR$/executor-plugin" />
       </list>
     </option>
   </component>
