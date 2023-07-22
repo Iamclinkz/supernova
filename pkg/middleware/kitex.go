@@ -9,9 +9,9 @@ import (
 
 func PrintKitexRequestResponse(next endpoint.Endpoint) endpoint.Endpoint {
 	return func(ctx context.Context, request, response interface{}) error {
-		klog.CtxTracef(ctx, "receive request: %v\n", request)
+		klog.CtxTracef(ctx, "receive request: %+v\n", request)
 		err := next(ctx, request, response)
-		klog.CtxTracef(ctx, "response: %v\n", request)
+		klog.CtxTracef(ctx, "response: %+v\n", request)
 		return err
 	}
 }

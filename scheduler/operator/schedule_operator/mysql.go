@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"supernova/pkg/util"
+	"supernova/scheduler/config"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/dal"
 	"supernova/scheduler/model"
@@ -24,8 +26,9 @@ type MysqlOperator struct {
 }
 
 var (
-	updateRedoAtExpr = gorm.Expr("redo_at + INTERVAL (retry_count - left_retry_count + 1) * 10 SECOND")
 	reduceRedoAtExpr = gorm.Expr("left_retry_count - 1")
+	updateRedoAtExpr = gorm.Expr("redo_at + INTERVAL (retry_count - left_retry_count - 1) * " +
+		strconv.Itoa(int(config.JobRetryInterval.Seconds())) + " SECOND")
 )
 
 func (m *MysqlOperator) UpdateOnFireLogRedoAt(ctx context.Context, onFireLogID uint, oldRedoAt time.Time) error {
@@ -50,7 +53,9 @@ func (m *MysqlOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int,
 	var logs []*model.OnFireLog
 
 	err := tx.Select("id, trigger_id, job_id, executor_instance, param").
-		Where("redo_at > ? AND redo_at < ? AND status != ? AND left_retry_count > 0", noEarlyThan, noLaterThan, constance.OnFireStatusFinished).
+		Where("redo_at > ? AND redo_at < ?", noEarlyThan, noLaterThan).
+		Where("status != ? ", constance.OnFireStatusFinished).
+		Where("left_retry_count > 0").
 		Limit(maxCount).Find(&logs).Error
 	return logs, err
 }
@@ -88,7 +93,7 @@ func (m *MysqlOperator) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID 
 		}).Error
 }
 
-func (m *MysqlOperator) UpdateOnFireLogFail(ctx context.Context, onFireLogID uint) error {
+func (m *MysqlOperator) UpdateOnFireLogFail(ctx context.Context, onFireLogID uint, errorMsg string) error {
 	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
 		tx = m.db.DB()
@@ -99,6 +104,7 @@ func (m *MysqlOperator) UpdateOnFireLogFail(ctx context.Context, onFireLogID uin
 		Where("id = ? AND status != ? AND left_retry_count > 0", onFireLogID, constance.OnFireStatusFinished).
 		Updates(map[string]interface{}{
 			"left_retry_count": reduceRedoAtExpr,
+			"result":           errorMsg,
 		}).Error
 }
 
@@ -261,12 +267,12 @@ const transactionKey string = "transaction"
 
 func (m *MysqlOperator) OnTxStart(ctx context.Context) (context.Context, error) {
 	//如果已经有事务了
-	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	_, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if ok {
 		return ctx, nil
 	}
 
-	tx = m.db.DB().Begin()
+	tx := m.db.DB().Begin()
 	if tx.Error != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", tx.Error)
 	}

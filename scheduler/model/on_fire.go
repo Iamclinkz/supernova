@@ -1,10 +1,14 @@
 package model
 
 import (
-	"gorm.io/gorm"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"supernova/pkg/api"
 	"supernova/scheduler/constance"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // OnFireLog 表示一次trigger的执行
@@ -18,7 +22,8 @@ type OnFireLog struct {
 	LeftRetryCount   int                    `gorm:"column:left_retry_count"`                      //剩余的重试次数
 	ExecutorInstance string                 `gorm:"column:executor_instance"`                     //上一个执行的Executor的InstanceID
 	RedoAt           time.Time              `gorm:"column:redo_at;type:timestamp;not null;index"` //超时时间
-	Param            map[string]string      `gorm:"type:json"`                                    //trigger参数
+	ParamToDB        string                 `gorm:"column:param"`
+	Param            map[string]string      `gorm:"-"`
 
 	//任务结束阶段使用
 	Success bool   `gorm:"success"`
@@ -43,4 +48,66 @@ func GenRunJobRequest(onFireLog *OnFireLog, job *Job) *api.RunJobRequest {
 			ExecutorExecuteTimeoutMs: onFireLog.ExecuteTimeout.Milliseconds(),
 		},
 	}
+}
+
+func (o *OnFireLog) BeforeCreate(tx *gorm.DB) error {
+	return o.prepareParam()
+}
+
+func (o *OnFireLog) BeforeUpdate(tx *gorm.DB) error {
+	return o.prepareParam()
+}
+
+func (o *OnFireLog) AfterFind(tx *gorm.DB) error {
+	return o.parseParam()
+}
+
+func (o *OnFireLog) prepareParam() error {
+	if o.Param != nil && len(o.Param) != 0 {
+		jsonData, err := json.Marshal(o.Param)
+		if err != nil {
+			return err
+		}
+		o.ParamToDB = string(jsonData)
+	}
+	return nil
+}
+
+func (o *OnFireLog) parseParam() error {
+	if o.ParamToDB != "" {
+		var paramMap map[string]string
+		err := json.Unmarshal([]byte(o.ParamToDB), &paramMap)
+		if err != nil {
+			return err
+		}
+		o.Param = paramMap
+	}
+	return nil
+}
+
+func OnFireLogsToString(onFireLogs []*OnFireLog) string {
+	var builder strings.Builder
+	for i, onFireLog := range onFireLogs {
+		builder.WriteString(fmt.Sprintf("OnFireLog %d: %s\n", i+1, onFireLog.String()))
+	}
+
+	return builder.String()
+}
+
+func (o *OnFireLog) String() string {
+	return fmt.Sprintf("OnFireLog(Model=%v, TriggerID=%d, JobID=%d, Status=%s, RetryCount=%d, LeftRetryCount=%d, ExecutorInstance=%s, RedoAt=%v, Param=%v, Success=%t, Result=%s, ShouldFireAt=%v, ExecuteTimeout=%v)",
+		o.Model,
+		o.TriggerID,
+		o.JobID,
+		o.Status,
+		o.RetryCount,
+		o.LeftRetryCount,
+		o.ExecutorInstance,
+		o.RedoAt,
+		o.Param,
+		o.Success,
+		o.Result,
+		o.ShouldFireAt,
+		o.ExecuteTimeout,
+	)
 }

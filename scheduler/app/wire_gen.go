@@ -21,7 +21,7 @@ func genScheduler(scheduleOperator schedule_operator.Operator, client discovery.
 	onFireService := service.NewOnFireService(scheduleOperator, statisticsService)
 	executorManageService := service.NewExecutorManageService(statisticsService, client)
 	executorRouteService := service.NewExecutorRouteService(executorManageService)
-	scheduleService := service.NewScheduleService(statisticsService, jobService, triggerService, onFireService, executorRouteService, schedulerWorkerCount)
+	scheduleService := service.NewScheduleService(statisticsService, jobService, triggerService, onFireService, executorRouteService, schedulerWorkerCount, executorManageService)
 	scheduler := newSchedulerInner(scheduleOperator, scheduleService, statisticsService, executorRouteService, executorManageService, jobService, triggerService, onFireService)
 	return scheduler, nil
 }

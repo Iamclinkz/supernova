@@ -1,10 +1,6 @@
 package app
 
 import (
-	"errors"
-	"github.com/cloudwego/kitex/pkg/klog"
-	"github.com/cloudwego/kitex/server"
-	"github.com/kitex-contrib/obs-opentelemetry/tracing"
 	"net"
 	"strconv"
 	myConstance "supernova/executor/constance"
@@ -14,15 +10,18 @@ import (
 	"supernova/pkg/api/executor"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
-	"supernova/pkg/middleware"
 	"supernova/pkg/util"
+
+	"github.com/cloudwego/kitex/pkg/klog"
+	"github.com/cloudwego/kitex/server"
+	"github.com/kitex-contrib/obs-opentelemetry/tracing"
 )
 
 type Executor struct {
 	//config
 	instanceID     string
 	tags           []string
-	processor      []processor.JobProcessor
+	processor      map[string]processor.JobProcessor
 	serveConf      *discovery.ServiceServeConf
 	processorCount int
 	extraConf      map[string]string
@@ -43,7 +42,7 @@ type Executor struct {
 func newExecutorInner(
 	instanceID string,
 	tags []string,
-	processor []processor.JobProcessor,
+	processor map[string]processor.JobProcessor,
 	serveConf *discovery.ServiceServeConf,
 	processorCount int,
 	extraConf map[string]string,
@@ -54,7 +53,7 @@ func newExecutorInner(
 	processorService *service.ProcessorService,
 	statisticsService *service.StatisticsService,
 ) *Executor {
-	return &Executor{
+	ret := &Executor{
 		instanceID:        instanceID,
 		tags:              tags,
 		processor:         processor,
@@ -67,9 +66,14 @@ func newExecutorInner(
 		processorService:  processorService,
 		statisticsService: statisticsService,
 	}
+
+	for _, p := range processor {
+		ret.processorService.Register(p)
+	}
+	return ret
 }
 
-func (e *Executor) startServe() error {
+func (e *Executor) startServe() {
 	switch e.serveConf.Protoc {
 	case discovery.ProtocTypeGrpc:
 		grpcHandler := handler.NewGrpcHandler(e.executeService, e.statisticsService)
@@ -81,16 +85,19 @@ func (e *Executor) startServe() error {
 		svr := executor.NewServer(grpcHandler,
 			server.WithServiceAddr(addr),
 			server.WithSuite(tracing.NewServerSuite()),
-			server.WithMiddleware(middleware.PrintKitexRequestResponse),
+			//server.WithMiddleware(middleware.PrintKitexRequestResponse),
 		)
 		e.grpcServer = svr
 		klog.Infof("executor try start serve, protoc:grpc, port:%v", e.serveConf.Port)
-		return svr.Run()
+		if err := svr.Run(); err != nil {
+			panic(err)
+		}
+		break
 	case discovery.ProtocTypeHttp:
 		//todo
-		return errors.New("not supported yet")
+		break
 	default:
-		return errors.New("unsupported type")
+		break
 	}
 }
 
@@ -99,9 +106,9 @@ func (e *Executor) register() error {
 	ins.ServiceServeConf = *e.serveConf
 	ins.Meta = make(map[string]string, 1)
 	ins.Meta[constance.ExecutorTagFieldName] = util.EncodeTag(e.tags)
+	ins.Meta[constance.HealthCheckPortFieldName] = e.extraConf[myConstance.ConsulHealthCheckPortExtraConfKeyName]
 	ins.ServiceName = constance.ExecutorServiceName
 	ins.InstanceId = e.instanceID
-	ins.MiddlewareHealthCheckUrl = "http://9.134.5.191:" + e.extraConf[myConstance.ConsulHealthCheckPortExtraConfKeyName] + "/health"
 
 	klog.Infof("executor try register service: %+v", ins)
 	return e.discoveryClient.Register(ins)
@@ -113,9 +120,7 @@ func (e *Executor) Start() error {
 	)
 
 	//开启提供executor服务
-	if err = e.startServe(); err != nil {
-		return err
-	}
+	go e.startServe()
 
 	e.executeService.Start()
 

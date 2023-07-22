@@ -14,7 +14,7 @@ import (
 
 // Injectors from wire.go:
 
-func genExecutor(instanceID string, tags []string, processor2 []processor.JobProcessor, serveConf *discovery.ServiceServeConf, processorCount int, client discovery.Client, extraConf map[string]string) (*Executor, error) {
+func genExecutor(instanceID string, tags []string, processor2 map[string]processor.JobProcessor, serveConf *discovery.ServiceServeConf, processorCount int, client discovery.Client, extraConf map[string]string) (*Executor, error) {
 	duplicateService := service.NewDuplicateService()
 	statisticsService := service.NewStatisticsService()
 	processorService := service.NewProcessorService()

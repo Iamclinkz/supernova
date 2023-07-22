@@ -13,7 +13,7 @@ import (
 type ExecutorBuilder struct {
 	instanceID      string
 	tags            []string
-	processor       []processor.JobProcessor
+	processor       map[string]processor.JobProcessor
 	serveConf       *discovery.ServiceServeConf
 	processorCount  int
 	discoveryClient discovery.Client
@@ -24,7 +24,7 @@ type ExecutorBuilder struct {
 func NewExecutorBuilder() *ExecutorBuilder {
 	return &ExecutorBuilder{
 		tags:      make([]string, 0),
-		processor: make([]processor.JobProcessor, 0),
+		processor: make(map[string]processor.JobProcessor, 0),
 		extraConf: make(map[string]string),
 	}
 }
@@ -95,8 +95,8 @@ func (b *ExecutorBuilder) WithProcessor(p processor.JobProcessor) *ExecutorBuild
 		b.err = errors.New("processor.GetGlueType() return nothing")
 	}
 
-	b.processor = append(b.processor, p)
-	b.tags = append(b.tags, constance.GlueTagPrefix+glueType)
+	b.processor[glueType] = p
+	b.tags = append(b.tags, constance.GlueTypeTagPrefix+glueType)
 	return b
 }
 

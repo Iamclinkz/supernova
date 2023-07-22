@@ -13,7 +13,7 @@ import (
 func genExecutor(
 	instanceID string,
 	tags []string,
-	processor []processor.JobProcessor,
+	processor map[string]processor.JobProcessor,
 	serveConf *discovery.ServiceServeConf,
 	processorCount int, client discovery.Client,
 	extraConf map[string]string,

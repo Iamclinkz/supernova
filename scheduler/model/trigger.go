@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"supernova/pkg/util"
@@ -34,8 +35,9 @@ type Trigger struct {
 	// 下次触发时间
 	TriggerNextTime time.Time `gorm:"column:trigger_next_time;type:timestamp;not null;index"`
 	// 当前状态
-	Status constance.TriggerStatus `gorm:"column:status;type:tinyint(4);not null"`
-	Param  map[string]string       `gorm:"type:json"`
+	Status    constance.TriggerStatus `gorm:"column:status;type:tinyint(4);not null"`
+	ParamToDB string                  `gorm:"column:param"`
+	Param     map[string]string       `gorm:"-"`
 }
 
 func (t *Trigger) String() string {
@@ -89,10 +91,44 @@ func (t *Trigger) PrepareFire() error {
 
 func TriggersToString(triggers []*Trigger) string {
 	var builder strings.Builder
-	builder.WriteString("find triggers:\n")
 	for i, trigger := range triggers {
 		builder.WriteString(fmt.Sprintf("Trigger %d: %s\n", i+1, trigger.String()))
 	}
 
 	return builder.String()
+}
+
+func (t *Trigger) BeforeCreate(tx *gorm.DB) error {
+	return t.prepareParam()
+}
+
+func (t *Trigger) BeforeUpdate(tx *gorm.DB) error {
+	return t.prepareParam()
+}
+
+func (t *Trigger) AfterFind(tx *gorm.DB) error {
+	return t.parseParam()
+}
+
+func (t *Trigger) prepareParam() error {
+	if t.Param != nil && len(t.Param) != 0 {
+		jsonData, err := json.Marshal(t.Param)
+		if err != nil {
+			return err
+		}
+		t.ParamToDB = string(jsonData)
+	}
+	return nil
+}
+
+func (t *Trigger) parseParam() error {
+	if t.ParamToDB != "" {
+		var paramMap map[string]string
+		err := json.Unmarshal([]byte(t.ParamToDB), &paramMap)
+		if err != nil {
+			return err
+		}
+		t.Param = paramMap
+	}
+	return nil
 }

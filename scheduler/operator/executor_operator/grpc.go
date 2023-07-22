@@ -3,8 +3,6 @@ package executor_operator
 import (
 	"context"
 	"errors"
-	"github.com/cloudwego/kitex/client/callopt"
-	"github.com/cloudwego/kitex/pkg/klog"
 	"strconv"
 	"supernova/pkg/api"
 	"supernova/pkg/api/executor"
@@ -13,9 +11,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-)
 
-type OnJobResponseNotifyFunc func(response *api.RunJobResponse)
+	"github.com/cloudwego/kitex/client/callopt"
+	"github.com/cloudwego/kitex/pkg/klog"
+)
 
 type GrpcOperator struct {
 	executorCli *dal.ExecutorRpcClient
@@ -33,7 +32,7 @@ func (g *GrpcOperator) Alive() bool {
 	return !g.stop.Load()
 }
 
-func newGrpcOperator(host string, port int) (Operator, error) {
+func newGrpcOperator(host string, port int, f OnJobResponseNotifyFunc) (Operator, error) {
 	if client, err := dal.NewExecutorServiceClient(host, strconv.Itoa(port)); err != nil {
 		return nil, err
 	} else {
@@ -42,6 +41,7 @@ func newGrpcOperator(host string, port int) (Operator, error) {
 			streamLock:  sync.Mutex{},
 			host:        host,
 			port:        port,
+			notify:      f,
 		}, nil
 	}
 }
@@ -95,7 +95,7 @@ func (g *GrpcOperator) initStream() error {
 	}
 
 	//todo 删掉判断
-	if g.notify == nil || g.stop.Load() {
+	if g.notify == nil {
 		panic("")
 	}
 

@@ -1,12 +1,13 @@
 package service
 
 import (
-	"github.com/cloudwego/kitex/pkg/klog"
 	"supernova/executor/constance"
 	"supernova/pkg/api"
 	"supernova/pkg/util"
 	"sync"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 type ExecuteService struct {
@@ -28,7 +29,12 @@ func NewExecuteService(statisticsService *StatisticsService, processorService *P
 		processorCount = 2000
 	}
 
-	tw, _ := util.NewTimeWheel(time.Microsecond*20, 100, util.TickSafeMode())
+	var err error
+	tw, err := util.NewTimeWheel(time.Millisecond*20, 100, util.TickSafeMode())
+	if err != nil {
+		panic(err)
+	}
+
 	ret := &ExecuteService{
 		taskCh:            make(chan *Task, processorCount*2),
 		jobResponseCh:     make(chan *api.RunJobResponse, processorCount*2),
@@ -53,15 +59,18 @@ type Task struct {
 }
 
 func (e *ExecuteService) PushJobRequest(jobRequest *api.RunJobRequest) {
+	klog.Tracef("receive execute jobRequest, OnFireID:%v", jobRequest.OnFireLogID)
 	if resp := e.duplicateService.CheckDuplicateExecute(uint(jobRequest.OnFireLogID)); resp != nil && resp.Result.Ok {
 		//通过duplicateService防重，即同一个ExecutorLogID的任务，如果执行过，且执行成功了，
 		//那么防重不执行，直接从缓存中取出*api.RunJobResponse
+		klog.Warnf("receive duplicate execute successed job request, OnFireID:%v", jobRequest.OnFireLogID)
 		e.jobResponseCh <- resp
 		return
 	}
 
 	//扔到时间轮里面，如果超时，那么返回一个失败的response
 	task := e.timeWheel.Add(time.Microsecond*time.Duration(jobRequest.Job.ExecutorExecuteTimeoutMs), func() {
+		klog.Warnf("on job overtime:%v", jobRequest.OnFireLogID)
 		e.jobResponseCh <- &api.RunJobResponse{
 			OnFireLogID: jobRequest.OnFireLogID,
 			Result: &api.JobResult{
@@ -119,13 +128,19 @@ func (e *ExecuteService) worker() {
 			e.wg.Done()
 			return
 		case task := <-e.taskCh:
+			klog.Tracef("worker start handle job, OnFireID:%v", task.JobRequest.OnFireLogID)
 			task.JobResponse = new(api.RunJobResponse)
 			processor := e.processorService.GetRegister(task.JobRequest.Job.GlueType)
+			task.JobResponse.OnFireLogID = task.JobRequest.OnFireLogID
 			if processor == nil {
+				//如果找不到Processor，那么框架填充error
+				klog.Errorf("can not find processor for OnFireID:%v, glueType required:%v", task.JobRequest.OnFireLogID,
+					task.JobRequest.Job.GlueType)
 				task.JobResponse.Result = new(api.JobResult)
 				task.JobResponse.Result.Ok = false
 				task.JobResponse.Result.Err = constance.CanNotFindProcessorErrMsg
 			} else {
+				//如果有Processor，那么用户自定义的Processor填充error
 				task.JobResponse.Result = processor.Process(task.JobRequest.Job)
 			}
 

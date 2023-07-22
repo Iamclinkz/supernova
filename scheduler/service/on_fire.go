@@ -21,8 +21,8 @@ func (s *OnFireService) UpdateOnFireLogExecutorStatus(ctx context.Context, onFir
 	return s.scheduleOperator.UpdateOnFireLogExecutorStatus(ctx, onFireLog)
 }
 
-func (s *OnFireService) UpdateOnFireLogFail(ctx context.Context, id uint) error {
-	return s.scheduleOperator.UpdateOnFireLogFail(ctx, id)
+func (s *OnFireService) UpdateOnFireLogFail(ctx context.Context, onFireLog uint, errorMsg string) error {
+	return s.scheduleOperator.UpdateOnFireLogFail(ctx, onFireLog, errorMsg)
 }
 
 func (s *OnFireService) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID uint, result string) error {

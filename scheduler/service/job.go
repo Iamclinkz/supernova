@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"supernova/pkg/constance"
+	"supernova/pkg/util"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
 )
@@ -34,6 +36,8 @@ func (s *JobService) AddJob(ctx context.Context, job *model.Job) error {
 		return err
 	}
 
+	s.insertGlueTag(job)
+
 	if err := s.scheduleOperator.InsertJob(ctx, job); err != nil {
 		return err
 	}
@@ -46,6 +50,7 @@ func (s *JobService) AddJobs(ctx context.Context, jobs []*model.Job) error {
 		if err := s.ValidateJob(job); err != nil {
 			return fmt.Errorf("job:%+v error:%v", job, err)
 		}
+		s.insertGlueTag(job)
 	}
 
 	if err := s.scheduleOperator.InsertJobs(ctx, jobs); err != nil {
@@ -85,4 +90,21 @@ func (s *JobService) ValidateJob(job *model.Job) error {
 	}
 
 	return nil
+}
+
+func (s *JobService) insertGlueTag(job *model.Job) {
+	//检查用户指定的glueType是否已经加到了Tag中，作为executor筛选的条件之一
+	glueTag := constance.GlueTypeTagPrefix + job.GlueType
+	userTagsSlice := util.DecodeTags(job.Tags)
+	found := false
+	for _, tag := range userTagsSlice {
+		if tag == glueTag {
+			found = true
+		}
+	}
+
+	if !found {
+		userTagsSlice = append(userTagsSlice, glueTag)
+		job.Tags = util.EncodeTag(userTagsSlice)
+	}
 }

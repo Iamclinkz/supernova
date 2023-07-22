@@ -21,6 +21,7 @@ type ScheduleService struct {
 	triggerService        *TriggerService
 	onFireService         *OnFireService
 	executorSelectService *ExecutorRouteService
+	executorManageService *ExecutorManageService
 	timeWheel             *util.TimeWheel //这里不用cron.Cron，因为触发时间确定，且只触发一次，且距离触发时间较短，所以用时间轮定时器了
 	timeWheelTaskCh       chan *model.OnFireLog
 	overtimeOnFireLogCh   chan *model.OnFireLog
@@ -32,27 +33,32 @@ type ScheduleService struct {
 func NewScheduleService(statisticsService *StatisticsService,
 	jobService *JobService, triggerService *TriggerService, onFireService *OnFireService,
 	executorSelectService *ExecutorRouteService,
-	workerCount int) *ScheduleService {
+	workerCount int, executorManageService *ExecutorManageService) *ScheduleService {
 	tw, _ := util.NewTimeWheel(time.Millisecond*20, 512, util.TickSafeMode())
-	return &ScheduleService{
+	ret := &ScheduleService{
 		stopCh:                make(chan struct{}),
 		statisticsService:     statisticsService,
 		jobService:            jobService,
 		triggerService:        triggerService,
 		onFireService:         onFireService,
 		executorSelectService: executorSelectService,
+		executorManageService: executorManageService,
 		timeWheel:             tw,
 		//todo 想一下大小
-		timeWheelTaskCh:   make(chan *model.OnFireLog, workerCount*2),
-		jobResponseTaskCh: make(chan *api.RunJobResponse, workerCount*2),
-		wg:                sync.WaitGroup{},
-		workerCount:       workerCount,
+		timeWheelTaskCh:     make(chan *model.OnFireLog, workerCount*2),
+		overtimeOnFireLogCh: make(chan *model.OnFireLog, workerCount*2),
+		jobResponseTaskCh:   make(chan *api.RunJobResponse, workerCount*2),
+		wg:                  sync.WaitGroup{},
+		workerCount:         workerCount,
 	}
+	ret.executorManageService.RegisterReceiveMsgNotifyFunc(ret.onReceiveJobResponse)
+	return ret
 }
 
 func (s *ScheduleService) Schedule() {
 	s.timeWheel.Start()
 	s.startWorker()
+	go s.checkTimeoutOnFireLogs()
 	ticker := time.NewTicker(s.statisticsService.GetScheduleInterval())
 
 	for {
@@ -90,6 +96,7 @@ func (s *ScheduleService) Stop() {
 
 // fire 执行一次任务。force表示是否强制执行。目前为true只是表示用户删掉了任务，但是指示失败的OnFireLog仍然执行
 func (s *ScheduleService) fire(onFireLog *model.OnFireLog, force bool) error {
+	klog.Tracef("worker start fire:%+v", onFireLog)
 	job, err := s.jobService.FetchJobFromID(context.TODO(), onFireLog.JobID)
 	if err != nil {
 		if err == schedule_operator.ErrNotFound {
@@ -111,6 +118,7 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, force bool) error {
 
 	executorWrapper, err := s.executorSelectService.ChooseJobExecutor(job)
 	if err != nil {
+		_ = s.onFireService.UpdateOnFireLogFail(context.TODO(), uint(onFireLog.ID), "No matched executors")
 		return err
 	}
 
@@ -137,15 +145,16 @@ func (s *ScheduleService) handleRunJobResponse(response *api.RunJobResponse) {
 		//这里更新失败了，有可能是已经成功了，我们收到了落后的失败消息，也可能已经失败了，或者数据库连接失败。
 		//对于这几种情况，已经成功/已经失败不需要处理。数据库连接失败最多也就是多尝试执行一次这个失败的任务。
 		//总之不是很严重的问题，先不处理了。
-		_ = s.onFireService.UpdateOnFireLogFail(context.TODO(), uint(response.OnFireLogID))
-		klog.Warnf("PrepareFire:%v execute failed", response.OnFireLogID)
+		_ = s.onFireService.UpdateOnFireLogFail(context.TODO(), uint(response.OnFireLogID), response.Result.Err)
+		klog.Warnf("Receive from executor, [onFireLog:%v] execute failed, error:%v",
+			response.OnFireLogID, response.Result.Err)
 		return
 	}
 
 	//如果执行成功，更新OnFireLog
 	//todo 更新失败的话，除了一致性路由保底，这里也需要处理下
 	_ = s.onFireService.UpdateOnFireLogSuccess(context.TODO(), uint(response.OnFireLogID), response.Result.Result)
-	klog.Tracef("PrepareFire:%v execute successes", response.OnFireLogID)
+	klog.Tracef("Receive from executor, [onFireLog:%v] execute successes", response.OnFireLogID)
 }
 
 func (s *ScheduleService) onReceiveJobResponse(response *api.RunJobResponse) {
@@ -172,15 +181,12 @@ func (s *ScheduleService) work() {
 			if fireErr := s.fire(onFireJob, false); fireErr != nil {
 				klog.Errorf("onFireJob:%v fire error:%v", onFireJob, fireErr)
 			}
-			break
 		case response := <-s.jobResponseTaskCh:
 			s.handleRunJobResponse(response)
-			break
 		case overtimeOnFireLog := <-s.overtimeOnFireLogCh:
 			if fireErr := s.fire(overtimeOnFireLog, true); fireErr != nil {
 				klog.Errorf("onFireJob:%v fire error:%v", overtimeOnFireLog, fireErr)
 			}
-			break
 		case <-s.stopCh:
 			klog.Infof("ScheduleService worker stop working")
 			s.wg.Done()

@@ -17,7 +17,7 @@ func (h HttpOperator) Alive() bool {
 	panic("implement me")
 }
 
-func newHttpOperator(host string, port int) (Operator, error) {
+func newHttpOperator(host string, port int, f OnJobResponseNotifyFunc) (Operator, error) {
 	return &HttpOperator{
 		host: host,
 		port: strconv.Itoa(port),
@@ -32,7 +32,6 @@ func (h HttpOperator) CheckStatus(timeout time.Duration) (*model.ExecutorStatus,
 func (h HttpOperator) RunJob(*api.RunJobRequest) error {
 	//TODO implement me
 	panic("implement me")
-	return nil
 }
 
 var _ Operator = (*HttpOperator)(nil)

@@ -21,7 +21,8 @@ type ExecutorManageService struct {
 	statisticsService *StatisticsService
 	discoveryClient   discovery.Client
 
-	updateExecutorListeners []UpdateExecutorListener
+	updateExecutorListeners     []UpdateExecutorListener
+	onJobResponseNotifyFuncFunc executor_operator.OnJobResponseNotifyFunc
 }
 
 func NewExecutorManageService(statisticsService *StatisticsService, discoveryClient discovery.Client) *ExecutorManageService {
@@ -92,7 +93,8 @@ func (s *ExecutorManageService) updateExecutor() {
 			panic(err)
 		}
 
-		operator, err := executor_operator.NewOperatorByProtoc(newExecutor.Protoc, newExecutor.Host, newExecutor.Port)
+		operator, err := executor_operator.NewOperatorByProtoc(newExecutor.Protoc,
+			newExecutor.Host, newExecutor.Port, s.onJobResponseNotifyFuncFunc)
 		if err != nil {
 			panic(err)
 		}
@@ -184,4 +186,13 @@ func (s *ExecutorManageService) NotifyExecutorListener() {
 	for _, l := range s.updateExecutorListeners {
 		l.OnExecutorUpdate(s.executors)
 	}
+}
+
+func (s *ExecutorManageService) RegisterReceiveMsgNotifyFunc(f executor_operator.OnJobResponseNotifyFunc) {
+	if s.onJobResponseNotifyFuncFunc != nil {
+		//todo 测试使用
+		panic("")
+	}
+
+	s.onJobResponseNotifyFuncFunc = f
 }

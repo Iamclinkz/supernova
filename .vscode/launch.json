@@ -9,6 +9,24 @@
         "program": "${workspaceFolder}/scheduler/main.go",
         "env": {},
         "args": []
+      },
+      {
+        "name": "shell-executor",
+        "type": "go",
+        "request": "launch",
+        "mode": "debug",
+        "program": "${workspaceFolder}/example/shell-executor",
+        "env": {},
+        "args": []
+      },
+      {
+        "name": "http-executor",
+        "type": "go",
+        "request": "launch",
+        "mode": "debug",
+        "program": "${workspaceFolder}/example/http-executor",
+        "env": {},
+        "args": []
       }
     ]
   }

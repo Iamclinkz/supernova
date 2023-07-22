@@ -1,5 +1,6 @@
 package constance
 
 const (
-	ExecutorTagFieldName = "Tag"
+	ExecutorTagFieldName     = "Tag"
+	HealthCheckPortFieldName = "HealthCheckPort"
 )

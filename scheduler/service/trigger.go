@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"supernova/pkg/util"
+	"supernova/scheduler/config"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
@@ -60,7 +61,7 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		goto emptyEnd
 	}
 
-	klog.Trace(model.TriggersToString(fetchedTriggers))
+	klog.Tracef("fetchUpdateMarkTrigger fetched triggers:%s", model.TriggersToString(fetchedTriggers))
 
 	onFireTriggers = make([]*model.OnFireLog, 0, len(fetchedTriggers))
 	//3.依次让trigger更新自己，如果有问题的，则需要删除trigger
@@ -92,9 +93,11 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 				Status:           constance.OnFireStatusWaiting,
 				RetryCount:       trigger.FailRetryCount,
 				ExecutorInstance: "",
-				RedoAt:           fireTime.Add(trigger.ExecuteTimeout),
-				ShouldFireAt:     fireTime,
-				ExecuteTimeout:   trigger.ExecuteTimeout,
+				//下次重试时间 = 触发时间 + 用户指定执行最大时间 + 重试间隔 * 1
+				RedoAt:         fireTime.Add(trigger.ExecuteTimeout).Add(config.JobRetryInterval),
+				ShouldFireAt:   fireTime,
+				ExecuteTimeout: trigger.ExecuteTimeout,
+				LeftRetryCount: trigger.FailRetryCount,
 			}
 			onFireTriggers = append(onFireTriggers, onFireTrigger)
 			klog.Tracef("update on fire trigger:%+v", onFireTrigger)
@@ -226,13 +229,19 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog,
 	}
 
 	ret := make([]*model.OnFireLog, 0, len(onFireLogs))
-	for _, onFireLog := range ret {
+	for _, onFireLog := range onFireLogs {
 		if err = s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog.ID, onFireLog.RedoAt); err == nil {
 			//因为不考虑极端的情况下，失败的应该不多？且各个Scheduler动态调整捞取过期OnFireLog时间+捞取间隔较长，
 			//所以这里用了乐观锁，取到过期的OnFireLog之后，尝试更新RedoAt字段。如果更新成功，则自己执行。更新失败则说明要不
 			//成功了，要不让另一个进程抢先了，总之不是自己执行。
 			ret = append(ret, onFireLog)
 		}
+	}
+
+	if len(ret) != 0 {
+		klog.Infof("fetchTimeoutAndRefreshOnFireLogs fetched timeout logs:%s", model.OnFireLogsToString(ret))
+	} else {
+		klog.Trace("fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs")
 	}
 
 	return ret, nil

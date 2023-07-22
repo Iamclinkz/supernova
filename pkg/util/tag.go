@@ -5,6 +5,9 @@ import "strings"
 const TagSep = ","
 
 func DecodeTags(tagStr string) []string {
+	if tagStr == "" {
+		return make([]string, 0)
+	}
 	return strings.Split(tagStr, TagSep)
 }
 

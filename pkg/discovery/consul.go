@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"supernova/pkg/constance"
 	"sync"
 
 	"github.com/cloudwego/kitex/pkg/klog"
@@ -55,13 +56,14 @@ func (consulClient *ConsulDiscoverClient) Register(instance *ServiceInstance) er
 		Meta:    instance.Meta,
 		Check: &api.AgentServiceCheck{
 			DeregisterCriticalServiceAfter: "30s",
-			HTTP:                           instance.MiddlewareHealthCheckUrl,
-			Interval:                       "15s",
+			HTTP: "http://" + instance.Host + ":" +
+				instance.Meta[constance.HealthCheckPortFieldName] + "/health",
+			Interval: "15s",
 		},
 	}
 
 	consulClient.httpServer = &http.Server{
-		Addr: fmt.Sprintf(":" + strconv.Itoa(instance.Port)),
+		Addr: fmt.Sprintf(":" + instance.Meta[constance.HealthCheckPortFieldName]),
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("OK"))

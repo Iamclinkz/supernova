@@ -8,7 +8,7 @@ type ProtocType string
 
 const (
 	ProtocTypeGrpc ProtocType = "Grpc"
-	ProtocTypeHttp            = "Http"
+	ProtocTypeHttp ProtocType = "Http"
 )
 
 type ServiceServeConf struct {
@@ -20,8 +20,6 @@ type ServiceServeConf struct {
 type ServiceInstance struct {
 	ServiceName string
 	InstanceId  string
-	//如果使用的中间件检查健康，例如consul，那么应该填写这个字段，让consul检查
-	MiddlewareHealthCheckUrl string
 	ServiceServeConf
 	Meta map[string]string
 }

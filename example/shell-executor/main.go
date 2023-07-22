@@ -1,11 +1,12 @@
 package main
 
 import (
-	"github.com/cloudwego/kitex/pkg/klog"
 	"supernova/executor/app"
 	"supernova/pkg/conf"
-	"supernova/processor-plugin/processor-plugin-shell"
+	processor_plugin_shell "supernova/processor-plugin/processor-plugin-shell"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 const (
@@ -29,8 +30,8 @@ func main() {
 	shellExecutor := new(processor_plugin_shell.Shell)
 	builder := app.NewExecutorBuilder()
 	executor, err := builder.WithCustomTag("A").WithResourceTag("LargeMemory").
-		WithInstanceID("instance-1").WithConsulDiscovery(cfg.ConsulConf, HealthCheckPort).
-		WithProcessor(shellExecutor).WithGrpcServe("localhost", GRPCServePort).Build()
+		WithInstanceID("instance-2").WithConsulDiscovery(cfg.ConsulConf, HealthCheckPort).
+		WithProcessor(shellExecutor).WithGrpcServe("9.134.5.191", GRPCServePort).Build()
 
 	if err != nil {
 		panic(err)

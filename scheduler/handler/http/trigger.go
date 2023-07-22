@@ -35,7 +35,7 @@ func (h *TriggerHandler) GetTrigger(c *gin.Context) {
 		return
 	}
 
-	trigger, err := h.triggerService.FetchTriggerFromID(c.Request.Context(), uint(triggerID))
+	trigger, err := h.triggerService.FetchTriggerFromID(uint(triggerID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -51,7 +51,7 @@ func (h *TriggerHandler) AddTrigger(c *gin.Context) {
 		return
 	}
 
-	if err := h.triggerService.AddTrigger(c.Request.Context(), &trigger); err != nil {
+	if err := h.triggerService.AddTrigger(&trigger); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -66,7 +66,7 @@ func (h *TriggerHandler) DeleteTrigger(c *gin.Context) {
 		return
 	}
 
-	if err := h.triggerService.DeleteTrigger(c.Request.Context(), uint(triggerID)); err != nil {
+	if err := h.triggerService.DeleteTrigger(uint(triggerID)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -81,7 +81,7 @@ func (h *TriggerHandler) AddTriggers(c *gin.Context) {
 		return
 	}
 
-	if err := h.triggerService.AddTriggers(c.Request.Context(), triggers); err != nil {
+	if err := h.triggerService.AddTriggers(triggers); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -96,7 +96,7 @@ func (h *TriggerHandler) GetTriggerByName(c *gin.Context) {
 		return
 	}
 
-	trigger, err := h.triggerService.FindTriggerByName(c.Request.Context(), name)
+	trigger, err := h.triggerService.FindTriggerByName(name)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

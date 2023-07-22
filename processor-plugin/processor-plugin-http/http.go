@@ -35,9 +35,9 @@ type HTTP struct {
 }
 
 // Process Process method of the plugin
-// "executor": "http",
+// "glueType": "http",
 //
-//	"executor_config": {
+//	"glueSource": {
 //	    "method": "GET",             // Request method in uppercase
 //	    "url": "http://example.com", // Request url
 //	    "headers": "[]"              // Json string, such as "[\"Content-Type: application/json\"]"
