@@ -59,10 +59,11 @@ func (t MisfireStrategyType) Valid() bool {
 type ExecutorRouteStrategyType int8
 
 const (
-	ExecutorRouteStrategyTypeMin       ExecutorRouteStrategyType = iota
-	ExecutorRouteStrategyTypeRandom                              //随机选择一个执行器
-	ExecutorRouteStrategyTypeHash                                //一致性路由，本trigger最好分到同一个执行器实例执行
-	ExecutorRouteStrategyTypeBroadcast                           //分给全部执行器执行
+	ExecutorRouteStrategyTypeMin                   ExecutorRouteStrategyType = iota
+	ExecutorRouteStrategyTypeRandom                                          //随机选择一个执行器
+	ExecutorRouteStrategyTypeHash                                            //一致性路由，本trigger最好分到同一个执行器实例执行
+	ExecutorRouteStrategyTypeBroadcast                                       //分给全部执行器执行
+	ExecutorRouteStrategyTypeExecutorInstanceMatch                           //只能分给名称匹配的executor执行
 	ExecutorRouteStrategyTypeMax
 )
 
@@ -74,6 +75,8 @@ func (t ExecutorRouteStrategyType) String() string {
 		return "ExecutorRouteStrategyTypeHash"
 	case ExecutorRouteStrategyTypeBroadcast:
 		return "ExecutorRouteStrategyTypeBroadcast"
+	case ExecutorRouteStrategyTypeExecutorInstanceMatch:
+		return "ExecutorRouteStrategyTypeExecutorInstanceMatch"
 	default:
 		return "UnknownExecutorRouteStrategyType" + strconv.Itoa(int(t))
 	}

@@ -5,6 +5,10 @@ import "supernova/pkg/api"
 type StatisticsService struct {
 }
 
+func (s *StatisticsService) OnSendRunJobResponse(response *api.RunJobResponse) {
+
+}
+
 func NewStatisticsService() *StatisticsService {
 	return &StatisticsService{}
 }
@@ -17,11 +21,7 @@ func (s *StatisticsService) OnStartExecute(task *Task) {
 
 }
 
-func (s *StatisticsService) OnDuplicateOnFireLogID(request *api.RunJobRequest) {
-
-}
-
-func (s *StatisticsService) OnFinishExecute(response *api.RunJobResponse) {
+func (s *StatisticsService) OnFinishExecute(task *Task) {
 
 }
 

@@ -94,8 +94,8 @@ func (s *ScheduleService) Stop() {
 	//todo 怎么优雅退出？要不要处理完管道里的所有消息？
 }
 
-// fire 执行一次任务。force表示是否强制执行。目前为true只是表示用户删掉了任务，但是指示失败的OnFireLog仍然执行
-func (s *ScheduleService) fire(onFireLog *model.OnFireLog, force bool) error {
+// fire 执行一次任务。retry表示是否是重试
+func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 	klog.Tracef("worker start fire:%+v", onFireLog)
 	job, err := s.jobService.FetchJobFromID(context.TODO(), onFireLog.JobID)
 	if err != nil {
@@ -111,12 +111,12 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, force bool) error {
 		}
 	}
 
-	if job.Status == constance.JobStatusDeleted && !force {
+	if job.Status == constance.JobStatusDeleted && !retry {
 		//如果job已经删除了，那么只有重试才能执行。否则不执行
 		return nil
 	}
 
-	executorWrapper, err := s.executorSelectService.ChooseJobExecutor(job)
+	executorWrapper, err := s.executorSelectService.ChooseJobExecutor(job, onFireLog, retry)
 	if err != nil {
 		_ = s.onFireService.UpdateOnFireLogFail(context.TODO(), uint(onFireLog.ID), "No matched executors")
 		return err

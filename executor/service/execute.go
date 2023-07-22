@@ -21,6 +21,7 @@ type ExecuteService struct {
 	wg                *sync.WaitGroup
 	timeWheel         *util.TimeWheel
 	executeListeners  []ExecuteListener
+	taskIDCounter     int64 //用于分配task的ID。防止超时任务重复发送执行失败消息
 }
 
 func NewExecuteService(statisticsService *StatisticsService, processorService *ProcessorService,
@@ -60,10 +61,10 @@ type Task struct {
 
 func (e *ExecuteService) PushJobRequest(jobRequest *api.RunJobRequest) {
 	klog.Tracef("receive execute jobRequest, OnFireID:%v", jobRequest.OnFireLogID)
-	if resp := e.duplicateService.CheckDuplicateExecute(uint(jobRequest.OnFireLogID)); resp != nil && resp.Result.Ok {
+	if resp := e.duplicateService.CheckDuplicateExecuteSuccessJob(uint(jobRequest.OnFireLogID)); resp != nil && resp.Result.Ok {
 		//通过duplicateService防重，即同一个ExecutorLogID的任务，如果执行过，且执行成功了，
 		//那么防重不执行，直接从缓存中取出*api.RunJobResponse
-		klog.Warnf("receive duplicate execute successed job request, OnFireID:%v", jobRequest.OnFireLogID)
+		klog.Warnf("receive duplicate execute success job request, OnFireID:%v", jobRequest.OnFireLogID)
 		e.jobResponseCh <- resp
 		return
 	}
@@ -98,8 +99,13 @@ func (e *ExecuteService) PopJobResponse() (*api.RunJobResponse, bool) {
 }
 
 func (e *ExecuteService) OnTaskFinish(task *Task) {
-	e.timeWheel.Remove(task.TimeWheelTask)
-	e.jobResponseCh <- task.JobResponse
+	ok := e.timeWheel.Remove(task.TimeWheelTask)
+	//这里如果不ok，说明时间轮定时器中的内容没了，只能说明本次执行超时，定时器触发，返回了一个超时错误。
+	//这种情况下，如果本次虽然超时，但是任务执行成功了，扔回去一个成功回复。而如果执行失败，就不再扔回去失败回复了。
+	//反正已经是扣除失败次数了
+	if ok || (!ok && task.JobResponse.Result.Ok) {
+		e.jobResponseCh <- task.JobResponse
+	}
 }
 
 // Start 开启很多个go程抢夺job运行
@@ -144,16 +150,17 @@ func (e *ExecuteService) worker() {
 				task.JobResponse.Result = processor.Process(task.JobRequest.Job)
 			}
 
+			klog.Tracef("worker execute task finished:%+v", task)
 			e.OnTaskFinish(task)
 		}
 	}
 }
 
 type ExecuteListener interface {
-	OnReceiveRunJobRequest(request *api.RunJobRequest)
-	OnStartExecute(task *Task)
-	OnDuplicateOnFireLogID(request *api.RunJobRequest)
-	OnFinishExecute(response *api.RunJobResponse)
+	OnReceiveRunJobRequest(request *api.RunJobRequest) //接收到任务请求
+	OnStartExecute(task *Task)                         //开始执行某个任务
+	OnFinishExecute(task *Task)                        //执行结束某个任务
+	OnSendRunJobResponse(response *api.RunJobResponse) //准备发送任务回复
 }
 
 func (e *ExecuteService) RegisterExecuteListener(listener ExecuteListener) {
@@ -172,15 +179,15 @@ func (e *ExecuteService) OnStartExecute(task *Task) {
 	}
 }
 
-func (e *ExecuteService) OnDuplicateOnFireLogID(request *api.RunJobRequest) {
+func (e *ExecuteService) OnFinishExecute(task *Task) {
 	for _, listener := range e.executeListeners {
-		listener.OnDuplicateOnFireLogID(request)
+		listener.OnFinishExecute(task)
 	}
 }
 
-func (e *ExecuteService) OnFinishExecute(response *api.RunJobResponse) {
+func (e *ExecuteService) OnSendRunJobResponse(response *api.RunJobResponse) {
 	for _, listener := range e.executeListeners {
-		listener.OnFinishExecute(response)
+		listener.OnSendRunJobResponse(response)
 	}
 }
 

@@ -93,6 +93,18 @@ func (s *HTTP) ExecuteImpl(job *api.Job) ([]byte, error) {
 		}
 	}
 
+	//这里把trigger的param也扔进http头里，方便测试
+	if len(job.Param) != 0 {
+		paramJSON, err := json.Marshal(job.Param)
+		if err != nil {
+			panic(err)
+		}
+		req.Header.Set("param", string(paramJSON))
+	} else {
+		//todo 删掉
+		panic("")
+	}
+
 	for _, h := range headers {
 		if h != "" {
 			kv := strings.Split(h, ":")

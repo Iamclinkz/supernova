@@ -168,10 +168,15 @@ func (tw *TimeWheel) Stop() {
 	tw.stopC <- struct{}{}
 }
 
-func (tw *TimeWheel) collectTask(task *Task) {
+func (tw *TimeWheel) collectTask(task *Task) bool {
 	index := tw.bucketIndexes[task.id]
+	_, ok := tw.bucketIndexes[task.id]
+	if !ok {
+		return false
+	}
 	delete(tw.bucketIndexes, task.id)
 	delete(tw.buckets[index], task.id)
+	return true
 }
 
 func (tw *TimeWheel) handleTick() {
@@ -285,16 +290,16 @@ func (tw *TimeWheel) calculateIndex(delay time.Duration) (index int) {
 	return
 }
 
-func (tw *TimeWheel) Remove(task *Task) {
+func (tw *TimeWheel) Remove(task *Task) bool {
 	// tw.removeC <- task
-	tw.remove(task)
+	return tw.remove(task)
 }
 
-func (tw *TimeWheel) remove(task *Task) {
+func (tw *TimeWheel) remove(task *Task) bool {
 	tw.Lock()
 	defer tw.Unlock()
 
-	tw.collectTask(task)
+	return tw.collectTask(task)
 }
 
 func (tw *TimeWheel) NewTimer(delay time.Duration) *Timer {

@@ -13,6 +13,7 @@ require (
 	github.com/hashicorp/consul/api v1.22.0
 	github.com/kitex-contrib/obs-opentelemetry v0.2.3
 	github.com/mattn/go-shellwords v1.0.12
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/robfig/cron/v3 v3.0.1
 	google.golang.org/protobuf v1.30.0
 	gorm.io/driver/mysql v1.5.1

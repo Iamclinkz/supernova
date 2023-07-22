@@ -11,7 +11,7 @@ import (
 
 type ExecutorRouteService struct {
 	executorManagerService *ExecutorManageService
-	jobRouters             *JobRouterManager
+	jobRouterManager       *JobRouterManager
 
 	mu sync.Mutex
 	//key为tag，value为有该tag的Executor
@@ -22,7 +22,7 @@ type ExecutorRouteService struct {
 func NewExecutorRouteService(executorManagerService *ExecutorManageService) *ExecutorRouteService {
 	ret := &ExecutorRouteService{
 		executorManagerService: executorManagerService,
-		jobRouters:             NewJobRouters(),
+		jobRouterManager:       NewJobRouters(),
 		mu:                     sync.Mutex{},
 		invertedIndex:          make(map[string][]*ExecutorWrapper),
 		executors:              make(map[string]*ExecutorWrapper),
@@ -32,13 +32,18 @@ func NewExecutorRouteService(executorManagerService *ExecutorManageService) *Exe
 	return ret
 }
 
-func (s *ExecutorRouteService) ChooseJobExecutor(job *model.Job) (*ExecutorWrapper, error) {
+func (s *ExecutorRouteService) ChooseJobExecutor(job *model.Job, onFireLog *model.OnFireLog, retry bool) (*ExecutorWrapper, error) {
 	executors, err := s.findMatchingExecutorsForJob(job)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.jobRouters.Route(job.ExecutorRouteStrategy, executors, job)
+	if retry {
+		//重试的话，暂时只能分配到同一个executor节点。否则失败
+		//todo： 以后要不要加上“至少执行一次”语义，如果分配不到上次执行的Executor，那么分配新的Executor执行？
+		return s.jobRouterManager.Route(constance.ExecutorRouteStrategyTypeExecutorInstanceMatch, executors, job, onFireLog)
+	}
+	return s.jobRouterManager.Route(job.ExecutorRouteStrategy, executors, job, onFireLog)
 }
 
 // findMatchingExecutorsForJob 找到和Job的Tag匹配的Executor
@@ -92,7 +97,7 @@ func (s *ExecutorRouteService) OnExecutorUpdate(newExecutors map[string]*Executo
 }
 
 type Router interface {
-	Route(instance []*ExecutorWrapper, job *model.Job) *ExecutorWrapper
+	Route(instances []*ExecutorWrapper, job *model.Job, onFireLog *model.OnFireLog) *ExecutorWrapper
 }
 
 type JobRouterManager struct {
@@ -101,13 +106,15 @@ type JobRouterManager struct {
 
 func NewJobRouters() *JobRouterManager {
 	return &JobRouterManager{routers: map[constance.ExecutorRouteStrategyType]Router{
-		constance.ExecutorRouteStrategyTypeRandom: RandomRouter{},
+		constance.ExecutorRouteStrategyTypeRandom:                RandomRouter{},
+		constance.ExecutorRouteStrategyTypeExecutorInstanceMatch: ExecutorInstanceIDRouter{},
 	}}
 }
 
-func (r *JobRouterManager) Route(strategy constance.ExecutorRouteStrategyType, instance []*ExecutorWrapper, job *model.Job) (*ExecutorWrapper, error) {
+func (r *JobRouterManager) Route(strategy constance.ExecutorRouteStrategyType,
+	instance []*ExecutorWrapper, job *model.Job, onFireLog *model.OnFireLog) (*ExecutorWrapper, error) {
 	if router, ok := r.routers[strategy]; ok {
-		return router.Route(instance, job), nil
+		return router.Route(instance, job, onFireLog), nil
 	}
 
 	return nil, errors.New("no ExecutorRouteStrategyType:" + strategy.String())
@@ -116,12 +123,28 @@ func (r *JobRouterManager) Route(strategy constance.ExecutorRouteStrategyType, i
 // RandomRouter 随机路由
 type RandomRouter struct{}
 
-func (r RandomRouter) Route(instance []*ExecutorWrapper, job *model.Job) *ExecutorWrapper {
-	if len(instance) == 0 {
+func (r RandomRouter) Route(instances []*ExecutorWrapper, job *model.Job, onFireLog *model.OnFireLog) *ExecutorWrapper {
+	if len(instances) == 0 {
 		return nil
 	}
 
-	return instance[rand.Int()%len(instance)]
+	return instances[rand.Int()%len(instances)]
+}
+
+// ExecutorInstanceIDRouter 按照Executor的InstanceID路由
+type ExecutorInstanceIDRouter struct{}
+
+func (r ExecutorInstanceIDRouter) Route(instances []*ExecutorWrapper, job *model.Job, onFireLog *model.OnFireLog) *ExecutorWrapper {
+	if len(instances) == 0 {
+		return nil
+	}
+
+	for _, instance := range instances {
+		if instance.Executor.InstanceId == onFireLog.ExecutorInstance {
+			return instance
+		}
+	}
+	return instances[rand.Int()%len(instances)]
 }
 
 var _ Router = (*RandomRouter)(nil)
