@@ -25,7 +25,9 @@ func initTest() {
 // TestBasic 执行单次，任务不会失败
 func TestBasic(t *testing.T) {
 	start := time.Now()
+
 	var triggerCount = 5000
+
 	initTest()
 	httpServer := util.NewSimpleHttpServer(&util.SimpleHttpServerConf{
 		FailRate:      0,
@@ -59,7 +61,7 @@ func TestBasic(t *testing.T) {
 			Name:            "test-trigger-" + strconv.Itoa(i),
 			JobID:           1,
 			ScheduleType:    2,          //执行一次
-			FailRetryCount:  5,          //失败重试一次
+			FailRetryCount:  5,          //失败重试五次。因为simple_http_service每次都需要开go程执行请求，瞬间很多个请求打过去可能造成失败的情况。。
 			ExecuteTimeout:  3000000000, //3s
 			TriggerNextTime: time.Now(),
 			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,

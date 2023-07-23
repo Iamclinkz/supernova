@@ -17,11 +17,11 @@ func (s *StatisticsService) OnReceiveRunJobRequest(request *api.RunJobRequest) {
 
 }
 
-func (s *StatisticsService) OnStartExecute(task *Task) {
+func (s *StatisticsService) OnStartExecute(jobRequest *api.RunJobRequest) {
 
 }
 
-func (s *StatisticsService) OnFinishExecute(task *Task) {
+func (s *StatisticsService) OnFinishExecute(jobRequest *api.RunJobRequest, jobResponse *api.RunJobResponse) {
 
 }
 
