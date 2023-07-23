@@ -22,17 +22,18 @@ func initTest() {
 	util.StartSchedulers(2)
 }
 
-// TestBasic 执行单次，任务不会失败
-func TestBasic(t *testing.T) {
+// TestWithoutFail 执行单次，任务不会失败
+func TestWithoutFail(t *testing.T) {
 	start := time.Now()
 
 	var triggerCount = 5000
 
 	initTest()
 	httpServer := util.NewSimpleHttpServer(&util.SimpleHttpServerConf{
-		FailRate:      0,
-		ListeningPort: SimpleWebServerPort,
-		TriggerCount:  triggerCount,
+		FailRate:             0,
+		ListeningPort:        SimpleWebServerPort,
+		TriggerCount:         triggerCount,
+		AllowDuplicateCalled: false,
 	})
 	go httpServer.Start()
 
@@ -67,7 +68,7 @@ func TestBasic(t *testing.T) {
 			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,
 			Param: map[string]string{
 				//把triggerID带过去，由SimpleHttpServer记录执行情况
-				util.ExecutorIDFieldName: strconv.Itoa(i),
+				util.TriggerIDFieldName: strconv.Itoa(i),
 			},
 			FailRetryInterval: 0,
 		}
@@ -79,7 +80,11 @@ func TestBasic(t *testing.T) {
 
 	time.Sleep(15 * time.Second)
 
-	httpServer.PrintResult()
+	httpServer.CheckResult(&util.CheckResultConf{
+		AllSuccess:                    true,
+		NoUncalledTriggers:            true,
+		FailTriggerRateNotGreaterThan: 0.1,
+	})
 }
 
 // TestRandomFailJob 执行单次，任务有概率会失败
@@ -87,9 +92,10 @@ func TestMayFail(t *testing.T) {
 	var triggerCount = 5000
 	initTest()
 	httpServer := util.NewSimpleHttpServer(&util.SimpleHttpServerConf{
-		FailRate:      0.2, //20%的概率失败
-		ListeningPort: SimpleWebServerPort,
-		TriggerCount:  triggerCount,
+		FailRate:             0.1, //10%的概率失败
+		ListeningPort:        SimpleWebServerPort,
+		TriggerCount:         triggerCount,
+		AllowDuplicateCalled: false,
 	})
 	go httpServer.Start()
 
@@ -123,7 +129,7 @@ func TestMayFail(t *testing.T) {
 			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,
 			Param: map[string]string{
 				//把triggerID带过去，由SimpleHttpServer记录执行情况
-				util.ExecutorIDFieldName: strconv.Itoa(i),
+				util.TriggerIDFieldName: strconv.Itoa(i),
 			},
 			FailRetryInterval: 0,
 		}
@@ -131,6 +137,10 @@ func TestMayFail(t *testing.T) {
 
 	util.RegisterTriggers(SchedulerAddress, triggers)
 
-	time.Sleep(10 * time.Second)
-	httpServer.PrintResult()
+	time.Sleep(15 * time.Second)
+	httpServer.CheckResult(&util.CheckResultConf{
+		AllSuccess:                    true,
+		NoUncalledTriggers:            true,
+		FailTriggerRateNotGreaterThan: 0.3,
+	})
 }
