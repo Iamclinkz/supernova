@@ -1,11 +1,12 @@
 package service
 
 import (
-	"github.com/patrickmn/go-cache"
 	"strconv"
 	"supernova/pkg/api"
 	"sync"
 	"time"
+
+	"github.com/patrickmn/go-cache"
 )
 
 // DuplicateService 当前主要有以下功能：
@@ -52,11 +53,12 @@ func (s *DuplicateService) OnFinishExecute(task *Task) {
 		}
 		//如果成功，还需要记录一下成功
 		s.c.Set(successJobResponseOnFireLogIDToCacheKey(onFireID), task.JobResponse, cache.DefaultExpiration)
+		delete(s.onFireID2Waiter, onFireID)
 	} else {
 		//如果执行失败，给第一个返回true，让第一个执行
 		if len(waitChanSlice) > 0 {
 			waitChanSlice[0] <- true
-			waitChanSlice = waitChanSlice[1:]
+			s.onFireID2Waiter[onFireID] = s.onFireID2Waiter[onFireID][1:]
 		}
 	}
 }
@@ -79,11 +81,12 @@ func (s *DuplicateService) CheckDuplicateExecuteSuccessJob(onFireID uint) *api.R
 // 调用方需要等待这个chan bool，如果返回true，则表示刚刚执行结束的任务失败了，调用方本次可以执行。如果返回false，
 // 说明刚刚执行结束的任务执行成功了，调用方本次不执行。考虑最极端的情况，同时有很多个调用方，等待同一个任务执行，那么
 // 其顺序应是按到来顺序排队执行，直到第一个执行成功或者轮到自己执行。
+// todo 两个合二为一
 func (s *DuplicateService) CheckDuplicateExecute(onFireID uint) chan bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	waitChanSlice, ok := s.onFireID2Waiter[onFireID]
+	_, ok := s.onFireID2Waiter[onFireID]
 	if !ok {
 		//没有等待者，直接执行即可
 		s.onFireID2Waiter[onFireID] = make([]chan bool, 0)
@@ -92,7 +95,7 @@ func (s *DuplicateService) CheckDuplicateExecute(onFireID uint) chan bool {
 
 	//有等待者，自己需要排队
 	myWaitChan := make(chan bool, 1)
-	waitChanSlice = append(waitChanSlice, myWaitChan)
+	s.onFireID2Waiter[onFireID] = append(s.onFireID2Waiter[onFireID], myWaitChan)
 	return myWaitChan
 }
 

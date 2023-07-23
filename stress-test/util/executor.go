@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"supernova/executor/app"
 	"supernova/pkg/conf"
-	"supernova/processor-plugin/processor-plugin-http"
+	processor_plugin_http "supernova/processor-plugin/processor-plugin-http"
 )
 
 type ExecutorInstanceConf struct {
@@ -25,7 +25,7 @@ func GenExecutorInstanceConfWithCount(count int) []*ExecutorInstanceConf {
 	ret := make([]*ExecutorInstanceConf, count)
 
 	for i := 1; i <= count; i++ {
-		ret = append(ret, GenExecutorInstanceConf(i))
+		ret[i-1] = GenExecutorInstanceConf(i)
 	}
 	return ret
 }

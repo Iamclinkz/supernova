@@ -1,13 +1,14 @@
 package main
 
 import (
-	"log"
 	"strconv"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
 	"supernova/stress-test/util"
 	"testing"
 	"time"
+
+	"log"
 )
 
 var (
@@ -16,53 +17,118 @@ var (
 	SchedulerAddress    = "http://localhost:" + strconv.Itoa(SchedulerPort)
 )
 
-func init() {
+func initTest() {
 	util.StartHttpExecutors(util.GenExecutorInstanceConfWithCount(3))
 	util.StartSchedulers(2)
 }
 
+// TestBasic 执行单次，任务不会失败
 func TestBasic(t *testing.T) {
+	start := time.Now()
+	var triggerCount = 5000
+	initTest()
 	httpServer := util.NewSimpleHttpServer(&util.SimpleHttpServerConf{
 		FailRate:      0,
 		ListeningPort: SimpleWebServerPort,
+		TriggerCount:  triggerCount,
 	})
-	httpServer.Start()
+	go httpServer.Start()
 
+	time.Sleep(5 * time.Second)
 	//加一个任务
 	if err := util.RegisterJob(SchedulerAddress, &model.Job{
 		Name:                  "test-http-job",
 		ExecutorRouteStrategy: constance.ExecutorRouteStrategyTypeRandom, //随机路由
 		GlueType:              "Http",
 		GlueSource: map[string]string{
-			"method":     "GET",
-			"url":        "localhost:" + strconv.Itoa(SimpleWebServerPort),
+			"method":     "POST",
+			"url":        "http://localhost:" + strconv.Itoa(SimpleWebServerPort) + "/test",
 			"timeout":    "30",
 			"expectCode": "200",
-			"expectBody": "ok",
+			"expectBody": "OK",
 			"debug":      "",
 		},
 	}); err != nil {
 		panic(err)
 	}
 
-	for i := 0; i < 3; i++ {
-		if err := util.RegisterTrigger(SchedulerAddress, &model.Trigger{
+	triggers := make([]*model.Trigger, triggerCount)
+
+	for i := 0; i < triggerCount; i++ {
+		triggers[i] = &model.Trigger{
 			Name:            "test-trigger-" + strconv.Itoa(i),
 			JobID:           1,
 			ScheduleType:    2,          //执行一次
-			FailRetryCount:  0,          //失败不执行
-			ExecuteTimeout:  2000000000, //2s
+			FailRetryCount:  5,          //失败重试一次
+			ExecuteTimeout:  3000000000, //3s
 			TriggerNextTime: time.Now(),
+			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,
 			Param: map[string]string{
+				//把triggerID带过去，由SimpleHttpServer记录执行情况
 				util.ExecutorIDFieldName: strconv.Itoa(i),
 			},
-		}); err != nil {
-			panic(err)
+			FailRetryInterval: 0,
 		}
 	}
 
-	for {
-		time.Sleep(2 * time.Second)
-		log.Println(httpServer.GetResult())
+	util.RegisterTriggers(SchedulerAddress, triggers)
+
+	log.Printf("register triggers successed, cost:%v\n", time.Since(start))
+
+	time.Sleep(15 * time.Second)
+
+	httpServer.PrintResult()
+}
+
+// TestRandomFailJob 执行单次，任务有概率会失败
+func TestMayFail(t *testing.T) {
+	var triggerCount = 5000
+	initTest()
+	httpServer := util.NewSimpleHttpServer(&util.SimpleHttpServerConf{
+		FailRate:      0.2, //20%的概率失败
+		ListeningPort: SimpleWebServerPort,
+		TriggerCount:  triggerCount,
+	})
+	go httpServer.Start()
+
+	time.Sleep(3 * time.Second)
+	//加一个任务
+	if err := util.RegisterJob(SchedulerAddress, &model.Job{
+		Name:                  "test-http-job",
+		ExecutorRouteStrategy: constance.ExecutorRouteStrategyTypeRandom, //随机路由
+		GlueType:              "Http",
+		GlueSource: map[string]string{
+			"method":     "POST",
+			"url":        "http://localhost:" + strconv.Itoa(SimpleWebServerPort) + "/test",
+			"timeout":    "30",
+			"expectCode": "200",
+			"expectBody": "OK",
+			"debug":      "",
+		},
+	}); err != nil {
+		panic(err)
 	}
+
+	triggers := make([]*model.Trigger, triggerCount)
+	for i := 0; i < triggerCount; i++ {
+		triggers[i] = &model.Trigger{
+			Name:            "test-trigger-" + strconv.Itoa(i),
+			JobID:           1,
+			ScheduleType:    2,          //执行一次
+			FailRetryCount:  100,        //失败几乎可以一直重试
+			ExecuteTimeout:  2000000000, //2s
+			TriggerNextTime: time.Now(),
+			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,
+			Param: map[string]string{
+				//把triggerID带过去，由SimpleHttpServer记录执行情况
+				util.ExecutorIDFieldName: strconv.Itoa(i),
+			},
+			FailRetryInterval: 0,
+		}
+	}
+
+	util.RegisterTriggers(SchedulerAddress, triggers)
+
+	time.Sleep(10 * time.Second)
+	httpServer.PrintResult()
 }

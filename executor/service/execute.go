@@ -21,17 +21,16 @@ type ExecuteService struct {
 	wg                *sync.WaitGroup
 	timeWheel         *util.TimeWheel
 	executeListeners  []ExecuteListener
-	taskIDCounter     int64 //用于分配task的ID。防止超时任务重复发送执行失败消息
 }
 
 func NewExecuteService(statisticsService *StatisticsService, processorService *ProcessorService,
 	duplicateService *DuplicateService, processorCount int) *ExecuteService {
-	if processorCount <= 0 || processorCount > 2000 {
-		processorCount = 2000
+	if processorCount <= 0 || processorCount > 100 {
+		processorCount = 100
 	}
 
 	var err error
-	tw, err := util.NewTimeWheel(time.Millisecond*20, 100, util.TickSafeMode())
+	tw, err := util.NewTimeWheel(time.Millisecond*200, 100, util.TickSafeMode())
 	if err != nil {
 		panic(err)
 	}
@@ -46,7 +45,7 @@ func NewExecuteService(statisticsService *StatisticsService, processorService *P
 		processorCount:    processorCount,
 		wg:                &sync.WaitGroup{},
 		timeWheel:         tw,
-		executeListeners:  make([]ExecuteListener, 2),
+		executeListeners:  make([]ExecuteListener, 0, 2),
 	}
 	ret.RegisterExecuteListener(statisticsService)
 	ret.RegisterExecuteListener(duplicateService)
@@ -60,6 +59,7 @@ type Task struct {
 }
 
 func (e *ExecuteService) PushJobRequest(jobRequest *api.RunJobRequest) {
+	e.OnReceiveRunJobRequest(jobRequest)
 	klog.Tracef("receive execute jobRequest, OnFireID:%v", jobRequest.OnFireLogID)
 	if resp := e.duplicateService.CheckDuplicateExecuteSuccessJob(uint(jobRequest.OnFireLogID)); resp != nil && resp.Result.Ok {
 		//通过duplicateService防重，即同一个ExecutorLogID的任务，如果执行过，且执行成功了，
@@ -67,6 +67,14 @@ func (e *ExecuteService) PushJobRequest(jobRequest *api.RunJobRequest) {
 		klog.Warnf("receive duplicate execute success job request, OnFireID:%v", jobRequest.OnFireLogID)
 		e.jobResponseCh <- resp
 		return
+	}
+
+	//todo 挪到task执行过程中去
+	if ch := e.duplicateService.CheckDuplicateExecute(uint(jobRequest.OnFireLogID)); ch != nil {
+		needDo := <-ch
+		if !needDo {
+			return
+		}
 	}
 
 	//扔到时间轮里面，如果超时，那么返回一个失败的response
@@ -103,6 +111,7 @@ func (e *ExecuteService) OnTaskFinish(task *Task) {
 	//这里如果不ok，说明时间轮定时器中的内容没了，只能说明本次执行超时，定时器触发，返回了一个超时错误。
 	//这种情况下，如果本次虽然超时，但是任务执行成功了，扔回去一个成功回复。而如果执行失败，就不再扔回去失败回复了。
 	//反正已经是扣除失败次数了
+	e.OnSendRunJobResponse(task.JobResponse)
 	if ok || (!ok && task.JobResponse.Result.Ok) {
 		e.jobResponseCh <- task.JobResponse
 	}
@@ -135,6 +144,7 @@ func (e *ExecuteService) worker() {
 			return
 		case task := <-e.taskCh:
 			klog.Tracef("worker start handle job, OnFireID:%v", task.JobRequest.OnFireLogID)
+			e.OnStartExecute(task)
 			task.JobResponse = new(api.RunJobResponse)
 			processor := e.processorService.GetRegister(task.JobRequest.Job.GlueType)
 			task.JobResponse.OnFireLogID = task.JobRequest.OnFireLogID
@@ -152,6 +162,7 @@ func (e *ExecuteService) worker() {
 
 			klog.Tracef("worker execute task finished:%+v", task)
 			e.OnTaskFinish(task)
+			e.OnFinishExecute(task)
 		}
 	}
 }

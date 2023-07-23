@@ -22,19 +22,19 @@ func (s *StatisticsService) GetHandleTriggerForwardDuration() time.Duration {
 }
 
 func (s *StatisticsService) GetHandleTriggerMaxCount() int {
-	return 100
+	return 3000
 }
 
 func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
-	return 100
+	return 1000
 }
 
 func (s *StatisticsService) GetScheduleInterval() time.Duration {
-	return time.Second * 5
+	return time.Second * 4
 }
 
 func (s *StatisticsService) GetCheckTimeoutOnFireLogsInterval() time.Duration {
-	return time.Second * 20
+	return time.Second * 5
 }
 
 func (s *StatisticsService) GetExecutorHeartbeatInterval() time.Duration {

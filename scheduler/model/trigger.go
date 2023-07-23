@@ -29,7 +29,8 @@ type Trigger struct {
 	// 如果出错，最大重试次数。
 	FailRetryCount int `gorm:"column:executor_fail_retry_count;not null"`
 	// executor执行的最大时间。要求用户一定指定。如果超时，则减少OnFireLog中的RetryCount字段
-	ExecuteTimeout time.Duration `gorm:"column:execute_timeout;type:bigint;not null"`
+	ExecuteTimeout    time.Duration `gorm:"column:execute_timeout;type:bigint;not null"`
+	FailRetryInterval time.Duration `gorm:"column:fail_retry_interval"` //失败重试间隔，为0则立刻重试
 	// 上次触发时间
 	TriggerLastTime time.Time `gorm:"column:trigger_last_time;type:timestamp;not null"`
 	// 下次触发时间

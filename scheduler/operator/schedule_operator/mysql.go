@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"supernova/pkg/util"
-	"supernova/scheduler/config"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/dal"
 	"supernova/scheduler/model"
@@ -28,7 +26,7 @@ type MysqlOperator struct {
 var (
 	reduceRedoAtExpr = gorm.Expr("left_retry_count - 1")
 	updateRedoAtExpr = gorm.Expr("redo_at + INTERVAL (retry_count - left_retry_count - 1) * " +
-		strconv.Itoa(int(config.JobRetryInterval.Seconds())) + " SECOND")
+		"fail_retry_interval / 1000000000" + " SECOND")
 )
 
 func (m *MysqlOperator) UpdateOnFireLogRedoAt(ctx context.Context, onFireLogID uint, oldRedoAt time.Time) error {

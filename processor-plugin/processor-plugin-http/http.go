@@ -49,12 +49,13 @@ type HTTP struct {
 //	}
 func (s *HTTP) Process(job *api.Job) *api.JobResult {
 	out, err := s.ExecuteImpl(job)
-	result := &api.JobResult{
-		Ok:     err == nil,
-		Err:    err.Error(),
-		Result: string(out),
-	}
 
+	result := new(api.JobResult)
+	result.Ok = err == nil
+	if !result.Ok {
+		result.Err = err.Error()
+	}
+	result.Result = string(out)
 	return result
 }
 

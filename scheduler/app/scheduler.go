@@ -1,9 +1,10 @@
 package app
 
 import (
-	"github.com/cloudwego/kitex/pkg/klog"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/service"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 type Scheduler struct {

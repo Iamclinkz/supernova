@@ -69,7 +69,7 @@ func (b *SchedulerBuilder) Build() (*Scheduler, error) {
 		return nil, errors.New("no select discovery")
 	}
 	if b.schedulerWorkerCount == 0 {
-		b.schedulerWorkerCount = 20
+		b.schedulerWorkerCount = 50
 	}
 
 	return genScheduler(b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)

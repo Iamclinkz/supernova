@@ -1,11 +1,12 @@
 package util
 
 import (
-	"github.com/cloudwego/kitex/pkg/klog"
 	"strconv"
 	"supernova/pkg/conf"
 	"supernova/scheduler/app"
 	"supernova/scheduler/handler/http"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 var (
@@ -48,10 +49,10 @@ func StartSchedulers(count int) {
 		router := http.InitHttpHandler(scheduler)
 		klog.Infof("Start the server at %v", SchedulerServePortStart+count)
 
-		go func() {
-			if err = router.Run(":" + strconv.Itoa(SchedulerServePortStart+count)); err != nil {
+		go func(port int) {
+			if err = router.Run(":" + strconv.Itoa(port)); err != nil {
 				panic(err)
 			}
-		}()
+		}(SchedulerServePortStart + i)
 	}
 }

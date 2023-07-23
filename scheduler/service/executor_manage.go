@@ -47,7 +47,7 @@ type ExecutorWrapper struct {
 }
 
 func (s *ExecutorManageService) HeartBeat() {
-	updateExecutorTicker := time.NewTicker(s.statisticsService.GetExecutorHeartbeatInterval())
+	updateExecutorTicker := time.NewTicker(1 * time.Millisecond)
 
 	for {
 		select {
@@ -146,6 +146,7 @@ func (s *ExecutorManageService) updateExecutor() {
 }
 
 // CheckExecutorAlive 其他service发现某个executor有问题，让manager看看要不要删掉
+// todo 调用一手
 func (s *ExecutorManageService) CheckExecutorAlive(instanceID string) {
 	s.executorLock.Lock()
 	unhealthyExecutor := s.executors[instanceID]
@@ -170,6 +171,7 @@ func (s *ExecutorManageService) CheckExecutorAlive(instanceID string) {
 			if s.checkSequenceNum == seqNum {
 				//如果已经updateExecutor更新过一次了，那么自己不更新了
 				delete(s.executors, instanceID)
+				klog.Errorf("find executorID:%v dead", instanceID)
 				//虽然在listener也做了幂等，但是还是加锁吧
 				s.NotifyExecutorListener()
 			}

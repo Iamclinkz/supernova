@@ -94,10 +94,12 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 				RetryCount:       trigger.FailRetryCount,
 				ExecutorInstance: "",
 				//下次重试时间 = 触发时间 + 用户指定执行最大时间 + 重试间隔 * 1
-				RedoAt:         fireTime.Add(trigger.ExecuteTimeout).Add(config.JobRetryInterval),
-				ShouldFireAt:   fireTime,
-				ExecuteTimeout: trigger.ExecuteTimeout,
-				LeftRetryCount: trigger.FailRetryCount,
+				RedoAt:            fireTime.Add(trigger.ExecuteTimeout).Add(config.JobRetryInterval),
+				ShouldFireAt:      fireTime,
+				ExecuteTimeout:    trigger.ExecuteTimeout,
+				LeftRetryCount:    trigger.FailRetryCount + 1, //出错重试为1，表示出了两次错才不执行
+				Param:             trigger.Param,
+				FailRetryInterval: trigger.FailRetryInterval,
 			}
 			onFireTriggers = append(onFireTriggers, onFireTrigger)
 			klog.Tracef("update on fire trigger:%+v", onFireTrigger)
@@ -141,6 +143,13 @@ emptyEnd:
 func (s *TriggerService) AddTrigger(trigger *model.Trigger) error {
 	if err := s.ValidateTrigger(trigger); err != nil {
 		return err
+	}
+
+	trigger.Status = constance.TriggerStatusNormal
+	trigger.TriggerLastTime = util.VeryEarlyTime()
+	if trigger.FailRetryInterval < time.Second {
+		//重试间隔至少1s
+		trigger.FailRetryInterval = time.Second
 	}
 
 	if err := s.scheduleOperator.InsertTrigger(context.TODO(), trigger); err != nil {

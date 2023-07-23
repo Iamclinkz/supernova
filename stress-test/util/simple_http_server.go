@@ -3,12 +3,13 @@ package util
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"log"
 	"math/rand"
 	"net/http"
 	"strconv"
 	"sync"
+
+	"github.com/gin-gonic/gin"
 )
 
 //监听/test的POST方法，记录并统计收到的http请求中的triggerID字段的值，根据fail字段随机失败。
@@ -17,6 +18,7 @@ import (
 type SimpleHttpServerConf struct {
 	FailRate      float32
 	ListeningPort int
+	TriggerCount  int
 }
 
 const ExecutorIDFieldName = "X-ExecutorID"
@@ -38,7 +40,7 @@ func NewSimpleHttpServer(config *SimpleHttpServerConf) *SimpleHttpServer {
 }
 
 func (s *SimpleHttpServer) Start() {
-	router := gin.Default()
+	router := gin.New()
 
 	router.POST("/test", func(c *gin.Context) {
 		paramJSON := c.GetHeader("param")
@@ -54,7 +56,7 @@ func (s *SimpleHttpServer) Start() {
 			panic("")
 		}
 
-		log.Printf("Received param: %v", param)
+		//log.Printf("Received param: %v", param)
 
 		fail := rand.Float32() < s.serveConfig.FailRate
 		if fail {
@@ -79,6 +81,10 @@ func (s *SimpleHttpServer) UpdateServe(onFireLogID string, failed bool) {
 	if id, err := strconv.Atoi(onFireLogID); err != nil {
 		panic(err)
 	} else {
+		if s.executorID2CallTime[uint(id)] != 0 {
+			panic(fmt.Sprintf("dup called:%v", uint(id)))
+		}
+
 		s.executorID2CallTime[uint(id)]++
 		if !failed {
 			s.executorID2SuccessTime[uint(id)]++
@@ -87,8 +93,26 @@ func (s *SimpleHttpServer) UpdateServe(onFireLogID string, failed bool) {
 }
 
 type Result struct {
-	executorID2CallTime    map[uint]int
-	executorID2SuccessTime map[uint]int
+	ExecutorID2CallTime    map[uint]int
+	ExecutorID2SuccessTime map[uint]int
+}
+
+func (s *SimpleHttpServer) PrintResult() {
+	result := s.GetResult()
+
+	done := 0
+	notDone := 0
+	for i := 0; i < s.serveConfig.TriggerCount; i++ {
+		if result.ExecutorID2SuccessTime[uint(i)] != 1 && result.ExecutorID2SuccessTime[uint(i)] != 0 {
+			panic(i)
+		} else if result.ExecutorID2CallTime[uint(i)] != 1 {
+			notDone++
+		} else {
+			done++
+		}
+	}
+
+	log.Printf("done:%v, not done:%v", done, notDone)
 }
 
 func (s *SimpleHttpServer) GetResult() *Result {
@@ -96,15 +120,15 @@ func (s *SimpleHttpServer) GetResult() *Result {
 	defer s.mu.Unlock()
 
 	result := &Result{
-		executorID2CallTime:    make(map[uint]int),
-		executorID2SuccessTime: make(map[uint]int),
+		ExecutorID2CallTime:    make(map[uint]int),
+		ExecutorID2SuccessTime: make(map[uint]int),
 	}
 
 	for k, v := range s.executorID2CallTime {
-		result.executorID2CallTime[k] = v
+		result.ExecutorID2CallTime[k] = v
 	}
 	for k, v := range s.executorID2SuccessTime {
-		result.executorID2SuccessTime[k] = v
+		result.ExecutorID2SuccessTime[k] = v
 	}
 
 	return result

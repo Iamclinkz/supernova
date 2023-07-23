@@ -34,7 +34,7 @@ func NewScheduleService(statisticsService *StatisticsService,
 	jobService *JobService, triggerService *TriggerService, onFireService *OnFireService,
 	executorSelectService *ExecutorRouteService,
 	workerCount int, executorManageService *ExecutorManageService) *ScheduleService {
-	tw, _ := util.NewTimeWheel(time.Millisecond*20, 512, util.TickSafeMode())
+	tw, _ := util.NewTimeWheel(time.Millisecond*200, 512, util.TickSafeMode())
 	ret := &ScheduleService{
 		stopCh:                make(chan struct{}),
 		statisticsService:     statisticsService,
@@ -45,9 +45,9 @@ func NewScheduleService(statisticsService *StatisticsService,
 		executorManageService: executorManageService,
 		timeWheel:             tw,
 		//todo 想一下大小
-		timeWheelTaskCh:     make(chan *model.OnFireLog, workerCount*2),
-		overtimeOnFireLogCh: make(chan *model.OnFireLog, workerCount*2),
-		jobResponseTaskCh:   make(chan *api.RunJobResponse, workerCount*2),
+		timeWheelTaskCh:     make(chan *model.OnFireLog, workerCount*20),
+		overtimeOnFireLogCh: make(chan *model.OnFireLog, workerCount*20),
+		jobResponseTaskCh:   make(chan *api.RunJobResponse, workerCount*20),
 		wg:                  sync.WaitGroup{},
 		workerCount:         workerCount,
 	}
