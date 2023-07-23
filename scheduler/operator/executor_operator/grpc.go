@@ -36,13 +36,18 @@ func newGrpcOperator(host string, port int, f OnJobResponseNotifyFunc) (Operator
 	if client, err := dal.NewExecutorServiceClient(host, strconv.Itoa(port)); err != nil {
 		return nil, err
 	} else {
-		return &GrpcOperator{
+		ret := &GrpcOperator{
 			executorCli: client,
 			streamLock:  sync.Mutex{},
 			host:        host,
 			port:        port,
 			notify:      f,
-		}, nil
+		}
+		if err = ret.initStream(); err != nil {
+			return nil, err
+		} else {
+			return ret, nil
+		}
 	}
 }
 
@@ -66,13 +71,6 @@ func (g *GrpcOperator) RunJob(request *api.RunJobRequest) error {
 		return errors.New("stream stopped")
 	}
 
-	if g.stream == nil {
-		//如果流是空的，那么创建流
-		if err := g.initStream(); err != nil {
-			return err
-		}
-	}
-
 	var err error
 	if err = g.stream.Send(request); err != nil {
 		g.ForceStop()
@@ -82,9 +80,6 @@ func (g *GrpcOperator) RunJob(request *api.RunJobRequest) error {
 
 func (g *GrpcOperator) initStream() error {
 	var err error
-	//加锁避免重复获取流
-	g.streamLock.Lock()
-	defer g.streamLock.Unlock()
 
 	if g.stream != nil {
 		return nil

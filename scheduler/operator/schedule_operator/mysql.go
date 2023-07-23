@@ -35,7 +35,7 @@ func (m *MysqlOperator) UpdateOnFireLogRedoAt(ctx context.Context, onFireLogID u
 		tx = m.db.DB()
 	}
 
-	return tx.Model(m.emptyOnFireLog).
+	return tx.Model(&model.OnFireLog{}).
 		Where("id = ? AND status != ? AND redo_at = ?", onFireLogID, constance.OnFireStatusFinished, oldRedoAt).
 		Updates(map[string]interface{}{
 			"redo_at": updateRedoAtExpr,
@@ -65,7 +65,7 @@ func (m *MysqlOperator) UpdateOnFireLogStop(ctx context.Context, onFireLogID uin
 	}
 
 	// 更新满足条件的记录
-	return tx.Model(m.emptyOnFireLog).
+	return tx.Model(&model.OnFireLog{}).
 		Where("id = ? AND status != ?", onFireLogID, constance.OnFireStatusFinished).
 		Updates(map[string]interface{}{
 			"status":  constance.OnFireStatusFinished,
@@ -81,7 +81,7 @@ func (m *MysqlOperator) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID 
 	}
 
 	// 更新满足条件的记录
-	return tx.Model(m.emptyOnFireLog).
+	return tx.Model(&model.OnFireLog{}).
 		Where("id = ? AND status != ?", onFireLogID, constance.OnFireStatusFinished).
 		Updates(map[string]interface{}{
 			"success": true,
@@ -98,7 +98,7 @@ func (m *MysqlOperator) UpdateOnFireLogFail(ctx context.Context, onFireLogID uin
 	}
 
 	// 更新满足条件的记录
-	return tx.Model(m.emptyOnFireLog).
+	return tx.Model(&model.OnFireLog{}).
 		Where("id = ? AND status != ? AND left_retry_count > 0", onFireLogID, constance.OnFireStatusFinished).
 		Updates(map[string]interface{}{
 			"left_retry_count": reduceRedoAtExpr,
@@ -369,7 +369,7 @@ func (m *MysqlOperator) UpdateOnFireLogExecutorStatus(ctx context.Context, onFir
 		db = m.db.DB()
 	}
 
-	err := db.Model(m.emptyOnFireLog).Where("id = ?", onFireLog.ID).
+	err := db.Model(&model.OnFireLog{}).Where("id = ?", onFireLog.ID).
 		Updates(map[string]interface{}{
 			"executor_instance": onFireLog.ExecutorInstance,
 			"status":            onFireLog.Status,
