@@ -46,12 +46,13 @@ type Operator interface {
 	//-------------------------------onFire
 	//增
 	InsertOnFires(ctx context.Context, onFire []*model.OnFireLog) error
-	//改
+	//改-改字段，需要更新UpdateAt字段到onFireLog中
 	UpdateOnFireLogExecutorStatus(ctx context.Context, onFireLog *model.OnFireLog) error
+	UpdateOnFireLogRedoAt(ctx context.Context, onFireLog *model.OnFireLog) error
+	//改-改状态，执行过一次UpdateOnFireLogSuccess，将状态迭代为success之后，后面再调用都不应该更新为fail
 	UpdateOnFireLogFail(ctx context.Context, onFireLogID uint, errorMsg string) error
 	UpdateOnFireLogSuccess(ctx context.Context, onFireLogID uint, result string) error
-	UpdateOnFireLogStop(ctx context.Context, onFireLog *model.OnFireLog, msg string) error
-	UpdateOnFireLogRedoAt(ctx context.Context, onFireLog *model.OnFireLog) error
+	UpdateOnFireLogStop(ctx context.Context, onFireLogID uint, msg string) error
 
 	//查
 	FindOnFireLogByJobID(ctx context.Context, jobID uint) ([]*model.OnFireLog, error)

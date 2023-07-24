@@ -104,7 +104,7 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 			//job找不到了，说明被删且用户不希望失败的任务再执行了。
 			//这种情况下，尝试更新一下这条OnFireLog，标记成执行结束了。不让其他进程再取了
 			//更新不成功可能是已经成功了或者其他原因，不需要处理
-			_ = s.onFireService.UpdateOnFireLogStop(context.TODO(), onFireLog, "user cancel")
+			_ = s.onFireService.UpdateOnFireLogStop(context.TODO(), onFireLog.ID, "user cancel")
 			return nil
 		} else {
 			//其他情况，可能是网络不通？先不操作了

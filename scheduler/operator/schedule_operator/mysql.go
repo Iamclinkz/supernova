@@ -68,15 +68,15 @@ func (m *MysqlOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int,
 	return logs, err
 }
 
-func (m *MysqlOperator) UpdateOnFireLogStop(ctx context.Context, onFireLog *model.OnFireLog, msg string) error {
+func (m *MysqlOperator) UpdateOnFireLogStop(ctx context.Context, onFireLogID uint, msg string) error {
 	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
 		tx = m.db.DB()
 	}
 
 	// 更新满足条件的记录
-	return tx.Model(onFireLog).
-		Where("id = ? AND status != ?", onFireLog.ID, constance.OnFireStatusFinished).
+	return tx.Model(&model.OnFireLog{}).
+		Where("id = ? AND status != ?", onFireLogID, constance.OnFireStatusFinished).
 		Updates(map[string]interface{}{
 			"status":  constance.OnFireStatusFinished,
 			"result":  msg,

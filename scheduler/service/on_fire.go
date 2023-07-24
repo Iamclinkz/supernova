@@ -29,6 +29,6 @@ func (s *OnFireService) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID 
 	return s.scheduleOperator.UpdateOnFireLogSuccess(ctx, onFireLogID, result)
 }
 
-func (s *OnFireService) UpdateOnFireLogStop(ctx context.Context, onFireLog *model.OnFireLog, msg string) error {
-	return s.scheduleOperator.UpdateOnFireLogStop(ctx, onFireLog, msg)
+func (s *OnFireService) UpdateOnFireLogStop(ctx context.Context, onFireLogID uint, msg string) error {
+	return s.scheduleOperator.UpdateOnFireLogStop(ctx, onFireLogID, msg)
 }
