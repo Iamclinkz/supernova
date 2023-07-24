@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"supernova/pkg/util"
-	"supernova/scheduler/config"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
+	"sync"
 	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
@@ -37,7 +37,7 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		endTriggerHandleTime   = time.Now().Add(s.statisticsService.GetHandleTriggerDuration())
 		err                    error
 		txCtx                  = context.TODO()
-		onFireTriggers         []*model.OnFireLog
+		onFireLogs             []*model.OnFireLog
 		fetchedTriggers        []*model.Trigger
 	)
 
@@ -61,9 +61,8 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		goto emptyEnd
 	}
 
-	klog.Tracef("fetchUpdateMarkTrigger fetched triggers:%s", model.TriggersToString(fetchedTriggers))
-
-	onFireTriggers = make([]*model.OnFireLog, 0, len(fetchedTriggers))
+	//klog.Tracef("fetchUpdateMarkTrigger fetched triggers:%s", model.TriggersToString(fetchedTriggers))
+	onFireLogs = make([]*model.OnFireLog, 0, len(fetchedTriggers))
 	//3.依次让trigger更新自己，如果有问题的，则需要删除trigger
 	for _, trigger := range fetchedTriggers {
 		//这里需要注意，如果一个trigger的触发时间很短，例如1s一次，而我们的HandleTriggerDuration较长，例如5s一次，
@@ -87,22 +86,22 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 				break
 			}
 
-			onFireTrigger := &model.OnFireLog{
+			onFireLog := &model.OnFireLog{
 				TriggerID:        trigger.ID,
 				JobID:            trigger.JobID,
 				Status:           constance.OnFireStatusWaiting,
-				RetryCount:       trigger.FailRetryCount,
+				TryCount:         trigger.FailRetryCount,
 				ExecutorInstance: "",
-				//下次重试时间 = 触发时间 + 用户指定执行最大时间 + 重试间隔 * 1
-				RedoAt:            fireTime.Add(trigger.ExecuteTimeout).Add(config.JobRetryInterval),
+				//初始的下次重试时间 = 触发时间 + 用户指定执行最大时间 + 重试间隔 * 1
+				RedoAt:            fireTime.Add(trigger.ExecuteTimeout).Add(trigger.FailRetryInterval),
 				ShouldFireAt:      fireTime,
 				ExecuteTimeout:    trigger.ExecuteTimeout,
-				LeftRetryCount:    trigger.FailRetryCount + 1, //出错重试为1，表示出了两次错才不执行
+				LeftTryCount:      trigger.FailRetryCount,
 				Param:             trigger.Param,
 				FailRetryInterval: trigger.FailRetryInterval,
 			}
-			onFireTriggers = append(onFireTriggers, onFireTrigger)
-			klog.Tracef("update on fire trigger:%+v", onFireTrigger)
+			onFireLogs = append(onFireLogs, onFireLog)
+			klog.Tracef("update on fire trigger:%+v", onFireLog)
 			if trigger.TriggerNextTime.After(endTriggerHandleTime) {
 				break
 			}
@@ -114,12 +113,12 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		goto badEnd
 	}
 
-	if len(onFireTriggers) == 0 {
+	if len(onFireLogs) == 0 {
 		klog.Warnf("fetch fetchedTriggers:%s, but none of them should be fired", fetchedTriggers)
 		goto emptyEnd
 	}
 
-	if err = s.scheduleOperator.InsertOnFires(txCtx, onFireTriggers); err != nil {
+	if err = s.scheduleOperator.InsertOnFires(txCtx, onFireLogs); err != nil {
 		goto badEnd
 	}
 
@@ -127,7 +126,8 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		return nil, err
 	}
 
-	return onFireTriggers, nil
+	klog.Tracef("fetchUpdateMarkTrigger fetched triggers, len:%v", len(onFireLogs))
+	return onFireLogs, nil
 
 badEnd:
 	if txFailErr := s.scheduleOperator.OnTxFail(txCtx); txFailErr != nil {
@@ -238,19 +238,49 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog,
 	}
 
 	ret := make([]*model.OnFireLog, 0, len(onFireLogs))
-	for _, onFireLog := range onFireLogs {
-		if err = s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog.ID, onFireLog.RedoAt); err == nil {
-			//因为不考虑极端的情况下，失败的应该不多？且各个Scheduler动态调整捞取过期OnFireLog时间+捞取间隔较长，
-			//所以这里用了乐观锁，取到过期的OnFireLog之后，尝试更新RedoAt字段。如果更新成功，则自己执行。更新失败则说明要不
-			//成功了，要不让另一个进程抢先了，总之不是自己执行。
-			ret = append(ret, onFireLog)
+	mu := sync.Mutex{}
+	//因为不考虑极端的情况下，失败的应该不多？且各个Scheduler动态调整捞取过期OnFireLog时间+捞取间隔较长，
+	//所以这里用了乐观锁，取到过期的OnFireLog之后，尝试更新RedoAt字段。如果更新成功，则自己执行。更新失败则说明要不
+	//成功了，要不让另一个进程抢先了，总之不是自己执行。
+	const batchSize = 100
+	var wg sync.WaitGroup
+
+	processBatch := func(startIndex, endIndex int) {
+		defer wg.Done()
+		for i := startIndex; i < endIndex; i++ {
+			onFireLog := onFireLogs[i]
+			onFireLog.RedoAt = model.GetNextRedoAt(onFireLog)
+			if err = s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog); err == nil {
+				mu.Lock()
+				ret = append(ret, onFireLog)
+				mu.Unlock()
+			} else {
+				klog.Warnf("fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", onFireLog.ID, err)
+			}
 		}
 	}
 
+	n := len(onFireLogs)
+	for i := 0; i < n; i += batchSize {
+		startIndex := i
+		endIndex := i + batchSize
+		if endIndex > n {
+			endIndex = n
+		}
+		wg.Add(1)
+		go processBatch(startIndex, endIndex)
+	}
+
+	wg.Wait()
+
 	if len(ret) != 0 {
-		klog.Infof("fetchTimeoutAndRefreshOnFireLogs fetched timeout logs:%s", model.OnFireLogsToString(ret))
+		klog.Infof("fetchTimeoutAndRefreshOnFireLogs fetched timeout logs, len:%v", len(ret))
 	} else {
-		klog.Trace("fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs")
+		if len(onFireLogs) != 0 {
+			klog.Errorf("fetchTimeoutAndRefreshOnFireLogs find %v logs, but fetch nothing", len(onFireLogs))
+		} else {
+			klog.Trace("fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs")
+		}
 	}
 
 	return ret, nil

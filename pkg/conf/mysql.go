@@ -17,7 +17,7 @@ var K8sMysqlConfig = &MysqlConf{
 	Password:           "password",
 	DbName:             "supernovaK8s",
 	MaxIdleConnections: 10,
-	MaxOpenConnections: 100,
+	MaxOpenConnections: 128,
 }
 
 type MysqlConf struct {

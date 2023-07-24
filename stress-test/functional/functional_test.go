@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"log"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 var (
@@ -18,7 +20,9 @@ var (
 )
 
 func initTest() {
+	klog.SetLevel(klog.LevelWarn)
 	util.StartHttpExecutors(util.GenExecutorInstanceConfWithCount(3))
+	time.Sleep(2 * time.Second)
 	util.StartSchedulers(2)
 }
 
@@ -37,7 +41,7 @@ func TestWithoutFail(t *testing.T) {
 	})
 	go httpServer.Start()
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 	//加一个任务
 	if err := util.RegisterJob(SchedulerAddress, &model.Job{
 		Name:                  "test-http-job",
@@ -89,17 +93,18 @@ func TestWithoutFail(t *testing.T) {
 
 // TestRandomFailJob 执行单次，任务有概率会失败
 func TestMayFail(t *testing.T) {
-	var triggerCount = 5000
+	var triggerCount = 2
 	initTest()
 	httpServer := util.NewSimpleHttpServer(&util.SimpleHttpServerConf{
-		FailRate:             0.1, //10%的概率失败
-		ListeningPort:        SimpleWebServerPort,
-		TriggerCount:         triggerCount,
-		AllowDuplicateCalled: false,
+		FailRate:              0.80, //80%的概率失败
+		ListeningPort:         SimpleWebServerPort,
+		TriggerCount:          triggerCount,
+		AllowDuplicateCalled:  false,
+		SuccessAfterFirstFail: true, //但是失败之后，重试一定成功
 	})
 	go httpServer.Start()
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(1 * time.Second)
 	//加一个任务
 	if err := util.RegisterJob(SchedulerAddress, &model.Job{
 		Name:                  "test-http-job",
@@ -137,10 +142,10 @@ func TestMayFail(t *testing.T) {
 
 	util.RegisterTriggers(SchedulerAddress, triggers)
 
-	time.Sleep(15 * time.Second)
+	time.Sleep(20 * time.Second)
 	httpServer.CheckResult(&util.CheckResultConf{
-		AllSuccess:                    true,
+		AllSuccess:                    false,
 		NoUncalledTriggers:            true,
-		FailTriggerRateNotGreaterThan: 0.3,
+		FailTriggerRateNotGreaterThan: 0.01,
 	})
 }

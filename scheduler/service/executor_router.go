@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"math/rand"
 	"supernova/pkg/util"
 	"supernova/scheduler/constance"
@@ -38,7 +39,7 @@ func (s *ExecutorRouteService) ChooseJobExecutor(job *model.Job, onFireLog *mode
 		return nil, err
 	}
 
-	if retry {
+	if retry && onFireLog.ExecutorInstance != "" {
 		//重试的话，暂时只能分配到同一个executor节点。否则失败
 		//todo： 以后要不要加上“至少执行一次”语义，如果分配不到上次执行的Executor，那么分配新的Executor执行？
 		return s.jobRouterManager.Route(constance.ExecutorRouteStrategyTypeExecutorInstanceMatch, executors, job, onFireLog)
@@ -74,7 +75,7 @@ func (s *ExecutorRouteService) findMatchingExecutorsForJob(job *model.Job) ([]*E
 	}
 
 	if len(ret) == 0 {
-		return nil, errors.New("can not find exist executor for job")
+		return nil, fmt.Errorf("can not find exist executor for job, executors:%v", executors)
 	}
 
 	return ret, nil

@@ -49,8 +49,8 @@ func (b *SchedulerBuilder) WithMysqlStore(config *conf.MysqlConf) *SchedulerBuil
 }
 
 func (b *SchedulerBuilder) WithSchedulerWorkerCount(count int) *SchedulerBuilder {
-	if count <= 0 || count > 100 {
-		b.err = errors.New("scheduler worker should be range in [1,100]")
+	if count <= 0 || count > 32 {
+		b.err = errors.New("scheduler worker should be range in [1,32]")
 	} else {
 		b.schedulerWorkerCount = count
 	}
@@ -69,7 +69,7 @@ func (b *SchedulerBuilder) Build() (*Scheduler, error) {
 		return nil, errors.New("no select discovery")
 	}
 	if b.schedulerWorkerCount == 0 {
-		b.schedulerWorkerCount = 50
+		b.schedulerWorkerCount = 512
 	}
 
 	return genScheduler(b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)

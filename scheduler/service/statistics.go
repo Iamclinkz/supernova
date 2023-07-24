@@ -38,7 +38,7 @@ func (s *StatisticsService) GetCheckTimeoutOnFireLogsInterval() time.Duration {
 }
 
 func (s *StatisticsService) GetExecutorHeartbeatInterval() time.Duration {
-	return time.Second * 10
+	return time.Second * 5
 }
 
 func (s *StatisticsService) GetHeartBeatTimeout() time.Duration {

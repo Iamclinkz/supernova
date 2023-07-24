@@ -17,8 +17,8 @@ func NewOnFireService(jobOperator schedule_operator.Operator, statisticsService 
 		statisticsService: statisticsService,
 	}
 }
-func (s *OnFireService) UpdateOnFireLogExecutorStatus(ctx context.Context, onFireLog *model.OnFireLog) error {
-	return s.scheduleOperator.UpdateOnFireLogExecutorStatus(ctx, onFireLog)
+func (s *OnFireService) UpdateOnFireLogExecutorStatus(ctx context.Context, onFireLog *model.OnFireLog, retry bool) error {
+	return s.scheduleOperator.UpdateOnFireLogExecutorStatus(ctx, onFireLog, retry)
 }
 
 func (s *OnFireService) UpdateOnFireLogFail(ctx context.Context, onFireLog uint, errorMsg string) error {

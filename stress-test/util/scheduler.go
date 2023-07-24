@@ -5,6 +5,7 @@ import (
 	"supernova/pkg/conf"
 	"supernova/scheduler/app"
 	"supernova/scheduler/handler/http"
+	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
@@ -54,5 +55,6 @@ func StartSchedulers(count int) {
 				panic(err)
 			}
 		}(SchedulerServePortStart + i)
+		time.Sleep(1 * time.Second)
 	}
 }

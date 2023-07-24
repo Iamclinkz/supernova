@@ -61,6 +61,7 @@ func (s *ScheduleService) Schedule() {
 	go s.checkTimeoutOnFireLogs()
 	ticker := time.NewTicker(s.statisticsService.GetScheduleInterval())
 
+	klog.Infof("ScheduleService start Schedule, worker count:%v", s.workerCount)
 	for {
 		select {
 		case <-s.stopCh:
@@ -125,13 +126,13 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 	//更新db中的onFireLog的状态，以及ExecutorInstance实例信息
 	onFireLog.ExecutorInstance = executorWrapper.Executor.InstanceId
 	onFireLog.Status = constance.OnFireStatusExecuting
-	if err = s.onFireService.UpdateOnFireLogExecutorStatus(context.TODO(), onFireLog); err != nil {
-		return err
+	if err = s.onFireService.UpdateOnFireLogExecutorStatus(context.TODO(), onFireLog, retry); err != nil {
+		return errors.New("update on fire log status fail:" + err.Error())
 	}
 
 	if err = executorWrapper.Operator.RunJob(model.GenRunJobRequest(onFireLog, job)); err != nil {
-		//如果执行出错，说明是executor错误。不扣除RetryCount。等下次再执行
-		return err
+		//如果执行出错，说明是流错误。不扣除RetryCount。等下次再执行
+		return errors.New("run job fail:" + err.Error())
 	}
 	return nil
 }
@@ -179,13 +180,13 @@ func (s *ScheduleService) work() {
 		select {
 		case onFireJob := <-s.timeWheelTaskCh:
 			if fireErr := s.fire(onFireJob, false); fireErr != nil {
-				klog.Errorf("onFireJob:%v fire error:%v", onFireJob, fireErr)
+				klog.Errorf("onFireNormalJob:%v fire error:%v", onFireJob, fireErr)
 			}
 		case response := <-s.jobResponseTaskCh:
 			s.handleRunJobResponse(response)
 		case overtimeOnFireLog := <-s.overtimeOnFireLogCh:
 			if fireErr := s.fire(overtimeOnFireLog, true); fireErr != nil {
-				klog.Errorf("onFireJob:%v fire error:%v", overtimeOnFireLog, fireErr)
+				klog.Errorf("onFireOvertimeJob:%v fire error:%v", overtimeOnFireLog, fireErr)
 			}
 		case <-s.stopCh:
 			klog.Infof("ScheduleService worker stop working")
@@ -197,7 +198,7 @@ func (s *ScheduleService) work() {
 
 // checkTimeoutOnFireLogs 从数据库中捞取超时的OnFireLogs，尝试再次执行
 func (s *ScheduleService) checkTimeoutOnFireLogs() {
-	ticker := time.NewTicker(s.statisticsService.GetScheduleInterval())
+	ticker := time.NewTicker(s.statisticsService.GetCheckTimeoutOnFireLogsInterval())
 
 	for {
 		select {
@@ -214,7 +215,7 @@ func (s *ScheduleService) checkTimeoutOnFireLogs() {
 					s.overtimeOnFireLogCh <- onFireLog
 				}
 			}
-			ticker.Reset(s.statisticsService.GetScheduleInterval())
+			ticker.Reset(s.statisticsService.GetCheckTimeoutOnFireLogsInterval())
 		}
 	}
 }

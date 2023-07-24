@@ -10,6 +10,7 @@ import (
 	"supernova/scheduler/model"
 	"time"
 
+	"github.com/cloudwego/kitex/pkg/klog"
 	"gorm.io/gorm"
 )
 
@@ -24,22 +25,32 @@ type MysqlOperator struct {
 }
 
 var (
-	reduceRedoAtExpr = gorm.Expr("left_retry_count - 1")
-	updateRedoAtExpr = gorm.Expr("redo_at + INTERVAL (retry_count - left_retry_count - 1) * " +
-		"fail_retry_interval / 1000000000" + " SECOND")
+	reduceRedoAtExpr = gorm.Expr("left_try_count - 1")
 )
 
-func (m *MysqlOperator) UpdateOnFireLogRedoAt(ctx context.Context, onFireLogID uint, oldRedoAt time.Time) error {
+func (m *MysqlOperator) UpdateOnFireLogRedoAt(ctx context.Context, onFireLog *model.OnFireLog) error {
 	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
 		tx = m.db.DB()
 	}
 
-	return tx.Model(&model.OnFireLog{}).
-		Where("id = ? AND status != ? AND redo_at = ?", onFireLogID, constance.OnFireStatusFinished, oldRedoAt).
-		Updates(map[string]interface{}{
-			"redo_at": updateRedoAtExpr,
-		}).Error
+	result := tx.Model(onFireLog).
+		Where("id = ?", onFireLog.ID).
+		Where("status != ?", constance.OnFireStatusFinished).
+		Where("updated_at = ?", onFireLog.UpdatedAt).
+		Updates(model.OnFireLog{
+			RedoAt: onFireLog.RedoAt,
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
 }
 
 func (m *MysqlOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time) ([]*model.OnFireLog, error) {
@@ -50,10 +61,10 @@ func (m *MysqlOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int,
 
 	var logs []*model.OnFireLog
 
-	err := tx.Select("id, trigger_id, job_id, executor_instance, param").
+	err := tx.Select("id, trigger_id, job_id, executor_instance, param,redo_at,updated_at").
 		Where("redo_at > ? AND redo_at < ?", noEarlyThan, noLaterThan).
 		Where("status != ? ", constance.OnFireStatusFinished).
-		Where("left_retry_count > 0").
+		Where("left_try_count > 0").
 		Limit(maxCount).Find(&logs).Error
 	return logs, err
 }
@@ -99,10 +110,10 @@ func (m *MysqlOperator) UpdateOnFireLogFail(ctx context.Context, onFireLogID uin
 
 	// 更新满足条件的记录
 	return tx.Model(&model.OnFireLog{}).
-		Where("id = ? AND status != ? AND left_retry_count > 0", onFireLogID, constance.OnFireStatusFinished).
+		Where("id = ? AND status != ? AND left_try_count > 0", onFireLogID, constance.OnFireStatusFinished).
 		Updates(map[string]interface{}{
-			"left_retry_count": reduceRedoAtExpr,
-			"result":           errorMsg,
+			"left_try_count": reduceRedoAtExpr,
+			"result":         errorMsg,
 		}).Error
 }
 
@@ -307,13 +318,13 @@ func (m *MysqlOperator) UpdateTriggers(ctx context.Context, triggers []*model.Tr
 	return nil
 }
 
-func (m *MysqlOperator) InsertOnFires(ctx context.Context, onFire []*model.OnFireLog) error {
+func (m *MysqlOperator) InsertOnFires(ctx context.Context, onFires []*model.OnFireLog) error {
 	db, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
 		db = m.db.DB()
 	}
 
-	err := db.Create(onFire).Error
+	err := db.Create(onFires).Error
 	if err != nil {
 		return fmt.Errorf("failed to insert on_fire record: %w", err)
 	}
@@ -363,20 +374,45 @@ func (m *MysqlOperator) OnTxFail(ctx context.Context) error {
 	return db.Rollback().Error
 }
 
-func (m *MysqlOperator) UpdateOnFireLogExecutorStatus(ctx context.Context, onFireLog *model.OnFireLog) error {
+func (m *MysqlOperator) UpdateOnFireLogExecutorStatus(ctx context.Context,
+	onFireLog *model.OnFireLog, retry bool) error {
 	db, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
 		db = m.db.DB()
 	}
 
-	err := db.Model(&model.OnFireLog{}).Where("id = ?", onFireLog.ID).
-		Updates(map[string]interface{}{
-			"executor_instance": onFireLog.ExecutorInstance,
-			"status":            onFireLog.Status,
-		}).Error
+	//为了避免同一个任务在多个Executor实例处重复执行，这里需要更新Executor的InstanceID。
+	//测试用例跑了1000次发现个问题，就是假设SchedulerA取了TriggerA，并且插入了OnFireLogA，但是SchedulerA内部任务太多，
+	//轮到OnFireLogA执行的时候，已经到了OnFireLogA中指定的RedoAt之后。这种情况下，另一个ShedulerB（或者该Scheduler自己）
+	//拿到了过期的OnFireLog执行的话，发现Executor的InstanceID为空，所以自己按照用户指定的路由策略，分配一个Executor。
+	//但是如果用户指定的是例如随机策略，那么很可能SchedulerA和SchedulerB就把同一个任务分配到不同的Executor上了。
+	//但两个不同的Executor之间没有防重，所以同一个Trigger的一次触发被执行了两次。解决这个问题的方法是在任务执行之前，
+	//通过redo_at字段再通过数据库看看，是不是我这次执行。如果失败，那么说明另一处已经要执行了。自己不需要不执行。
+	// if !retry {
+	// 	newer := new(model.OnFireLog)
+	// 	findResult := db.Debug().
+	// 		Where("id = ?", onFireLog.ID).
+	// 		Where("updated_at = ?", onFireLog.UpdatedAt).
+	// 		Find(newer)
 
-	if err != nil {
-		return fmt.Errorf("failed to update on fire log executor status: %w", err)
+	// 	klog.Errorf("Find result: newer = %+v, error = %v, rows affected = %d", newer, findResult.Error, findResult.RowsAffected)
+	// }
+
+	result := db.Model(onFireLog).
+		Where("id = ?", onFireLog.ID).
+		Where("updated_at = ?", onFireLog.UpdatedAt).
+		Updates(model.OnFireLog{
+			ExecutorInstance: onFireLog.ExecutorInstance,
+			Status:           onFireLog.Status,
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		klog.Warnf("not find onFireLog:%v, retry:%v", onFireLog, retry)
+		return ErrNotFound
 	}
 
 	return nil

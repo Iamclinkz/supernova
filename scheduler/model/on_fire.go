@@ -15,13 +15,13 @@ import (
 type OnFireLog struct {
 	//任务执行阶段取
 	gorm.Model
-	TriggerID         uint                   `gorm:"column:trigger_id;not null;index"`
-	JobID             uint                   `gorm:"column:job_id;not null;index"`
+	TriggerID         uint                   `gorm:"column:trigger_id;not null;"`
+	JobID             uint                   `gorm:"column:job_id;not null;"`
 	Status            constance.OnFireStatus `gorm:"column:status;type:tinyint(4);not null"`
-	RetryCount        int                    `gorm:"column:retry_count;not null"`                  //当前重试次数
-	LeftRetryCount    int                    `gorm:"column:left_retry_count"`                      //剩余的重试次数
-	ExecutorInstance  string                 `gorm:"column:executor_instance"`                     //上一个执行的Executor的InstanceID
-	RedoAt            time.Time              `gorm:"column:redo_at;type:timestamp;not null;index"` //超时时间
+	TryCount          int                    `gorm:"column:try_count;not null"`     //（失败）可执行次数
+	LeftTryCount      int                    `gorm:"column:left_try_count"`         //剩余的重试次数
+	ExecutorInstance  string                 `gorm:"column:executor_instance"`      //上一个执行的Executor的InstanceID
+	RedoAt            time.Time              `gorm:"column:redo_at;not null;index"` //超时时间
 	ParamToDB         string                 `gorm:"column:param"`
 	Param             map[string]string      `gorm:"-"`
 	FailRetryInterval time.Duration          `gorm:"column:fail_retry_interval"` //失败重试间隔，为0则立刻重试
@@ -96,13 +96,13 @@ func OnFireLogsToString(onFireLogs []*OnFireLog) string {
 }
 
 func (o *OnFireLog) String() string {
-	return fmt.Sprintf("OnFireLog(Model=%v, TriggerID=%d, JobID=%d, Status=%s, RetryCount=%d, LeftRetryCount=%d, ExecutorInstance=%s, RedoAt=%v, Param=%v, Success=%t, Result=%s, ShouldFireAt=%v, ExecuteTimeout=%v)",
+	return fmt.Sprintf("OnFireLog(Model=%v, TriggerID=%d, JobID=%d, Status=%s, TryCount=%d, LeftTryCount=%d, ExecutorInstance=%s, RedoAt=%v, Param=%v, Success=%t, Result=%s, ShouldFireAt=%v, ExecuteTimeout=%v)",
 		o.Model,
 		o.TriggerID,
 		o.JobID,
 		o.Status,
-		o.RetryCount,
-		o.LeftRetryCount,
+		o.TryCount,
+		o.LeftTryCount,
 		o.ExecutorInstance,
 		o.RedoAt,
 		o.Param,
@@ -111,4 +111,11 @@ func (o *OnFireLog) String() string {
 		o.ShouldFireAt,
 		o.ExecuteTimeout,
 	)
+}
+
+// GetNextRedoAt 计算下一次应该执行的时间（超时时间）：
+// 旧超时时间 + 用户指定的最大执行时间 + （经过了几次超时+1） * 用户指定的重试间隔
+func GetNextRedoAt(o *OnFireLog) time.Time {
+	oldRedoAt := o.RedoAt
+	return oldRedoAt.Add(time.Duration(o.TryCount-o.LeftTryCount+1)*o.FailRetryInterval + o.ExecuteTimeout)
 }

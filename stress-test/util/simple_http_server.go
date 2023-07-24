@@ -16,13 +16,14 @@ import (
 //如果失败，返回500，Error，如果不失败，返回200，OK。无论失败与否都会记录数据。
 
 type SimpleHttpServerConf struct {
-	FailRate             float32 //随机失败率是多少。如果是0，则不失败
-	ListeningPort        int     //监听的端口
-	TriggerCount         int     //应该来的trigger
-	AllowDuplicateCalled bool    //是否允许一个trigger执行多次？（需要结合 “最多一次“ 和 ”最少一次“ 语义指定）
+	FailRate              float32 //随机失败率是多少。如果是0，则不失败
+	ListeningPort         int     //监听的端口
+	TriggerCount          int     //应该来的trigger
+	AllowDuplicateCalled  bool    //是否允许一个trigger执行多次？（需要结合 “最多一次“ 和 ”最少一次“ 语义指定）
+	SuccessAfterFirstFail bool    //第一次失败之后，之后是否必须成功
 }
 
-const TriggerIDFieldName = "X-ExecutorID"
+const TriggerIDFieldName = "X-TriggerID"
 
 type SimpleHttpServer struct {
 	serveConfig  *SimpleHttpServerConf
@@ -57,14 +58,19 @@ func (s *SimpleHttpServer) Start() {
 			panic("")
 		}
 
-		fail := rand.Float32() < s.serveConfig.FailRate
+		var onFireID uint
+		if intID, err := strconv.Atoi(param[TriggerIDFieldName]); err != nil {
+			panic(err)
+		} else {
+			onFireID = uint(intID)
+		}
+
+		fail := s.IsFail(onFireID)
 		if fail {
 			c.String(http.StatusInternalServerError, "Error")
 		} else {
 			c.String(http.StatusOK, "OK")
 		}
-
-		s.UpdateServe(param[TriggerIDFieldName], fail)
 	})
 
 	err := router.Run(fmt.Sprintf(":%d", s.serveConfig.ListeningPort))
@@ -73,32 +79,42 @@ func (s *SimpleHttpServer) Start() {
 	}
 }
 
-func (s *SimpleHttpServer) UpdateServe(onFireLogID string, failed bool) {
+func (s *SimpleHttpServer) IsFail(onFireLogID uint) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if id, err := strconv.Atoi(onFireLogID); err != nil {
-		panic(err)
+	fail := false
+	if s.serveConfig.SuccessAfterFirstFail && s.calledCount[onFireLogID] != 0 {
+		//如果指定了第一次失败，其余成功，并且之前失败过了，那么肯定成功
+		fail = false
 	} else {
-		if s.successCount[uint(id)] != 0 && !s.serveConfig.AllowDuplicateCalled {
-			//如果之前执行成功了，现在又收到一条消息，那么是重复执行了。如果指定不能重复执行，则失败
-			log.Fatalf("simple http server duplicate called by triggerID:%v\n", uint(id))
-		}
+		fail = rand.Float32() < s.serveConfig.FailRate
+	}
 
-		s.calledCount[uint(id)]++
-		if !failed {
-			s.successCount[uint(id)]++
-		}
+	s.UpdateServe(onFireLogID, fail)
+	return fail
+}
+
+func (s *SimpleHttpServer) UpdateServe(onFireLogID uint, failed bool) {
+	if s.successCount[onFireLogID] != 0 && !s.serveConfig.AllowDuplicateCalled {
+		//如果之前执行成功了，现在又收到一条消息，那么是重复执行了。如果指定不能重复执行，则失败
+		log.Fatalf("simple http server duplicate called by triggerID:%v\n", onFireLogID)
+	}
+
+	s.calledCount[onFireLogID]++
+	if !failed {
+		s.successCount[onFireLogID]++
 	}
 }
 
 type Result struct {
-	SuccessCount       int     //成功执行的任务个数
-	HaveNotCalledCount int     //一次都没执行过的任务个数
-	CalledButFailCount int     //执行过，但是最终结果是失败的任务个数
-	CalledTotal        int     //总计被执行的次数
-	UncalledTriggers   []uint  //一次都没有执行过的trigger
-	FailedTriggers     []uint  //到最后，仍然没有执行成功的trigger
+	SuccessCount       int    //成功执行的任务个数
+	HaveNotCalledCount int    //一次都没执行过的任务个数
+	CalledButFailCount int    //执行过，但是最终结果是失败的任务个数
+	CalledTotal        int    //总计被执行的次数
+	UncalledTriggers   []uint //一次都没有执行过的trigger
+	FailedTriggers     []uint //到最后，仍然没有执行成功的trigger
+	CalledTwiceOrMore  []uint
 	FailTriggerRate    float32 //失败的trigger的个数
 }
 
@@ -109,13 +125,17 @@ func (r Result) String() string {
 		"  CalledButFailCount: %d\n"+
 		"  CalledTotal: %d\n"+
 		"  UncalledTriggers: %v\n"+
-		"  FailedTriggers: %v",
+		"  FailedTriggers: %v\n"+
+		"  FailTriggerRate: %v\n"+
+		" CalledTwiceOrMore: %v\n",
 		r.SuccessCount,
 		r.HaveNotCalledCount,
 		r.CalledButFailCount,
 		r.CalledTotal,
 		r.UncalledTriggers,
 		r.FailedTriggers,
+		r.FailTriggerRate,
+		r.CalledTwiceOrMore,
 	)
 }
 
@@ -130,18 +150,20 @@ func (s *SimpleHttpServer) CheckResult(crc *CheckResultConf) {
 
 	if crc.AllSuccess && result.SuccessCount != s.serveConfig.TriggerCount {
 		//检查失败
-		log.Fatalf("not all triggers successed:%s", result.String())
+		log.Fatalf("not all triggers successed:%s\n", result.String())
 	}
 
 	if crc.NoUncalledTriggers && len(result.UncalledTriggers) != 0 {
 		//有任何一个trigger一次都没有被执行过
-		log.Fatalf("not all triggers called:%s", result.String())
+		log.Fatalf("not all triggers called:%s\n", result.String())
 	}
 
 	if crc.FailTriggerRateNotGreaterThan < result.FailTriggerRate {
 		//失败率检查
-		log.Fatalf("high fail rate:%s", result.String())
+		log.Fatalf("high fail rate:%s\n", result.String())
 	}
+
+	log.Printf("check result passed:%s\n", result.String())
 }
 
 func (s *SimpleHttpServer) GetResult() *Result {
@@ -157,6 +179,9 @@ func (s *SimpleHttpServer) GetResult() *Result {
 		successCount := s.successCount[triggerID]
 		calledTimes := s.calledCount[triggerID]
 
+		if calledTimes >= 2 {
+			result.CalledTwiceOrMore = append(result.CalledTwiceOrMore, uint(triggerID))
+		}
 		//总calledTimes
 		result.CalledTotal += calledTimes
 

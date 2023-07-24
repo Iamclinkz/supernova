@@ -59,6 +59,8 @@ func (s *DuplicateService) OnFinishExecute(jobRequest *api.RunJobRequest, jobRes
 		if len(waitChanSlice) > 0 {
 			waitChanSlice[0] <- true
 			s.onFireID2Waiter[onFireID] = s.onFireID2Waiter[onFireID][1:]
+		} else {
+			delete(s.onFireID2Waiter, onFireID)
 		}
 	}
 }
@@ -74,8 +76,6 @@ func (s *DuplicateService) CheckDuplicateExecuteSuccessJobAndConcurrentExecute(o
 	defer s.mu.Unlock()
 	if ret, ok := s.c.Get(successJobResponseOnFireLogIDToCacheKey(onFireID)); ok {
 		//如果之前执行过，且执行成功了，那么直接返回上次执行成功的回复。由于更新执行成功记录是幂等的，所以可以任意发若干次给任意的Scheduler
-		//延长一下过期时间
-		s.c.Set(successJobResponseOnFireLogIDToCacheKey(onFireID), ret, cache.DefaultExpiration)
 		return ret.(*api.RunJobResponse), nil
 	}
 

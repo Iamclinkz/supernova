@@ -25,8 +25,8 @@ type ExecuteService struct {
 
 func NewExecuteService(statisticsService *StatisticsService, processorService *ProcessorService,
 	duplicateService *DuplicateService, processorCount int) *ExecuteService {
-	if processorCount <= 0 || processorCount > 100 {
-		processorCount = 100
+	if processorCount <= 0 || processorCount > 512 {
+		processorCount = 512
 	}
 
 	var err error
@@ -36,8 +36,8 @@ func NewExecuteService(statisticsService *StatisticsService, processorService *P
 	}
 
 	ret := &ExecuteService{
-		jobRequestCh:      make(chan *api.RunJobRequest, processorCount*2),
-		jobResponseCh:     make(chan *api.RunJobResponse, processorCount*2),
+		jobRequestCh:      make(chan *api.RunJobRequest, processorCount*20),
+		jobResponseCh:     make(chan *api.RunJobResponse, processorCount*20),
 		statisticsService: statisticsService,
 		processorService:  processorService,
 		duplicateService:  duplicateService,
@@ -72,9 +72,9 @@ func (e *ExecuteService) Start() {
 	for i := 0; i < e.processorCount; i++ {
 		go e.work()
 	}
-	e.timeWheel.Start()
 
-	klog.Infof("start to handle Job, go routine count:%v", e.processorCount)
+	klog.Infof("ExecuteService start working, worker count:%v", e.processorCount)
+	e.timeWheel.Start()
 }
 
 func (e *ExecuteService) Stop() {
@@ -108,7 +108,7 @@ func (e *ExecuteService) work() {
 
 			//防止当前并发执行同一个任务
 			if myWaitCh != nil {
-				klog.Warnf("find concurrent execute job request")
+				klog.Warnf("find concurrent execute job request, onFireID:%v", jobRequest.OnFireLogID)
 				needDo := <-myWaitCh
 				if !needDo {
 					return
