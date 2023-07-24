@@ -47,11 +47,11 @@ type Operator interface {
 	//增
 	InsertOnFires(ctx context.Context, onFire []*model.OnFireLog) error
 	//改
-	UpdateOnFireLogExecutorStatus(ctx context.Context, onFireLog *model.OnFireLog, retry bool) error
+	UpdateOnFireLogExecutorStatus(ctx context.Context, onFireLog *model.OnFireLog) error
 	UpdateOnFireLogFail(ctx context.Context, onFireLogID uint, errorMsg string) error
 	UpdateOnFireLogSuccess(ctx context.Context, onFireLogID uint, result string) error
-	UpdateOnFireLogStop(ctx context.Context, onFireLogID uint, msg string) error
-	UpdateOnFireLogRedoAt(ctx context.Context, onfireLog *model.OnFireLog) error
+	UpdateOnFireLogStop(ctx context.Context, onFireLog *model.OnFireLog, msg string) error
+	UpdateOnFireLogRedoAt(ctx context.Context, onFireLog *model.OnFireLog) error
 
 	//查
 	FindOnFireLogByJobID(ctx context.Context, jobID uint) ([]*model.OnFireLog, error)

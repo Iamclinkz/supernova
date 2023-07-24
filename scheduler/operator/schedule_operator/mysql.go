@@ -10,7 +10,6 @@ import (
 	"supernova/scheduler/model"
 	"time"
 
-	"github.com/cloudwego/kitex/pkg/klog"
 	"gorm.io/gorm"
 )
 
@@ -38,8 +37,8 @@ func (m *MysqlOperator) UpdateOnFireLogRedoAt(ctx context.Context, onFireLog *mo
 		Where("id = ?", onFireLog.ID).
 		Where("status != ?", constance.OnFireStatusFinished).
 		Where("updated_at = ?", onFireLog.UpdatedAt).
-		Updates(model.OnFireLog{
-			RedoAt: onFireLog.RedoAt,
+		Updates(map[string]interface{}{
+			"redo_at": onFireLog.RedoAt,
 		})
 
 	if result.Error != nil {
@@ -69,15 +68,15 @@ func (m *MysqlOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int,
 	return logs, err
 }
 
-func (m *MysqlOperator) UpdateOnFireLogStop(ctx context.Context, onFireLogID uint, msg string) error {
+func (m *MysqlOperator) UpdateOnFireLogStop(ctx context.Context, onFireLog *model.OnFireLog, msg string) error {
 	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
 		tx = m.db.DB()
 	}
 
 	// 更新满足条件的记录
-	return tx.Model(&model.OnFireLog{}).
-		Where("id = ? AND status != ?", onFireLogID, constance.OnFireStatusFinished).
+	return tx.Model(onFireLog).
+		Where("id = ? AND status != ?", onFireLog.ID, constance.OnFireStatusFinished).
 		Updates(map[string]interface{}{
 			"status":  constance.OnFireStatusFinished,
 			"result":  msg,
@@ -374,8 +373,7 @@ func (m *MysqlOperator) OnTxFail(ctx context.Context) error {
 	return db.Rollback().Error
 }
 
-func (m *MysqlOperator) UpdateOnFireLogExecutorStatus(ctx context.Context,
-	onFireLog *model.OnFireLog, retry bool) error {
+func (m *MysqlOperator) UpdateOnFireLogExecutorStatus(ctx context.Context, onFireLog *model.OnFireLog) error {
 	db, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
 		db = m.db.DB()
@@ -388,22 +386,12 @@ func (m *MysqlOperator) UpdateOnFireLogExecutorStatus(ctx context.Context,
 	//但是如果用户指定的是例如随机策略，那么很可能SchedulerA和SchedulerB就把同一个任务分配到不同的Executor上了。
 	//但两个不同的Executor之间没有防重，所以同一个Trigger的一次触发被执行了两次。解决这个问题的方法是在任务执行之前，
 	//通过redo_at字段再通过数据库看看，是不是我这次执行。如果失败，那么说明另一处已经要执行了。自己不需要不执行。
-	// if !retry {
-	// 	newer := new(model.OnFireLog)
-	// 	findResult := db.Debug().
-	// 		Where("id = ?", onFireLog.ID).
-	// 		Where("updated_at = ?", onFireLog.UpdatedAt).
-	// 		Find(newer)
-
-	// 	klog.Errorf("Find result: newer = %+v, error = %v, rows affected = %d", newer, findResult.Error, findResult.RowsAffected)
-	// }
-
 	result := db.Model(onFireLog).
 		Where("id = ?", onFireLog.ID).
 		Where("updated_at = ?", onFireLog.UpdatedAt).
-		Updates(model.OnFireLog{
-			ExecutorInstance: onFireLog.ExecutorInstance,
-			Status:           onFireLog.Status,
+		Updates(map[string]interface{}{
+			"executor_instance": onFireLog.ExecutorInstance,
+			"status":            onFireLog.Status,
 		})
 
 	if result.Error != nil {
@@ -411,7 +399,6 @@ func (m *MysqlOperator) UpdateOnFireLogExecutorStatus(ctx context.Context,
 	}
 
 	if result.RowsAffected == 0 {
-		klog.Warnf("not find onFireLog:%v, retry:%v", onFireLog, retry)
 		return ErrNotFound
 	}
 
