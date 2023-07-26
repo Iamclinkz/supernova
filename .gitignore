@@ -1,0 +1,2 @@
+scheduler/build/*
+stress-test/tests/*.log
