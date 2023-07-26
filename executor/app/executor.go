@@ -1,20 +1,19 @@
 package app
 
 import (
-	"net"
-	"strconv"
+	"github.com/cloudwego/kitex/pkg/klog"
+	"os"
+	"os/signal"
 	myConstance "supernova/executor/constance"
-	"supernova/executor/handler"
+	"supernova/executor/exporter"
 	"supernova/executor/processor"
 	"supernova/executor/service"
-	"supernova/pkg/api/executor"
+	"supernova/pkg/conf"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 	"supernova/pkg/util"
-
-	"github.com/cloudwego/kitex/pkg/klog"
-	"github.com/cloudwego/kitex/server"
-	"github.com/kitex-contrib/obs-opentelemetry/tracing"
+	"syscall"
+	"time"
 )
 
 type Executor struct {
@@ -35,8 +34,7 @@ type Executor struct {
 	processorService  *service.ProcessorService
 	statisticsService *service.StatisticsService
 
-	//grpc server
-	grpcServer server.Server
+	serviceExporter exporter.Exporter
 }
 
 func newExecutorInner(
@@ -68,37 +66,13 @@ func newExecutorInner(
 	}
 
 	for _, p := range processor {
-		ret.processorService.Register(p)
+		if err := ret.processorService.Register(p); err != nil {
+			panic(err)
+		}
 	}
+
+	ret.serviceExporter = exporter.NewExporter(executeService, statisticsService, serveConf)
 	return ret
-}
-
-func (e *Executor) startServe() {
-	switch e.serveConf.Protoc {
-	case discovery.ProtocTypeGrpc:
-		grpcHandler := handler.NewGrpcHandler(e.executeService, e.statisticsService)
-		addr, err := net.ResolveTCPAddr("tcp", ":"+strconv.Itoa(e.serveConf.Port))
-		if err != nil {
-			panic(err)
-		}
-
-		svr := executor.NewServer(grpcHandler,
-			server.WithServiceAddr(addr),
-			server.WithSuite(tracing.NewServerSuite()),
-			//server.WithMiddleware(middleware.PrintKitexRequestResponse),
-		)
-		e.grpcServer = svr
-		klog.Infof("executor try start serve, protoc:grpc, port:%v", e.serveConf.Port)
-		if err := svr.Run(); err != nil {
-			panic(err)
-		}
-		break
-	case discovery.ProtocTypeHttp:
-		//todo
-		break
-	default:
-		break
-	}
 }
 
 func (e *Executor) register() error {
@@ -114,28 +88,68 @@ func (e *Executor) register() error {
 	return e.discoveryClient.Register(ins)
 }
 
-func (e *Executor) Start() error {
+func (e *Executor) Start() {
 	var (
 		err error
 	)
 
-	//开启提供executor服务
-	go e.startServe()
-
+	//创建execute worker，开始提供executor服务
 	e.executeService.Start()
+	go e.serviceExporter.StartServe()
 
-	//注册到用户自己指定的中间件中
+	//注册到本服务到用户指定的服务发现中间件中
 	if err = e.register(); err != nil {
-		_ = e.grpcServer.Stop()
-		e.executeService.Stop()
-		return err
+		panic(err)
 	}
 
-	return nil
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
+
+	s := <-signalCh
+	klog.Infof("found signal:%v, start graceful stop", s)
+	e.GracefulStop()
 }
 
 func (e *Executor) Stop() {
-	_ = e.grpcServer.Stop()
 	_ = e.discoveryClient.DiscoverServices(e.instanceID)
 	e.executeService.Stop()
+}
+
+func (e *Executor) GracefulStop() {
+	klog.Info("Executor start graceful stop")
+	//1.从服务发现处注销自己。如果是consul之类的中间件，那么调用其取消注册api，新的scheduler下一次就不会发现自己了。
+	//而如果是k8s，这里不需要取消注册，k8s滚动更新，如果决定干掉本pod，就不会导入流量给本pod了。所以不需要处理（from 常哥的指导）
+	//这样做的好处是Executor和Scheduler之间的连接不需要断开。而如果Scheduler检测到来自Executor的连接断开，直接返回即可。
+	err := e.discoveryClient.DeRegister(e.instanceID)
+	if err != nil {
+		klog.Errorf("fail to DeRegister executor service:%v", err)
+	}
+
+	//2.http/grpc不接受新连接
+	switch e.serveConf.Protoc {
+	case discovery.ProtocTypeGrpc:
+		e.serviceExporter.GracefulStop()
+		break
+	default:
+		//todo
+		break
+	}
+
+	//3.通知statisticsService，下次Executor询问自己的健康情况时回复已经GracefulStop
+	e.statisticsService.OnGracefulStop()
+
+	//4.等待一个服务发现周期
+	time.Sleep(conf.SchedulerMaxCheckHealthDuration)
+
+	//5.等待所有任务处理结束
+	for {
+		time.Sleep(1 * time.Second)
+		leftUnReplyRequest := e.statisticsService.GetUnReplyRequestCount()
+		if leftUnReplyRequest == 0 {
+			break
+		}
+		klog.Infof("Executor is waiting for leftUnReplyRequest, count: %v", leftUnReplyRequest)
+	}
+
+	klog.Info("Executor graceful stop success")
 }

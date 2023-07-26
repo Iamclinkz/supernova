@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"github.com/cloudwego/kitex/pkg/klog"
 	"supernova/executor/service"
 	"supernova/pkg/api"
@@ -12,6 +13,7 @@ import (
 type GrpcHandler struct {
 	executeService    *service.ExecuteService
 	statisticsService *service.StatisticsService
+	gracefulStopped   atomic.Bool
 }
 
 func NewGrpcHandler(executeService *service.ExecuteService, statisticsService *service.StatisticsService) *GrpcHandler {
@@ -29,7 +31,10 @@ func (e *GrpcHandler) HeartBeat(ctx context.Context, req *api.HeartBeatRequest) 
 }
 
 func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
-	//todo 优雅退出处理的有点粗糙，有时间再看看
+	if e.gracefulStopped.Load() {
+		return errors.New("executor graceful stopped")
+	}
+
 	var stop atomic.Bool
 	wg := sync.WaitGroup{}
 	wg.Add(2)
@@ -78,4 +83,8 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 
 	wg.Wait()
 	return nil
+}
+
+func (e *GrpcHandler) OnGracefulStop() {
+	e.gracefulStopped.Store(true)
 }

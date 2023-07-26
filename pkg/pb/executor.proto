@@ -27,7 +27,7 @@ message Job{
 
 message RunJobResponse{
     uint32 onFireLogID = 1;
-    JobResult result = 3;
+    JobResult result = 2;
 }
 
 message JobResult{
@@ -46,7 +46,8 @@ message HeartBeatResponse{
 }
 
 message HealthStatus{
-    float workload = 1;
+    float workload = 1;         //当前负载情况
+    bool gracefulStopped = 2;   
 }
 
 

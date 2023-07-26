@@ -65,6 +65,7 @@ func (s *ExecutorManageService) Stop() {
 	s.shutdownCh <- struct{}{}
 }
 
+// updateExecutor 根据从服务发现接口拿到的新的executor服务，跟executor建立连接，并且存储连接。
 func (s *ExecutorManageService) updateExecutor() {
 	//updateExecutor 本身就带有检查alive的能力，所以updateExecutor期间直接不让CheckExecutorAlive跑了
 	s.executorLock.Lock()
@@ -73,6 +74,10 @@ func (s *ExecutorManageService) updateExecutor() {
 	newServiceInstances := s.discoveryClient.DiscoverServices(constance.ExecutorServiceName)
 	newExecutors := make(map[string]*ExecutorWrapper, len(newServiceInstances))
 
+	// 这里注意，因为优雅退出，所以假设老的ExecutorA的连接仍然可用，但是新从服务发现接口中拿到的实例中没有ExecutorA，
+	// 则认为ExecutorA准备优雅退出了。这时候Scheduler就不给ExecutorA发消息，让ExecutorA处理任务了
+	//（具体实现是在ExecutorManagerService中缓存的executors中没有老的ExecutorA了）
+	// 但是Scheduler <-> ExecutorA的连接仍然不会断开
 	for _, newInstance := range newServiceInstances {
 		//合并新旧executor
 		if newInstance == nil {
@@ -146,7 +151,7 @@ func (s *ExecutorManageService) updateExecutor() {
 }
 
 // CheckExecutorAlive 其他service发现某个executor有问题，让manager看看要不要删掉
-// todo 调用一手
+// 经过常哥的指点，Scheduler和Executor的连接如果单方面断开，就可以认为连接不可用了。直接退出连接处理即可，不需要再去检查。
 func (s *ExecutorManageService) CheckExecutorAlive(instanceID string) {
 	s.executorLock.Lock()
 	unhealthyExecutor := s.executors[instanceID]

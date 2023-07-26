@@ -9,9 +9,7 @@ const (
 
 type CommonConf struct {
 	*OTelConf
-	*RedisConf
 	*MysqlConf
-	*KongAdminConf
 	*ConsulConf
 }
 
@@ -19,19 +17,15 @@ func GetCommonConfig(env Env) *CommonConf {
 	switch env {
 	case K8s:
 		return &CommonConf{
-			OTelConf:      K8sTraceConfig,
-			RedisConf:     K8sRedisConfig,
-			MysqlConf:     K8sMysqlConfig,
-			KongAdminConf: K8sKongAdminConfig,
-			ConsulConf:    K8sConsulConfig,
+			OTelConf:   K8sTraceConfig,
+			MysqlConf:  K8sMysqlConfig,
+			ConsulConf: K8sConsulConfig,
 		}
 	default:
 		return &CommonConf{
-			OTelConf:      DevTraceConfig,
-			RedisConf:     DevRedisConfig,
-			MysqlConf:     DevMysqlConfig,
-			KongAdminConf: DevKongAdminConfig,
-			ConsulConf:    DevConsulConfig,
+			OTelConf:   DevTraceConfig,
+			MysqlConf:  DevMysqlConfig,
+			ConsulConf: DevConsulConfig,
 		}
 	}
 }

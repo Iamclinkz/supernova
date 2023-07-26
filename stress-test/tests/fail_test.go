@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
-	simple_http_server "supernova/stress-test/simple-http-server"
+	"supernova/stress-test/simple-http-server"
 	"supernova/stress-test/util"
 	"testing"
 	"time"
