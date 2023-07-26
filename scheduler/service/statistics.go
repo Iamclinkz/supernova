@@ -30,7 +30,7 @@ func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
 }
 
 func (s *StatisticsService) GetScheduleInterval() time.Duration {
-	return time.Second * 4
+	return time.Second * 3
 }
 
 func (s *StatisticsService) GetCheckTimeoutOnFireLogsInterval() time.Duration {

@@ -249,7 +249,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog,
 		defer wg.Done()
 		for i := startIndex; i < endIndex; i++ {
 			onFireLog := onFireLogs[i]
-			onFireLog.RedoAt = model.GetNextRedoAt(onFireLog)
+			onFireLog.RedoAt = onFireLog.GetNextRedoAt()
 			if err = s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog); err == nil {
 				mu.Lock()
 				ret = append(ret, onFireLog)

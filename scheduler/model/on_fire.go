@@ -113,9 +113,8 @@ func (o *OnFireLog) String() string {
 	)
 }
 
-// GetNextRedoAt 计算下一次应该执行的时间（超时时间）：
-// 旧超时时间 + 用户指定的最大执行时间 + （经过了几次超时+1） * 用户指定的重试间隔
-func GetNextRedoAt(o *OnFireLog) time.Time {
-	oldRedoAt := o.RedoAt
-	return oldRedoAt.Add(time.Duration(o.TryCount-o.LeftTryCount+1)*o.FailRetryInterval + o.ExecuteTimeout)
+// GetNextRedoAt 计算下一次应该执行的时间（即本次的超时时间）。计算逻辑：
+// 旧超时时间 +  （经过了几次超时+1） * 用户指定的重试间隔 + 用户指定的Task最大执行时间
+func (o *OnFireLog) GetNextRedoAt() time.Time {
+	return o.RedoAt.Add(time.Duration(o.TryCount-o.LeftTryCount+1)*o.FailRetryInterval + o.ExecuteTimeout)
 }

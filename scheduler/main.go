@@ -13,8 +13,12 @@ func main() {
 	//todo 这里根据配置，初始化scheduler
 	cfg := conf.GetCommonConfig(conf.Dev)
 
+	//指定依赖，组装Scheduler
 	builder := app.NewSchedulerBuilder()
 	scheduler, err := builder.WithMysqlStore(cfg.MysqlConf).WithConsulDiscovery(cfg.ConsulConf).Build()
+	if err != nil {
+		panic(err)
+	}
 	scheduler.Start()
 
 	if err != nil {

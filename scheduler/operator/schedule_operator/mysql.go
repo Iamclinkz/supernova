@@ -217,23 +217,25 @@ func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
 		emptyJob:       &model.Job{},
 		emptyLock:      &model.Lock{},
 	}
-
 	//todo 测试用，记得删掉
-	cli.DB().Migrator().DropTable(ret.emptyJob)
 	cli.DB().Migrator().DropTable(ret.emptyTrigger)
 	cli.DB().Migrator().DropTable(ret.emptyOnFireLog)
-	cli.DB().Migrator().DropTable(ret.emptyLock)
-
-	//todo 建表语句，实际上可以放到.sql文件中
-	if err := cli.DB().AutoMigrate(ret.emptyJob); err != nil {
-		return nil, err
-	}
 	if err := cli.DB().AutoMigrate(ret.emptyTrigger); err != nil {
 		return nil, err
 	}
 	if err := cli.DB().AutoMigrate(ret.emptyOnFireLog); err != nil {
 		return nil, err
 	}
+
+	cli.DB().Migrator().DropTable(ret.emptyJob)
+
+	cli.DB().Migrator().DropTable(ret.emptyLock)
+
+	//todo 建表语句，实际上可以放到.sql文件中
+	if err := cli.DB().AutoMigrate(ret.emptyJob); err != nil {
+		return nil, err
+	}
+
 	if err := cli.DB().AutoMigrate(ret.emptyLock); err != nil {
 		return nil, err
 	}

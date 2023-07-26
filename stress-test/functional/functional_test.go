@@ -21,16 +21,16 @@ var (
 
 func initTest() {
 	klog.SetLevel(klog.LevelWarn)
-	util.StartHttpExecutors(util.GenExecutorInstanceConfWithCount(3))
+	util.StartHttpExecutors(util.GenExecutorInstanceConfWithCount(5))
 	time.Sleep(2 * time.Second)
-	util.StartSchedulers(2)
+	util.StartSchedulers(5)
 }
 
 // TestWithoutFail 执行单次，任务不会失败
 func TestWithoutFail(t *testing.T) {
 	start := time.Now()
 
-	var triggerCount = 5000
+	var triggerCount = 100000
 
 	initTest()
 	httpServer := util.NewSimpleHttpServer(&util.SimpleHttpServerConf{
@@ -82,7 +82,7 @@ func TestWithoutFail(t *testing.T) {
 
 	log.Printf("register triggers successed, cost:%v\n", time.Since(start))
 
-	time.Sleep(15 * time.Second)
+	time.Sleep(20 * time.Second)
 
 	httpServer.CheckResult(&util.CheckResultConf{
 		AllSuccess:                    true,
@@ -93,7 +93,7 @@ func TestWithoutFail(t *testing.T) {
 
 // TestRandomFailJob 执行单次，任务有概率会失败
 func TestMayFail(t *testing.T) {
-	var triggerCount = 2
+	var triggerCount = 10000
 	initTest()
 	httpServer := util.NewSimpleHttpServer(&util.SimpleHttpServerConf{
 		FailRate:              0.80, //80%的概率失败

@@ -12,6 +12,7 @@ import (
 const (
 	HealthCheckPort = 20000
 	GRPCServePort   = 20001
+	GRPCHost        = "9.134.5.191"
 )
 
 func main() {
@@ -31,13 +32,13 @@ func main() {
 	builder := app.NewExecutorBuilder()
 	executor, err := builder.WithCustomTag("A").WithResourceTag("LargeMemory").
 		WithInstanceID("instance-1").WithConsulDiscovery(cfg.ConsulConf, HealthCheckPort).
-		WithProcessor(httpExecutor).WithGrpcServe("9.134.5.191", GRPCServePort).Build()
+		WithProcessor(httpExecutor).WithGrpcServe(GRPCHost, GRPCServePort).Build()
 
 	if err != nil {
 		panic(err)
 	}
 
-	if err := executor.Start(); err != nil {
+	if err = executor.Start(); err != nil {
 		panic(err)
 	}
 
