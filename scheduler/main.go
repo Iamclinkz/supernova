@@ -1,6 +1,8 @@
 package main
 
 import (
+	"flag"
+	"strconv"
 	"supernova/pkg/conf"
 	"supernova/scheduler/app"
 	"supernova/scheduler/handler/http"
@@ -8,8 +10,13 @@ import (
 	"github.com/cloudwego/kitex/pkg/klog"
 )
 
+var port = flag.Int("port", 8080, "http server port")
+var logLevel = flag.Int("logLevel", 4, "log level")
+
 func main() {
-	klog.SetLevel(klog.LevelTrace)
+	flag.Parse()
+	klog.SetLevel(klog.Level(*logLevel))
+	
 	//todo 这里根据配置，初始化scheduler
 	cfg := conf.GetCommonConfig(conf.Dev)
 
@@ -26,8 +33,8 @@ func main() {
 	}
 
 	router := http.InitHttpHandler(scheduler)
-	klog.Infof("Start the server at %v", 8080)
-	if err = router.Run(":8080"); err != nil {
+	klog.Infof("Start the server at %v", *port)
+	if err = router.Run(":" + strconv.Itoa(*port)); err != nil {
 		klog.Fatalf("failed to start HTTP server: %v", err)
 	}
 }
