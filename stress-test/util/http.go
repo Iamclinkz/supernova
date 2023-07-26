@@ -15,23 +15,27 @@ func RegisterTrigger(schedulerAddress string, trigger *model.Trigger) error {
 
 func RegisterTriggers(schedulerAddress string, triggers []*model.Trigger) {
 	var wg sync.WaitGroup
+	//保证数据库不会被击穿
 	concurrencyLimit := make(chan struct{}, 500)
 
-	for _, trigger := range triggers {
-		concurrencyLimit <- struct{}{}
+	groupSize := 500
+	groupCount := (len(triggers) + groupSize - 1) / groupSize
 
+	for i := 0; i < groupCount; i++ {
 		wg.Add(1)
-		go func(t *model.Trigger) {
+		go func(start, end int) {
 			defer wg.Done()
 
-			err := RegisterTrigger(schedulerAddress, t)
-			if err != nil {
-				panic(err)
+			for _, trigger := range triggers[start:end] {
+				concurrencyLimit <- struct{}{}
+				err := RegisterTrigger(schedulerAddress, trigger)
+				if err != nil {
+					panic(err)
+				}
+				<-concurrencyLimit
 			}
 
-			// 将令牌放回channel
-			<-concurrencyLimit
-		}(trigger)
+		}(i*groupSize, (i+1)*groupSize)
 	}
 
 	wg.Wait()

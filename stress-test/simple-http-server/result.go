@@ -44,17 +44,17 @@ func (s *SimpleHttpServer) CheckResult() (error, *Result) {
 
 	if s.CheckResultConf.AllSuccess && result.SuccessCount != s.serveConfig.TriggerCount {
 		//检查失败
-		return fmt.Errorf("not all triggers successed:%s\n", result.String()), result
+		return fmt.Errorf("not all triggers successed:%s", result.String()), result
 	}
 
 	if s.CheckResultConf.NoUncalledTriggers && len(result.UncalledTriggers) != 0 {
 		//有任何一个trigger一次都没有被执行过
-		return fmt.Errorf("not all triggers called:%s\n", result.String()), result
+		return fmt.Errorf("not all triggers called:%s", result.String()), result
 	}
 
 	if s.CheckResultConf.FailTriggerRateNotGreaterThan < result.FailTriggerRate {
 		//失败率检查
-		return fmt.Errorf("high fail rate:%s\n", result.String()), nil
+		return fmt.Errorf("high fail rate:%s", result.String()), nil
 	}
 
 	return nil, result
@@ -109,6 +109,7 @@ func (s *SimpleHttpServer) WaitResult(maxWaitTime time.Duration) {
 			err, result := s.CheckResult()
 			if err != nil {
 				log.Fatalf("CheckResult failed: %v\n, result:%v\n", err, result)
+				return
 			} else {
 				log.Printf("result ok:\n%v\n", result)
 				return
@@ -117,8 +118,8 @@ func (s *SimpleHttpServer) WaitResult(maxWaitTime time.Duration) {
 			err, result := s.CheckResult()
 			if err == nil {
 				log.Printf("result ok:\n%v\n", result)
+				return
 			}
-			return
 		}
 	}
 }
