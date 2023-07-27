@@ -2,26 +2,27 @@ package tests
 
 import (
 	"fmt"
-	"github.com/cloudwego/kitex/pkg/klog"
 	"os"
 	"os/exec"
 	"strconv"
 	"supernova/pkg/conf"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
-	"supernova/stress-test/simple-http-server"
+	simple_http_server "supernova/stress-test/simple-http-server"
 	"supernova/stress-test/util"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 func TestExecutorGracefulStop(t *testing.T) {
 	//测试使用
 	const (
-		BinPath                 = "../../executor-example/http-executor/build"
+		BinPath                 = "../../executor-example/http-executor/build/http-executor"
 		LogLevel                = klog.LevelError
 		TriggerCount            = 50000
 		MaxWaitGracefulStopTime = time.Second*5 + conf.SchedulerMaxCheckHealthDuration
@@ -90,7 +91,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 			panic("start error!")
 		}
 
-		klog.Error("executor stopped, reason:%v", err)
+		klog.Infof("executor stopped, reason:%v", err)
 		executorStopWg.Done()
 	}()
 

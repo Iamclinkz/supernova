@@ -51,10 +51,6 @@ func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf) {
 			panic(err)
 		}
 
-		go func() {
-			if err = executor.Start(); err != nil {
-				panic(err)
-			}
-		}()
+		go executor.Start()
 	}
 }

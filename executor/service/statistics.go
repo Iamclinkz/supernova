@@ -6,29 +6,31 @@ import (
 )
 
 type StatisticsService struct {
-	gracefulStopped     atomic.Bool
-	currentJobCount     atomic.Int64 //当前正在执行的job数
-	unReplyRequestCount atomic.Int64 //当前还没有回复的response个数
-}
-
-func (s *StatisticsService) OnSendRunJobResponse(response *api.RunJobResponse) {
-
+	gracefulStopped atomic.Bool
+	currentJobCount atomic.Int64 //当前正在执行的job数
+	//当前还没有处理结束的response个数。这里的“还没有处理结束”指的是如果需要回复，那么回复成功（stream发送成功）算结束
+	//如果不需要回复，那么直接结束。
+	unFinishedRequestCount atomic.Int64
 }
 
 func NewStatisticsService() *StatisticsService {
 	return &StatisticsService{}
 }
 
-func (s *StatisticsService) OnReceiveRunJobRequest(request *api.RunJobRequest) {
+func (s *StatisticsService) OnSendRunJobResponse(response *api.RunJobResponse) {
+	s.unFinishedRequestCount.Add(-1)
+}
 
+func (s *StatisticsService) OnReceiveRunJobRequest(request *api.RunJobRequest) {
+	s.unFinishedRequestCount.Add(1)
 }
 
 func (s *StatisticsService) OnStartExecute(jobRequest *api.RunJobRequest) {
-
+	s.currentJobCount.Add(1)
 }
 
 func (s *StatisticsService) OnFinishExecute(jobRequest *api.RunJobRequest, jobResponse *api.RunJobResponse) {
-
+	s.currentJobCount.Add(-1)
 }
 
 func (s *StatisticsService) GetStatus() *api.HealthStatus {
@@ -52,5 +54,5 @@ func (s *StatisticsService) OnGracefulStop() {
 }
 
 func (s *StatisticsService) GetUnReplyRequestCount() int64 {
-	return s.unReplyRequestCount.Load()
+	return s.unFinishedRequestCount.Load()
 }

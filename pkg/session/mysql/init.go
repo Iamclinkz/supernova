@@ -28,7 +28,7 @@ func initMysql(host, port, userName, password, dbName string, maxIdleConns, maxO
 	newLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags),
 		logger.Config{
-			SlowThreshold: time.Second,
+			SlowThreshold: 3 * time.Second,
 			LogLevel:      logger.Warn,
 		},
 	)

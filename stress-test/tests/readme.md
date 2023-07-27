@@ -18,3 +18,9 @@ go test -v fail_test.go
 go test -v kill_scheduler_test.go
 ```
 
+## 4.Executor优雅退出测试
+
+```sh
+go test -v executor_graceful_stop_test.go
+```
+

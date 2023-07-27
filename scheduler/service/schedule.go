@@ -180,13 +180,13 @@ func (s *ScheduleService) work() {
 		select {
 		case onFireJob := <-s.timeWheelTaskCh:
 			if fireErr := s.fire(onFireJob, false); fireErr != nil {
-				klog.Errorf("onFireNormalJob:%v fire error:%v", onFireJob, fireErr)
+				klog.Debugf("onFireNormalJob:%v fire error:%v", onFireJob, fireErr)
 			}
 		case response := <-s.jobResponseTaskCh:
 			s.handleRunJobResponse(response)
 		case overtimeOnFireLog := <-s.overtimeOnFireLogCh:
 			if fireErr := s.fire(overtimeOnFireLog, true); fireErr != nil {
-				klog.Errorf("onFireOvertimeJob:%v fire error:%v", overtimeOnFireLog, fireErr)
+				klog.Debugf("onFireOvertimeJob:%v fire error:%v", overtimeOnFireLog, fireErr)
 			}
 		case <-s.stopCh:
 			klog.Infof("ScheduleService worker stop working")

@@ -152,7 +152,6 @@ func (e *ExecuteService) work() {
 			//这种情况下，如果本次虽然超时，但是任务执行成功了，则扔回去一个成功回复。而如果执行失败，就不再扔回去失败回复了。
 			//反正已经是扣除失败次数了
 			if ok || (!ok && jobResponse.Result.Ok) {
-				e.notifyOnSendRunJobResponse(jobResponse)
 				e.jobResponseCh <- jobResponse
 			}
 			klog.Tracef("worker execute job finished:%+v", jobResponse)
@@ -161,20 +160,12 @@ func (e *ExecuteService) work() {
 }
 
 type ExecuteListener interface {
-	OnReceiveRunJobRequest(request *api.RunJobRequest)                        //接收到任务请求
 	OnStartExecute(request *api.RunJobRequest)                                //开始执行某个任务
 	OnFinishExecute(request *api.RunJobRequest, response *api.RunJobResponse) //执行结束某个任务
-	OnSendRunJobResponse(response *api.RunJobResponse)                        //准备发送任务回复
 }
 
 func (e *ExecuteService) RegisterExecuteListener(listener ExecuteListener) {
 	e.executeListeners = append(e.executeListeners, listener)
-}
-
-func (e *ExecuteService) notifyOnReceiveRunJobRequest(request *api.RunJobRequest) {
-	for _, listener := range e.executeListeners {
-		listener.OnReceiveRunJobRequest(request)
-	}
 }
 
 func (e *ExecuteService) notifyOnStartExecute(request *api.RunJobRequest) {
@@ -186,11 +177,5 @@ func (e *ExecuteService) notifyOnStartExecute(request *api.RunJobRequest) {
 func (e *ExecuteService) notifyOnFinishExecute(request *api.RunJobRequest, response *api.RunJobResponse) {
 	for _, listener := range e.executeListeners {
 		listener.OnFinishExecute(request, response)
-	}
-}
-
-func (e *ExecuteService) notifyOnSendRunJobResponse(response *api.RunJobResponse) {
-	for _, listener := range e.executeListeners {
-		listener.OnSendRunJobResponse(response)
 	}
 }

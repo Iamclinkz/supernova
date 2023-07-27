@@ -27,6 +27,42 @@ var (
 	reduceRedoAtExpr = gorm.Expr("left_try_count - 1")
 )
 
+func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
+	ret := &MysqlOperator{
+		db:             cli,
+		emptyOnFireLog: &model.OnFireLog{},
+		emptyTrigger:   &model.Trigger{},
+		emptyJob:       &model.Job{},
+		emptyLock:      &model.Lock{},
+	}
+	//todo 测试用，记得删掉
+	cli.DB().Migrator().DropTable(ret.emptyTrigger)
+	cli.DB().Migrator().DropTable(ret.emptyOnFireLog)
+	if err := cli.DB().AutoMigrate(ret.emptyTrigger); err != nil {
+		return nil, err
+	}
+	if err := cli.DB().AutoMigrate(ret.emptyOnFireLog); err != nil {
+		return nil, err
+	}
+
+	cli.DB().Migrator().DropTable(ret.emptyJob)
+
+	cli.DB().Migrator().DropTable(ret.emptyLock)
+
+	//todo 建表语句，实际上可以放到.sql文件中
+	if err := cli.DB().AutoMigrate(ret.emptyJob); err != nil {
+		return nil, err
+	}
+
+	if err := cli.DB().AutoMigrate(ret.emptyLock); err != nil {
+		return nil, err
+	}
+
+	//初始化锁结构
+	cli.DB().Create(&model.Lock{LockName: constance.FetchUpdateMarkTriggerLockName})
+	return ret, nil
+}
+
 func (m *MysqlOperator) UpdateOnFireLogRedoAt(ctx context.Context, onFireLog *model.OnFireLog) error {
 	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
@@ -207,42 +243,6 @@ func (m *MysqlOperator) Lock(ctx context.Context, lockName string) error {
 
 	var lock model.Lock
 	return tx.Raw("SELECT * FROM t_lock WHERE lock_name = ? FOR UPDATE", lockName).Scan(&lock).Error
-}
-
-func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
-	ret := &MysqlOperator{
-		db:             cli,
-		emptyOnFireLog: &model.OnFireLog{},
-		emptyTrigger:   &model.Trigger{},
-		emptyJob:       &model.Job{},
-		emptyLock:      &model.Lock{},
-	}
-	//todo 测试用，记得删掉
-	cli.DB().Migrator().DropTable(ret.emptyTrigger)
-	cli.DB().Migrator().DropTable(ret.emptyOnFireLog)
-	if err := cli.DB().AutoMigrate(ret.emptyTrigger); err != nil {
-		return nil, err
-	}
-	if err := cli.DB().AutoMigrate(ret.emptyOnFireLog); err != nil {
-		return nil, err
-	}
-
-	cli.DB().Migrator().DropTable(ret.emptyJob)
-
-	cli.DB().Migrator().DropTable(ret.emptyLock)
-
-	//todo 建表语句，实际上可以放到.sql文件中
-	if err := cli.DB().AutoMigrate(ret.emptyJob); err != nil {
-		return nil, err
-	}
-
-	if err := cli.DB().AutoMigrate(ret.emptyLock); err != nil {
-		return nil, err
-	}
-
-	//初始化锁结构
-	cli.DB().Create(&model.Lock{LockName: constance.FetchUpdateMarkTriggerLockName})
-	return ret, nil
 }
 
 func (m *MysqlOperator) DeleteTriggerFromID(ctx context.Context, triggerID uint) error {

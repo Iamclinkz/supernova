@@ -3,11 +3,12 @@ package handler
 import (
 	"context"
 	"errors"
-	"github.com/cloudwego/kitex/pkg/klog"
 	"supernova/executor/service"
 	"supernova/pkg/api"
 	"sync"
 	"sync/atomic"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 type GrpcHandler struct {
@@ -77,6 +78,8 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 				stop.Store(true)
 				wg.Done()
 				return
+			} else {
+				//todo 搞一个grpc listener！
 			}
 		}
 	}()

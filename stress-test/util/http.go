@@ -3,10 +3,11 @@ package util
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
 	"supernova/scheduler/model"
 	"sync"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 func RegisterTrigger(schedulerAddress string, trigger *model.Trigger) error {
@@ -40,6 +41,7 @@ func RegisterTriggers(schedulerAddress string, triggers []*model.Trigger) {
 
 	wg.Wait()
 	close(concurrencyLimit)
+	klog.Infof("triggers inserted success, count:%v", len(triggers))
 }
 
 func RegisterJob(schedulerAddress string, job *model.Job) error {
@@ -62,6 +64,6 @@ func SendRequest(url, method string, data interface{}) error {
 	if resp.StatusCode != http.StatusOK {
 		panic(resp.Body)
 	}
-	log.Printf("Request to %s completed with status code: %d\n", url, resp.StatusCode)
+	klog.Tracef("Request to %s completed with status code: %d\n", url, resp.StatusCode)
 	return nil
 }
