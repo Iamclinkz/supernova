@@ -52,6 +52,8 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 				wg.Done()
 				return
 			}
+
+			e.statisticsService.OnReceiveRunJobRequest(req)
 			e.executeService.PushJobRequest(req)
 		}
 	}()
@@ -79,7 +81,7 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 				wg.Done()
 				return
 			} else {
-				//todo 搞一个grpc listener！
+				e.statisticsService.OnSendRunJobResponseSuccess(resp)
 			}
 		}
 	}()

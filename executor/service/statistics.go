@@ -17,7 +17,11 @@ func NewStatisticsService() *StatisticsService {
 	return &StatisticsService{}
 }
 
-func (s *StatisticsService) OnSendRunJobResponse(response *api.RunJobResponse) {
+func (s *StatisticsService) OnSendRunJobResponseSuccess(response *api.RunJobResponse) {
+	s.unFinishedRequestCount.Add(-1)
+}
+
+func (s *StatisticsService) OnNoNeedSendResponse(response *api.RunJobResponse) {
 	s.unFinishedRequestCount.Add(-1)
 }
 

@@ -53,7 +53,6 @@ func NewExecuteService(statisticsService *StatisticsService, processorService *P
 }
 
 func (e *ExecuteService) PushJobRequest(jobRequest *api.RunJobRequest) {
-	e.notifyOnReceiveRunJobRequest(jobRequest)
 	klog.Tracef("receive execute jobRequest, OnFireID:%v", jobRequest.OnFireLogID)
 	e.jobRequestCh <- jobRequest
 }

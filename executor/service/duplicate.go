@@ -13,7 +13,7 @@ import (
 // 1. 防止执行成功的任务（同一个OnFireID）再次执行。
 // 2. 防止同一个任务（同一个OnFireID）同时执行
 // 一个任务从收到grpc/http请求，一直到处理结束的调用链应该是：
-// OnReceiveRunJobRequest -> CheckDuplicateExecuteSuccessJob -> CheckDuplicateExecute -> OnStartExecute -> OnFinishExecute
+// CheckDuplicateExecuteSuccessJobAndConcurrentExecute  -> OnStartExecute -> OnFinishExecute
 type DuplicateService struct {
 	c               *cache.Cache
 	mu              sync.Mutex
@@ -26,10 +26,6 @@ func NewDuplicateService() *DuplicateService {
 		mu:              sync.Mutex{},
 		onFireID2Waiter: map[uint][]chan bool{},
 	}
-}
-
-func (s *DuplicateService) OnReceiveRunJobRequest(request *api.RunJobRequest) {
-
 }
 
 func (s *DuplicateService) OnStartExecute(jobRequest *api.RunJobRequest) {
@@ -91,10 +87,6 @@ func (s *DuplicateService) CheckDuplicateExecuteSuccessJobAndConcurrentExecute(o
 	myWaitChan := make(chan bool, 1)
 	s.onFireID2Waiter[onFireID] = append(s.onFireID2Waiter[onFireID], myWaitChan)
 	return nil, myWaitChan
-}
-
-func (s *DuplicateService) OnSendRunJobResponse(response *api.RunJobResponse) {
-
 }
 
 func successJobResponseOnFireLogIDToCacheKey(onFireID uint) string {
