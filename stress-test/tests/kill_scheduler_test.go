@@ -31,7 +31,7 @@ func TestForceKillScheduler(t *testing.T) {
 	)
 
 	var (
-		LogName = fmt.Sprintf("graceful-stop-executor-%v.log", time.Now().Format("15:04:05"))
+		LogName = fmt.Sprintf("kill-scheduler-error-log-%v.log", time.Now().Format("15:04:05"))
 		err     error
 		pid     atomic.Int32
 	)
@@ -145,5 +145,7 @@ func TestForceKillScheduler(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
+
+		panic("failed")
 	}
 }

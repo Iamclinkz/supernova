@@ -41,7 +41,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 	)
 
 	var (
-		LogName = fmt.Sprintf("graceful-stop-executor-%v.log", time.Now().Format("15:04:05"))
+		LogName = fmt.Sprintf("graceful-stop-executor-error-%v.log", time.Now().Format("15:04:05"))
 		err     error
 		pid     atomic.Int32
 	)
@@ -160,5 +160,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
+
+		panic("failed")
 	}
 }
