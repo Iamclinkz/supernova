@@ -28,3 +28,7 @@ const (
 	TypeConsul MiddlewareType = "Grpc"
 	TypeK8s                   = "K8s"
 )
+
+type MiddlewareConfig map[string]string
+
+type RegisterConfig map[string]string

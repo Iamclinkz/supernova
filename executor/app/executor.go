@@ -84,7 +84,7 @@ func (e *Executor) register() error {
 	extraDiscoveryConfig[discovery.ConsulExtraConfigHealthcheckPortFieldName] = e.extraConf[myConstance.ConsulHealthCheckPortExtraConfKeyName]
 
 	klog.Infof("executor try register service: %+v, extraDiscoveryConfig:%v", discoveryInstance, extraDiscoveryConfig)
-	return e.discoveryClient.Register(discoveryInstance, extraDiscoveryConfig)
+	return e.discoveryClient.Register(discoveryInstance)
 }
 
 func (e *Executor) Start() {

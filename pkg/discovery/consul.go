@@ -29,18 +29,32 @@ const (
 )
 
 type ConsulDiscoveryClient struct {
-	Host         string
-	Port         string
-	client       consul.Client
-	config       *api.Config
-	mutex        sync.Mutex
-	instancesMap sync.Map
-	httpServer   *http.Server
+	Host             string
+	Port             string
+	client           consul.Client
+	config           *api.Config
+	mutex            sync.Mutex
+	instancesMap     sync.Map
+	httpServer       *http.Server
+	middlewareConfig MiddlewareConfig
+	registerConfig   RegisterConfig
 }
 
-func newConsulDiscoveryClient(middlewareConfig map[string]string) (ExecutorDiscoveryClient, error) {
-	if middlewareConfig[ConsulExtraConfigHealthcheckPortFieldName] == "" ||
-		middlewareConfig[ConsulMiddlewareConfigConsulHostFieldName] == "" ||
+func NewConsulMiddlewareConfig(consulHost, consulPort string) MiddlewareConfig {
+	return MiddlewareConfig{
+		ConsulMiddlewareConfigConsulHostFieldName: consulHost,
+		ConsulMiddlewareConfigConsulPortFieldName: consulPort,
+	}
+}
+
+func NewConsulRegisterConfig(healthCheckPort string) RegisterConfig {
+	return RegisterConfig{
+		ConsulExtraConfigHealthcheckPortFieldName: healthCheckPort,
+	}
+}
+
+func newConsulDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig RegisterConfig) (ExecutorDiscoveryClient, error) {
+	if middlewareConfig[ConsulMiddlewareConfigConsulHostFieldName] == "" ||
 		middlewareConfig[ConsulMiddlewareConfigConsulPortFieldName] == "" {
 		panic("")
 	}
@@ -52,19 +66,21 @@ func newConsulDiscoveryClient(middlewareConfig map[string]string) (ExecutorDisco
 	}
 	client := consul.NewClient(apiClient)
 	return &ConsulDiscoveryClient{
-		Host:   middlewareConfig[ConsulMiddlewareConfigConsulHostFieldName],
-		Port:   middlewareConfig[ConsulMiddlewareConfigConsulPortFieldName],
-		config: consulConfig,
-		client: client,
+		Host:             middlewareConfig[ConsulMiddlewareConfigConsulHostFieldName],
+		Port:             middlewareConfig[ConsulMiddlewareConfigConsulPortFieldName],
+		client:           client,
+		config:           consulConfig,
+		middlewareConfig: middlewareConfig,
+		registerConfig:   registerConfig,
 	}, err
 }
 
-func (consulClient *ConsulDiscoveryClient) Register(instance *ExecutorServiceInstance, extraConfig map[string]string) error {
-	if extraConfig == nil || extraConfig[ConsulExtraConfigHealthcheckPortFieldName] == "" {
+func (consulClient *ConsulDiscoveryClient) Register(instance *ExecutorServiceInstance) error {
+	if consulClient.registerConfig[ConsulExtraConfigHealthcheckPortFieldName] == "" {
 		panic("")
 	}
 
-	healthCheckPort := extraConfig[ConsulExtraConfigHealthcheckPortFieldName]
+	healthCheckPort := consulClient.registerConfig[ConsulExtraConfigHealthcheckPortFieldName]
 	consulMeta := make(map[string]string, 2)
 	//编码protoc和tag到consul的meta data中，方便对端解出
 	consulMeta[serviceProtocFieldName] = string(instance.Protoc)

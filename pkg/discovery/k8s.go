@@ -3,11 +3,11 @@ package discovery
 type K8sDiscoveryClient struct {
 }
 
-func newK8sDiscoveryClient(middlewareConfig map[string]string) (*K8sDiscoveryClient, error) {
+func newK8sDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig RegisterConfig) (*K8sDiscoveryClient, error) {
 	return nil, nil
 }
 
-func (k K8sDiscoveryClient) Register(instance *ExecutorServiceInstance, extraConfig map[string]string) error {
+func (k K8sDiscoveryClient) Register(instance *ExecutorServiceInstance) error {
 	//TODO implement me
 	panic("implement me")
 }
