@@ -94,7 +94,7 @@ func (s *ExecutorManageService) updateExecutor() {
 		operator, err := executor_operator.NewOperatorByProtoc(newInstanceServiceData.Protoc,
 			newInstanceServiceData.Host, newInstanceServiceData.Port, s.onJobResponseNotifyFuncFunc)
 		if err != nil {
-			//可能是优雅退出？不管了先
+			//出现这种情况说明consul检查心跳间隔太短了？
 			klog.Errorf("fail to connect executor by grpc, error:%v", err)
 			continue
 		}
@@ -131,8 +131,7 @@ func (s *ExecutorManageService) updateExecutor() {
 	wg.Wait()
 
 	for _, r := range rets {
-		if r.err != nil || r.status.GracefulStopped {
-			//如果Executor已经优雅退出了，那么删掉
+		if r.err != nil {
 			delete(newExecutors, r.instanceID)
 			klog.Warnf("updateExecutor executor:%v failed with error:%v", r.instanceID, r.err)
 		} else {

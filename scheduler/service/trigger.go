@@ -99,6 +99,7 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 				LeftTryCount:      trigger.FailRetryCount,
 				Param:             trigger.Param,
 				FailRetryInterval: trigger.FailRetryInterval,
+				AtLeastOnce:       trigger.AtLeastOnce,
 			}
 			onFireLogs = append(onFireLogs, onFireLog)
 			klog.Tracef("update on fire trigger:%+v", onFireLog)

@@ -25,6 +25,7 @@ type OnFireLog struct {
 	ParamToDB         string                 `gorm:"column:param"`
 	Param             map[string]string      `gorm:"-"`
 	FailRetryInterval time.Duration          `gorm:"column:fail_retry_interval"` //失败重试间隔，为0则立刻重试
+	AtLeastOnce       bool                   `gorm:"column:at_least_once"`       //语义，至少一次。如果为false，则为至多一次
 
 	//任务结束阶段使用
 	Success bool   `gorm:"success"`

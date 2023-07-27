@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"supernova/pkg/conf"
 	"supernova/pkg/constance"
 	"supernova/pkg/util"
 	"sync"
@@ -95,7 +96,7 @@ func (consulClient *ConsulDiscoveryClient) Register(instance *ExecutorServiceIns
 		Check: &api.AgentServiceCheck{
 			DeregisterCriticalServiceAfter: "30s",
 			HTTP:                           "http://" + instance.Host + ":" + healthCheckPort + "/health",
-			Interval:                       "15s",
+			Interval:                       fmt.Sprintf("%vs", conf.ConsulCheckHeartBeatDuration.Seconds()),
 		},
 	}
 

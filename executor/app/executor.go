@@ -112,6 +112,7 @@ func (e *Executor) Start() {
 func (e *Executor) Stop() {
 	_ = e.discoveryClient.DeRegister(e.instanceID)
 	e.executeService.Stop()
+	e.serviceExporter.Stop()
 }
 
 func (e *Executor) GracefulStop() {
@@ -127,7 +128,9 @@ func (e *Executor) GracefulStop() {
 	//2.http/grpc不接受新连接
 	switch e.serveConf.Protoc {
 	case discovery.ProtocTypeGrpc:
-		e.serviceExporter.GracefulStop()
+		//这里想了一下，如果任务有重试，那么还得本Executor来做。
+		//所以这里在Scheduler侧改成，如果发现Executor优雅退出，那么只发送重试任务，不发送新任务。
+		//e.serviceExporter.GracefulStop()
 		break
 	default:
 		//todo
@@ -149,6 +152,9 @@ func (e *Executor) GracefulStop() {
 		}
 		klog.Infof("ServiceData is waiting for leftUnReplyRequest, count: %v", leftUnReplyRequest)
 	}
+
+	//断开grpc连接
+	e.Stop()
 
 	klog.Info("ServiceData graceful stop success")
 }

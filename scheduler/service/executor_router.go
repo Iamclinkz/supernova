@@ -129,7 +129,19 @@ func (r RandomRouter) Route(instances []*Executor, job *model.Job, onFireLog *mo
 		return nil
 	}
 
-	return instances[rand.Int()%len(instances)]
+	//过滤掉已经GracefulStop的Executor
+	availableInstances := make([]*Executor, 0, len(instances))
+	for _, instance := range instances {
+		if !instance.Status.GracefulStopped {
+			availableInstances = append(availableInstances, instance)
+		}
+	}
+
+	if len(availableInstances) == 0 {
+		return nil
+	}
+
+	return availableInstances[rand.Int()%len(availableInstances)]
 }
 
 // ExecutorInstanceIDRouter 按照Executor的InstanceID路由
@@ -141,11 +153,18 @@ func (r ExecutorInstanceIDRouter) Route(instances []*Executor, job *model.Job, o
 	}
 
 	for _, instance := range instances {
+		//精确匹配的情况下，忽略Executor优雅退出
 		if instance.ServiceData.InstanceId == onFireLog.ExecutorInstance {
 			return instance
 		}
 	}
-	return instances[rand.Int()%len(instances)]
+
+	if onFireLog.AtLeastOnce {
+		//如果"至少执行一次"语义，那么说明可以重复，即使原来的executor宕机了，我们也再重新分配一个
+		return instances[rand.Int()%len(instances)]
+	}
+	//如果"最多执行一次"语义，如果当前Executor不存在，那么不重新分配了
+	return nil
 }
 
 var _ Router = (*RandomRouter)(nil)

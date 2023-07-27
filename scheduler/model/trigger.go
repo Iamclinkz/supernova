@@ -36,9 +36,10 @@ type Trigger struct {
 	// 下次触发时间
 	TriggerNextTime time.Time `gorm:"column:trigger_next_time;type:timestamp;not null;index"`
 	// 当前状态
-	Status    constance.TriggerStatus `gorm:"column:status;type:tinyint(4);not null"`
-	ParamToDB string                  `gorm:"column:param"`
-	Param     map[string]string       `gorm:"-"`
+	Status      constance.TriggerStatus `gorm:"column:status;type:tinyint(4);not null"`
+	ParamToDB   string                  `gorm:"column:param"`
+	Param       map[string]string       `gorm:"-"`
+	AtLeastOnce bool                    `gorm:"column:at_least_once"` //语义，至少一次。如果为false，则为至多一次
 }
 
 func (t *Trigger) String() string {
