@@ -21,11 +21,15 @@ func (s *StatisticsService) OnSendRunJobResponseSuccess(response *api.RunJobResp
 	s.unFinishedRequestCount.Add(-1)
 }
 
-func (s *StatisticsService) OnNoNeedSendResponse(response *api.RunJobResponse) {
+func (s *StatisticsService) OnNoNeedSendResponse(request *api.RunJobRequest) {
 	s.unFinishedRequestCount.Add(-1)
 }
 
 func (s *StatisticsService) OnReceiveRunJobRequest(request *api.RunJobRequest) {
+	s.unFinishedRequestCount.Add(1)
+}
+
+func (s *StatisticsService) OnOverTimeTaskExecuteSuccess(request *api.RunJobRequest, response *api.RunJobResponse) {
 	s.unFinishedRequestCount.Add(1)
 }
 

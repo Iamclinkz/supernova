@@ -23,7 +23,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 	//测试使用
 	const (
 		BinPath                 = "../../executor-example/http-executor/build/http-executor"
-		LogLevel                = klog.LevelError
+		LogLevel                = klog.LevelInfo
 		TriggerCount            = 50000
 		MaxWaitGracefulStopTime = time.Second*5 + conf.SchedulerMaxCheckHealthDuration
 	)
@@ -32,7 +32,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 	const (
 		ExecutorGrpcHost        = "9.134.5.191"
 		ExecutorGrpcPort        = 20001
-		ExecutorLogLevel        = klog.LevelTrace
+		ExecutorLogLevel        = klog.LevelInfo
 		ExecutorHealthCheckPort = 8080
 		ExecutorConsulHost      = "9.134.5.191"
 		ExecutorConsulPort      = 8500
@@ -137,17 +137,17 @@ func TestExecutorGracefulStop(t *testing.T) {
 		time.Sleep(5 * time.Second)
 
 		//发送信号。这里先检查一手，别把init进程杀了。。。。。
-		schedulerPid := pid.Load()
-		if schedulerPid == 0 {
+		executorPid := pid.Load()
+		if executorPid == 0 {
 			panic("")
 		}
 		manualQuit.Store(true)
-		err = util.SendSignalByPid(int(schedulerPid), syscall.SIGTERM)
+		err = util.SendSignalByPid(int(executorPid), syscall.SIGTERM)
 		if err != nil {
 			panic(err)
 		}
 	}()
 
 	util.RegisterTriggers(util.SchedulerAddress, triggers)
-	httpServer.WaitResult(MaxWaitGracefulStopTime)
+	httpServer.WaitResult(MaxWaitGracefulStopTime, false)
 }

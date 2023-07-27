@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
-	"supernova/stress-test/simple-http-server"
+	simple_http_server "supernova/stress-test/simple-http-server"
 	"supernova/stress-test/util"
 	"sync"
 	"sync/atomic"
@@ -135,5 +135,5 @@ func TestForceKillScheduler(t *testing.T) {
 	}()
 
 	util.RegisterTriggers(util.SchedulerAddress, triggers)
-	httpServer.WaitResult(10 * time.Second)
+	httpServer.WaitResult(10*time.Second, true)
 }

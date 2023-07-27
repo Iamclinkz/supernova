@@ -77,5 +77,5 @@ func TestWithoutFail(t *testing.T) {
 	util.RegisterTriggers(util.SchedulerAddress, triggers)
 
 	log.Printf("register triggers successed, cost:%v\n", time.Since(start))
-	httpServer.WaitResult(20 * time.Second)
+	httpServer.WaitResult(20*time.Second, true)
 }

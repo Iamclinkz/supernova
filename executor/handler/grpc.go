@@ -80,9 +80,9 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 				stop.Store(true)
 				wg.Done()
 				return
-			} else {
-				e.statisticsService.OnSendRunJobResponseSuccess(resp)
 			}
+
+			e.statisticsService.OnSendRunJobResponseSuccess(resp)
 		}
 	}()
 

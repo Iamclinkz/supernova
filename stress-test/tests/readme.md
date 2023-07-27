@@ -24,3 +24,8 @@ go test -v kill_scheduler_test.go
 go test -v executor_graceful_stop_test.go
 ```
 
+## 1000.加了优雅测试之后强制杀死测试进程。。因为ctrl+c已经不好使了。。
+
+```sh
+ps -ef | grep 'go test -v' | grep -v grep | awk '{print $2}' | xargs kill
+```

@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
-	"supernova/stress-test/simple-http-server"
+	simple_http_server "supernova/stress-test/simple-http-server"
 	"supernova/stress-test/util"
 	"testing"
 	"time"
@@ -69,5 +69,5 @@ func TestFail(t *testing.T) {
 
 	util.RegisterTriggers(util.SchedulerAddress, triggers)
 
-	httpServer.WaitResult(20 * time.Second)
+	httpServer.WaitResult(20*time.Second, true)
 }

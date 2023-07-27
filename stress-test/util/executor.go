@@ -6,6 +6,8 @@ import (
 	"supernova/executor/app"
 	"supernova/pkg/conf"
 	processor_plugin_http "supernova/processor-plugin/processor-plugin-http"
+
+	"github.com/google/uuid"
 )
 
 type ExecutorInstanceConf struct {
@@ -45,7 +47,7 @@ func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf) {
 		cfg := conf.GetCommonConfig(conf.Dev)
 		httpExecutor := new(processor_plugin_http.HTTP)
 		builder := app.NewExecutorBuilder()
-		executor, err := builder.WithInstanceID(instanceConf.InstanceID).WithConsulDiscovery(
+		executor, err := builder.WithInstanceID(GenUnderCloudExecutorID()).WithConsulDiscovery(
 			cfg.ConsulConf.Host, strconv.Itoa(cfg.ConsulConf.Port), instanceConf.HealthCheckPort).
 			WithProcessor(httpExecutor).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).Build()
 
@@ -55,4 +57,9 @@ func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf) {
 
 		go executor.Start()
 	}
+}
+
+// GenUnderCloudExecutorID 为云下测试生成一个唯一的ExecutorID（云上直接用pod名，不会重复）
+func GenUnderCloudExecutorID() string {
+	return fmt.Sprintf("Executor-%v", uuid.New())
 }

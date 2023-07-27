@@ -2,8 +2,8 @@ package main
 
 import (
 	"flag"
+	"strconv"
 	"supernova/executor/app"
-	"supernova/pkg/conf"
 	processor_plugin_http "supernova/processor-plugin/processor-plugin-http"
 	"time"
 
@@ -23,14 +23,18 @@ var ConsulHost = flag.String("consulHost", "9.134.5.191", "consul host")
 var ConsulPort = flag.Int("consulPort", 8500, "consul port")
 
 func main() {
+	flag.Parse()
 	klog.SetLevel(klog.Level(*LogLevel))
 	httpExecutor := new(processor_plugin_http.HTTP)
 	builder := app.NewExecutorBuilder()
-	executor, err := builder.WithCustomTag("A").WithResourceTag("LargeMemory").
-		WithInstanceID("instance-1").WithConsulDiscovery(&conf.ConsulConf{
-		Host: *ConsulHost,
-		Port: *ConsulPort,
-	}, *HealthCheckPort).WithProcessor(httpExecutor).WithGrpcServe(*GrpcHost, *GrpcPort).Build()
+	executor, err := builder.
+		WithCustomTag("A").
+		WithResourceTag("LargeMemory").
+		WithInstanceID("instance-1").
+		WithConsulDiscovery(*ConsulHost, strconv.Itoa(*ConsulPort), *HealthCheckPort).
+		WithProcessor(httpExecutor).
+		WithGrpcServe(*GrpcHost, *GrpcPort).
+		Build()
 
 	if err != nil {
 		panic(err)

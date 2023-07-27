@@ -7,6 +7,7 @@ import (
 )
 
 func InitHttpHandler(scheduler *app.Scheduler) *gin.Engine {
+	gin.SetMode(gin.ReleaseMode)
 	jobHandler := NewJobHandler(scheduler.GetJobService())
 	triggerHandler := NewTriggerHandler(scheduler.GetTriggerService())
 

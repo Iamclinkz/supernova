@@ -102,7 +102,7 @@ func (e *ExecuteService) work() {
 				//之前执行过，且执行成功了，直接返回
 				klog.Warnf("receive duplicate execute success job request, OnFireID:%v", jobRequest.OnFireLogID)
 				e.jobResponseCh <- resp
-				return
+				continue
 			}
 
 			//防止当前并发执行同一个任务
@@ -110,7 +110,8 @@ func (e *ExecuteService) work() {
 				klog.Warnf("find concurrent execute job request, onFireID:%v", jobRequest.OnFireLogID)
 				needDo := <-myWaitCh
 				if !needDo {
-					return
+					e.statisticsService.OnNoNeedSendResponse(jobRequest)
+					continue
 				}
 			}
 
@@ -150,9 +151,13 @@ func (e *ExecuteService) work() {
 			//这里如果不ok，说明时间轮定时器中的内容没了，说明本次执行超时，定时器触发，且一定已经返回了一个超时错误。
 			//这种情况下，如果本次虽然超时，但是任务执行成功了，则扔回去一个成功回复。而如果执行失败，就不再扔回去失败回复了。
 			//反正已经是扣除失败次数了
-			if ok || (!ok && jobResponse.Result.Ok) {
+			if ok {
+				e.jobResponseCh <- jobResponse
+			} else if !ok && jobResponse.Result.Ok {
+				e.statisticsService.OnOverTimeTaskExecuteSuccess(jobRequest, jobResponse)
 				e.jobResponseCh <- jobResponse
 			}
+
 			klog.Tracef("worker execute job finished:%+v", jobResponse)
 		}
 	}

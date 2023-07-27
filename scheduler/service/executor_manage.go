@@ -132,7 +132,7 @@ func (s *ExecutorManageService) updateExecutor() {
 		if r.err != nil || r.status.GracefulStopped {
 			//如果Executor已经优雅退出了，那么删掉
 			delete(newExecutors, r.instanceID)
-			klog.Errorf("updateExecutor executor:%v failed with error:%v", r.instanceID, r.err)
+			klog.Warnf("updateExecutor executor:%v failed with error:%v", r.instanceID, r.err)
 		} else {
 			klog.Infof("updateExecutor executor:%v success, status:%+v", r.instanceID, r.status)
 		}
