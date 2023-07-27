@@ -124,7 +124,7 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 	}
 
 	//更新db中的onFireLog的状态，以及ExecutorInstance实例信息
-	onFireLog.ExecutorInstance = executorWrapper.Executor.InstanceId
+	onFireLog.ExecutorInstance = executorWrapper.ServiceData.InstanceId
 	onFireLog.Status = constance.OnFireStatusExecuting
 	if err = s.onFireService.UpdateOnFireLogExecutorStatus(context.TODO(), onFireLog, retry); err != nil {
 		return errors.New("update on fire log status fail:" + err.Error())

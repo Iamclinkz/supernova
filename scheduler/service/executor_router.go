@@ -16,8 +16,8 @@ type ExecutorRouteService struct {
 
 	mu sync.Mutex
 	//key为tag，value为有该tag的Executor
-	invertedIndex map[string][]*ExecutorWrapper
-	executors     map[string]*ExecutorWrapper
+	invertedIndex map[string][]*Executor
+	executors     map[string]*Executor
 }
 
 func NewExecutorRouteService(executorManagerService *ExecutorManageService) *ExecutorRouteService {
@@ -25,15 +25,15 @@ func NewExecutorRouteService(executorManagerService *ExecutorManageService) *Exe
 		executorManagerService: executorManagerService,
 		jobRouterManager:       NewJobRouters(),
 		mu:                     sync.Mutex{},
-		invertedIndex:          make(map[string][]*ExecutorWrapper),
-		executors:              make(map[string]*ExecutorWrapper),
+		invertedIndex:          make(map[string][]*Executor),
+		executors:              make(map[string]*Executor),
 	}
 
 	executorManagerService.AddUpdateExecutorListener(ret)
 	return ret
 }
 
-func (s *ExecutorRouteService) ChooseJobExecutor(job *model.Job, onFireLog *model.OnFireLog, retry bool) (*ExecutorWrapper, error) {
+func (s *ExecutorRouteService) ChooseJobExecutor(job *model.Job, onFireLog *model.OnFireLog, retry bool) (*Executor, error) {
 	executors, err := s.findMatchingExecutorsForJob(job)
 	if err != nil {
 		return nil, err
@@ -48,8 +48,8 @@ func (s *ExecutorRouteService) ChooseJobExecutor(job *model.Job, onFireLog *mode
 }
 
 // findMatchingExecutorsForJob 找到和Job的Tag匹配的Executor
-func (s *ExecutorRouteService) findMatchingExecutorsForJob(job *model.Job) ([]*ExecutorWrapper, error) {
-	ret := make([]*ExecutorWrapper, 0)
+func (s *ExecutorRouteService) findMatchingExecutorsForJob(job *model.Job) ([]*Executor, error) {
+	ret := make([]*Executor, 0)
 	tags := util.DecodeTags(job.Tags)
 	if len(tags) == 0 {
 		return nil, errors.New("no tag in job")
@@ -64,7 +64,7 @@ func (s *ExecutorRouteService) findMatchingExecutorsForJob(job *model.Job) ([]*E
 
 	for _, tag := range tags {
 		for _, executor := range invertedIndex[tag] {
-			executorCount[executor.Executor.InstanceId]++
+			executorCount[executor.ServiceData.InstanceId]++
 		}
 	}
 
@@ -82,10 +82,10 @@ func (s *ExecutorRouteService) findMatchingExecutorsForJob(job *model.Job) ([]*E
 }
 
 // OnExecutorUpdate 在更新Executor时，刷新当前的倒排索引
-func (s *ExecutorRouteService) OnExecutorUpdate(newExecutors map[string]*ExecutorWrapper) {
-	newInvertedIndex := make(map[string][]*ExecutorWrapper, len(newExecutors))
+func (s *ExecutorRouteService) OnExecutorUpdate(newExecutors map[string]*Executor) {
+	newInvertedIndex := make(map[string][]*Executor, len(newExecutors))
 	for _, newExecutor := range newExecutors {
-		for _, tag := range newExecutor.Executor.Tags {
+		for _, tag := range newExecutor.ServiceData.Tags {
 			newInvertedIndex[tag] = append(newInvertedIndex[tag], newExecutor)
 		}
 	}
@@ -98,7 +98,7 @@ func (s *ExecutorRouteService) OnExecutorUpdate(newExecutors map[string]*Executo
 }
 
 type Router interface {
-	Route(instances []*ExecutorWrapper, job *model.Job, onFireLog *model.OnFireLog) *ExecutorWrapper
+	Route(instances []*Executor, job *model.Job, onFireLog *model.OnFireLog) *Executor
 }
 
 type JobRouterManager struct {
@@ -113,7 +113,7 @@ func NewJobRouters() *JobRouterManager {
 }
 
 func (r *JobRouterManager) Route(strategy constance.ExecutorRouteStrategyType,
-	instance []*ExecutorWrapper, job *model.Job, onFireLog *model.OnFireLog) (*ExecutorWrapper, error) {
+	instance []*Executor, job *model.Job, onFireLog *model.OnFireLog) (*Executor, error) {
 	if router, ok := r.routers[strategy]; ok {
 		return router.Route(instance, job, onFireLog), nil
 	}
@@ -124,7 +124,7 @@ func (r *JobRouterManager) Route(strategy constance.ExecutorRouteStrategyType,
 // RandomRouter 随机路由
 type RandomRouter struct{}
 
-func (r RandomRouter) Route(instances []*ExecutorWrapper, job *model.Job, onFireLog *model.OnFireLog) *ExecutorWrapper {
+func (r RandomRouter) Route(instances []*Executor, job *model.Job, onFireLog *model.OnFireLog) *Executor {
 	if len(instances) == 0 {
 		return nil
 	}
@@ -135,13 +135,13 @@ func (r RandomRouter) Route(instances []*ExecutorWrapper, job *model.Job, onFire
 // ExecutorInstanceIDRouter 按照Executor的InstanceID路由
 type ExecutorInstanceIDRouter struct{}
 
-func (r ExecutorInstanceIDRouter) Route(instances []*ExecutorWrapper, job *model.Job, onFireLog *model.OnFireLog) *ExecutorWrapper {
+func (r ExecutorInstanceIDRouter) Route(instances []*Executor, job *model.Job, onFireLog *model.OnFireLog) *Executor {
 	if len(instances) == 0 {
 		return nil
 	}
 
 	for _, instance := range instances {
-		if instance.Executor.InstanceId == onFireLog.ExecutorInstance {
+		if instance.ServiceData.InstanceId == onFireLog.ExecutorInstance {
 			return instance
 		}
 	}

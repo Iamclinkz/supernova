@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 	"supernova/pkg/constance"
+	"supernova/pkg/util"
 	"sync"
 
 	"github.com/cloudwego/kitex/pkg/klog"
@@ -14,9 +14,23 @@ import (
 	"github.com/hashicorp/consul/api/watch"
 )
 
-type ConsulDiscoverClient struct {
-	Host         string // TypeConsul Host
-	Port         int    // TypeConsul Port
+// 使用者consul配置使用
+const (
+	//ConsulExtraConfigHealthcheckPortFieldName 指定consul心跳检查的Port
+	ConsulExtraConfigHealthcheckPortFieldName = "HealthCheckPort"
+	ConsulMiddlewareConfigConsulHostFieldName = "ConsulHost"
+	ConsulMiddlewareConfigConsulPortFieldName = "ConsulPort"
+)
+
+// consul自用
+const (
+	serviceProtocFieldName = "X-Protoc-Type"
+	serviceTagFieldName    = "X-Tag"
+)
+
+type ConsulDiscoveryClient struct {
+	Host         string
+	Port         string
 	client       consul.Client
 	config       *api.Config
 	mutex        sync.Mutex
@@ -24,46 +38,53 @@ type ConsulDiscoverClient struct {
 	httpServer   *http.Server
 }
 
-func newConsulDiscoverClient(consulHost string, consulPort int) (Client, error) {
+func newConsulDiscoveryClient(middlewareConfig map[string]string) (ExecutorDiscoveryClient, error) {
+	if middlewareConfig[ConsulExtraConfigHealthcheckPortFieldName] == "" ||
+		middlewareConfig[ConsulMiddlewareConfigConsulHostFieldName] == "" ||
+		middlewareConfig[ConsulMiddlewareConfigConsulPortFieldName] == "" {
+		panic("")
+	}
 	consulConfig := api.DefaultConfig()
-	consulConfig.Address = consulHost + ":" + strconv.Itoa(consulPort)
+	consulConfig.Address = middlewareConfig[ConsulMiddlewareConfigConsulHostFieldName] + ":" + middlewareConfig[ConsulMiddlewareConfigConsulPortFieldName]
 	apiClient, err := api.NewClient(consulConfig)
 	if err != nil {
 		return nil, err
 	}
 	client := consul.NewClient(apiClient)
-	return &ConsulDiscoverClient{
-		Host:   consulHost,
-		Port:   consulPort,
+	return &ConsulDiscoveryClient{
+		Host:   middlewareConfig[ConsulMiddlewareConfigConsulHostFieldName],
+		Port:   middlewareConfig[ConsulMiddlewareConfigConsulPortFieldName],
 		config: consulConfig,
 		client: client,
 	}, err
 }
 
-func (consulClient *ConsulDiscoverClient) Register(instance *ServiceInstance) error {
-	if instance.Meta == nil {
-		instance.Meta = make(map[string]string)
+func (consulClient *ConsulDiscoveryClient) Register(instance *ExecutorServiceInstance, extraConfig map[string]string) error {
+	if extraConfig == nil || extraConfig[ConsulExtraConfigHealthcheckPortFieldName] == "" {
+		panic("")
 	}
 
-	//编码protoc到meta中
-	instance.Meta[serviceProtocFieldName] = string(instance.Protoc)
+	healthCheckPort := extraConfig[ConsulExtraConfigHealthcheckPortFieldName]
+	consulMeta := make(map[string]string, 2)
+	//编码protoc和tag到consul的meta data中，方便对端解出
+	consulMeta[serviceProtocFieldName] = string(instance.Protoc)
+	consulMeta[serviceTagFieldName] = util.EncodeTag(instance.Tags)
 
 	serviceRegistration := &api.AgentServiceRegistration{
 		ID:      instance.InstanceId,
-		Name:    instance.ServiceName,
+		Name:    constance.ExecutorServiceName,
 		Address: instance.Host,
 		Port:    instance.Port,
-		Meta:    instance.Meta,
+		Meta:    consulMeta,
 		Check: &api.AgentServiceCheck{
 			DeregisterCriticalServiceAfter: "30s",
-			HTTP: "http://" + instance.Host + ":" +
-				instance.Meta[constance.HealthCheckPortFieldName] + "/health",
-			Interval: "15s",
+			HTTP:                           "http://" + instance.Host + ":" + healthCheckPort + "/health",
+			Interval:                       "15s",
 		},
 	}
 
 	consulClient.httpServer = &http.Server{
-		Addr: fmt.Sprintf(":" + instance.Meta[constance.HealthCheckPortFieldName]),
+		Addr: fmt.Sprintf(":" + healthCheckPort),
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("OK"))
@@ -79,7 +100,7 @@ func (consulClient *ConsulDiscoverClient) Register(instance *ServiceInstance) er
 	return consulClient.client.Register(serviceRegistration)
 }
 
-func (consulClient *ConsulDiscoverClient) DeRegister(instanceId string) error {
+func (consulClient *ConsulDiscoveryClient) DeRegister(instanceId string) error {
 	if consulClient.httpServer != nil {
 		if err := consulClient.httpServer.Shutdown(context.Background()); err != nil {
 			klog.Errorf("Error stopping HTTP server for health check: %v", err)
@@ -92,21 +113,21 @@ func (consulClient *ConsulDiscoverClient) DeRegister(instanceId string) error {
 	return consulClient.client.Deregister(serviceRegistration)
 }
 
-func (consulClient *ConsulDiscoverClient) DiscoverServices(serviceName string) []*ServiceInstance {
-	instanceList, ok := consulClient.instancesMap.Load(serviceName)
+func (consulClient *ConsulDiscoveryClient) DiscoverServices() []*ExecutorServiceInstance {
+	instanceList, ok := consulClient.instancesMap.Load(constance.ExecutorServiceName)
 	if ok {
-		return instanceList.([]*ServiceInstance)
+		return instanceList.([]*ExecutorServiceInstance)
 	}
 	consulClient.mutex.Lock()
 	defer consulClient.mutex.Unlock()
-	instanceList, ok = consulClient.instancesMap.Load(serviceName)
+	instanceList, ok = consulClient.instancesMap.Load(constance.ExecutorServiceName)
 	if ok {
-		return instanceList.([]*ServiceInstance)
+		return instanceList.([]*ExecutorServiceInstance)
 	} else {
 		go func() {
 			params := make(map[string]interface{})
 			params["type"] = "service"
-			params["service"] = serviceName
+			params["service"] = constance.ExecutorServiceName
 			plan, _ := watch.Parse(params)
 			plan.Handler = func(u uint64, i interface{}) {
 				if i == nil {
@@ -116,14 +137,14 @@ func (consulClient *ConsulDiscoverClient) DiscoverServices(serviceName string) [
 				if !ok {
 					return
 				}
-				var instances []*ServiceInstance
+				var instances []*ExecutorServiceInstance
 				for _, entry := range v {
-					instance := convertAgentServiceToServiceInstance(entry.Service)
+					instance := convertConsulAgentServiceToServiceInstance(entry.Service)
 					if instance != nil {
 						instances = append(instances, instance)
 					}
 				}
-				consulClient.instancesMap.Store(serviceName, instances)
+				consulClient.instancesMap.Store(constance.ExecutorServiceName, instances)
 			}
 			defer plan.Stop()
 			err := plan.Run(consulClient.config.Address)
@@ -134,40 +155,41 @@ func (consulClient *ConsulDiscoverClient) DiscoverServices(serviceName string) [
 		}()
 	}
 
-	entries, _, err := consulClient.client.Service(serviceName, "", false, nil)
+	entries, _, err := consulClient.client.Service(constance.ExecutorServiceName, "", false, nil)
 	if err != nil {
-		consulClient.instancesMap.Store(serviceName, []*ServiceInstance{})
-		klog.Error("Discover ServiceInstance Error!")
+		consulClient.instancesMap.Store(constance.ExecutorServiceName, []*ExecutorServiceInstance{})
+		klog.Error("Discover ExecutorServiceInstance Error!")
 		return nil
 	}
-	instances := make([]*ServiceInstance, 0, len(entries))
+	instances := make([]*ExecutorServiceInstance, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Checks.AggregatedStatus() == api.HealthPassing {
-			instance := convertAgentServiceToServiceInstance(entry.Service)
+			instance := convertConsulAgentServiceToServiceInstance(entry.Service)
 			if instance != nil {
 				instances = append(instances, instance)
 			}
 		}
 	}
-	consulClient.instancesMap.Store(serviceName, instances)
+	consulClient.instancesMap.Store(constance.ExecutorServiceName, instances)
 	return instances
 }
 
-func convertAgentServiceToServiceInstance(agentService *api.AgentService) *ServiceInstance {
-	if agentService.Meta == nil || agentService.Meta[serviceProtocFieldName] == "" {
+func convertConsulAgentServiceToServiceInstance(agentService *api.AgentService) *ExecutorServiceInstance {
+	if agentService.Meta == nil ||
+		agentService.Meta[serviceProtocFieldName] == "" ||
+		agentService.Meta[serviceTagFieldName] == "" {
 		return nil
 	}
 
-	return &ServiceInstance{
-		ServiceName: agentService.Service,
-		InstanceId:  agentService.ID,
-		ServiceServeConf: ServiceServeConf{
+	return &ExecutorServiceInstance{
+		InstanceId: agentService.ID,
+		ExecutorServiceServeConf: ExecutorServiceServeConf{
 			Protoc: ProtocType(agentService.Meta[serviceProtocFieldName]),
 			Host:   agentService.Address,
 			Port:   agentService.Port,
 		},
-		Meta: agentService.Meta,
+		Tags: util.DecodeTags(agentService.Meta[serviceTagFieldName]),
 	}
 }
 
-var _ Client = (*ConsulDiscoverClient)(nil)
+var _ ExecutorDiscoveryClient = (*ConsulDiscoveryClient)(nil)

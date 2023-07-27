@@ -1,6 +1,6 @@
 package constance
 
 const (
-	ExecutorServiceName  = "Executor"
+	ExecutorServiceName  = "ServiceData"
 	SchedulerServiceName = "Scheduler"
 )

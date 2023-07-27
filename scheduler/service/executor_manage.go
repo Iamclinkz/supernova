@@ -1,7 +1,6 @@
 package service
 
 import (
-	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/executor_operator"
@@ -14,21 +13,21 @@ import (
 type ExecutorManageService struct {
 	shutdownCh chan struct{}
 
-	executorLock     sync.Mutex                  //CheckExecutorAlive和updateExecutor，对executors的访问互斥的锁
-	checkSequenceNum int                         //感觉环回也无所谓，暂时32位吧
-	executors        map[string]*ExecutorWrapper //key为executor的instanceID
+	executorLock     sync.Mutex           //CheckExecutorAlive和updateExecutor，对executors的访问互斥的锁
+	checkSequenceNum int                  //感觉环回也无所谓，暂时32位吧
+	executors        map[string]*Executor //key为executor的instanceID
 
 	statisticsService *StatisticsService
-	discoveryClient   discovery.Client
+	discoveryClient   discovery.ExecutorDiscoveryClient
 
 	updateExecutorListeners     []UpdateExecutorListener
 	onJobResponseNotifyFuncFunc executor_operator.OnJobResponseNotifyFunc
 }
 
-func NewExecutorManageService(statisticsService *StatisticsService, discoveryClient discovery.Client) *ExecutorManageService {
+func NewExecutorManageService(statisticsService *StatisticsService, discoveryClient discovery.ExecutorDiscoveryClient) *ExecutorManageService {
 	return &ExecutorManageService{
 		shutdownCh:              make(chan struct{}),
-		executors:               make(map[string]*ExecutorWrapper),
+		executors:               make(map[string]*Executor),
 		statisticsService:       statisticsService,
 		discoveryClient:         discoveryClient,
 		updateExecutorListeners: make([]UpdateExecutorListener, 0),
@@ -37,13 +36,13 @@ func NewExecutorManageService(statisticsService *StatisticsService, discoveryCli
 }
 
 type UpdateExecutorListener interface {
-	OnExecutorUpdate(newExecutors map[string]*ExecutorWrapper)
+	OnExecutorUpdate(newExecutors map[string]*Executor)
 }
 
-type ExecutorWrapper struct {
-	Executor *model.Executor
-	Operator executor_operator.Operator
-	Status   *model.ExecutorStatus
+type Executor struct {
+	ServiceData *discovery.ExecutorServiceInstance
+	Operator    executor_operator.Operator
+	Status      *model.ExecutorStatus
 }
 
 func (s *ExecutorManageService) HeartBeat() {
@@ -71,42 +70,36 @@ func (s *ExecutorManageService) updateExecutor() {
 	s.executorLock.Lock()
 	defer s.executorLock.Unlock()
 
-	newServiceInstances := s.discoveryClient.DiscoverServices(constance.ExecutorServiceName)
-	newExecutors := make(map[string]*ExecutorWrapper, len(newServiceInstances))
+	newServiceInstances := s.discoveryClient.DiscoverServices()
+	newExecutors := make(map[string]*Executor, len(newServiceInstances))
 
 	// 这里注意，因为优雅退出，所以假设老的ExecutorA的连接仍然可用，但是新从服务发现接口中拿到的实例中没有ExecutorA，
 	// 则认为ExecutorA准备优雅退出了。这时候Scheduler就不给ExecutorA发消息，让ExecutorA处理任务了
 	//（具体实现是在ExecutorManagerService中缓存的executors中没有老的ExecutorA了）
 	// 但是Scheduler <-> ExecutorA的连接仍然不会断开
-	for _, newInstance := range newServiceInstances {
+	for _, newInstanceServiceData := range newServiceInstances {
 		//合并新旧executor
-		if newInstance == nil {
+		if newInstanceServiceData == nil {
 			panic("")
 		}
-		oldInstance, ok := s.executors[newInstance.InstanceId]
+		oldInstance, ok := s.executors[newInstanceServiceData.InstanceId]
 
-		if ok && oldInstance.Executor.Port == newInstance.Port &&
-			oldInstance.Executor.Host == newInstance.Host && oldInstance.Operator.Alive() {
+		if ok && oldInstance.ServiceData.Port == newInstanceServiceData.Port &&
+			oldInstance.ServiceData.Host == newInstanceServiceData.Host && oldInstance.Operator.Alive() {
 			//如果该executor上一波就有，且连接还能用，那么继续用旧的
-			newExecutors[newInstance.InstanceId] = oldInstance
+			newExecutors[newInstanceServiceData.InstanceId] = oldInstance
 			continue
 		}
 
-		//是新的executor，需要重新创建连接和Executor实例
-		newExecutor, err := model.NewExecutorFromServiceInstance(newInstance)
+		operator, err := executor_operator.NewOperatorByProtoc(newInstanceServiceData.Protoc,
+			newInstanceServiceData.Host, newInstanceServiceData.Port, s.onJobResponseNotifyFuncFunc)
 		if err != nil {
 			panic(err)
 		}
 
-		operator, err := executor_operator.NewOperatorByProtoc(newExecutor.Protoc,
-			newExecutor.Host, newExecutor.Port, s.onJobResponseNotifyFuncFunc)
-		if err != nil {
-			panic(err)
-		}
-
-		newExecutors[newInstance.InstanceId] = &ExecutorWrapper{
-			Executor: newExecutor,
-			Operator: operator,
+		newExecutors[newInstanceServiceData.InstanceId] = &Executor{
+			ServiceData: newInstanceServiceData,
+			Operator:    operator,
 		}
 	}
 
@@ -122,11 +115,11 @@ func (s *ExecutorManageService) updateExecutor() {
 	rets := make([]*ret, len(newExecutors))
 	counter := 0
 	for _, newExecutor := range newExecutors {
-		go func(e *ExecutorWrapper, retIdx int) {
+		go func(e *Executor, retIdx int) {
 			defer wg.Done()
 			status, err := e.Operator.CheckStatus(s.statisticsService.GetHeartBeatTimeout())
 			rets[retIdx] = &ret{
-				instanceID: e.Executor.InstanceId,
+				instanceID: e.ServiceData.InstanceId,
 				status:     status,
 				err:        err,
 			}
@@ -136,7 +129,8 @@ func (s *ExecutorManageService) updateExecutor() {
 	wg.Wait()
 
 	for _, r := range rets {
-		if r.err != nil {
+		if r.err != nil || r.status.GracefulStopped {
+			//如果Executor已经优雅退出了，那么删掉
 			delete(newExecutors, r.instanceID)
 			klog.Errorf("updateExecutor executor:%v failed with error:%v", r.instanceID, r.err)
 		} else {

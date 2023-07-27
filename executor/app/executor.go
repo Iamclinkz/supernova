@@ -9,9 +9,7 @@ import (
 	"supernova/executor/processor"
 	"supernova/executor/service"
 	"supernova/pkg/conf"
-	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
-	"supernova/pkg/util"
 	"syscall"
 	"time"
 )
@@ -21,12 +19,12 @@ type Executor struct {
 	instanceID     string
 	tags           []string
 	processor      map[string]processor.JobProcessor
-	serveConf      *discovery.ServiceServeConf
+	serveConf      *discovery.ExecutorServiceServeConf
 	processorCount int
 	extraConf      map[string]string
 
 	//discovery
-	discoveryClient discovery.Client
+	discoveryClient discovery.ExecutorDiscoveryClient
 
 	//service
 	duplicateService  *service.DuplicateService
@@ -41,11 +39,11 @@ func newExecutorInner(
 	instanceID string,
 	tags []string,
 	processor map[string]processor.JobProcessor,
-	serveConf *discovery.ServiceServeConf,
+	serveConf *discovery.ExecutorServiceServeConf,
 	processorCount int,
 	extraConf map[string]string,
 
-	discoveryClient discovery.Client,
+	discoveryClient discovery.ExecutorDiscoveryClient,
 	duplicateService *service.DuplicateService,
 	executeService *service.ExecuteService,
 	processorService *service.ProcessorService,
@@ -76,16 +74,17 @@ func newExecutorInner(
 }
 
 func (e *Executor) register() error {
-	ins := new(discovery.ServiceInstance)
-	ins.ServiceServeConf = *e.serveConf
-	ins.Meta = make(map[string]string, 1)
-	ins.Meta[constance.ExecutorTagFieldName] = util.EncodeTag(e.tags)
-	ins.Meta[constance.HealthCheckPortFieldName] = e.extraConf[myConstance.ConsulHealthCheckPortExtraConfKeyName]
-	ins.ServiceName = constance.ExecutorServiceName
-	ins.InstanceId = e.instanceID
+	discoveryInstance := &discovery.ExecutorServiceInstance{
+		InstanceId:               e.instanceID,
+		ExecutorServiceServeConf: *e.serveConf,
+		Tags:                     e.tags,
+	}
 
-	klog.Infof("executor try register service: %+v", ins)
-	return e.discoveryClient.Register(ins)
+	extraDiscoveryConfig := make(map[string]string, 1)
+	extraDiscoveryConfig[discovery.ConsulExtraConfigHealthcheckPortFieldName] = e.extraConf[myConstance.ConsulHealthCheckPortExtraConfKeyName]
+
+	klog.Infof("executor try register service: %+v, extraDiscoveryConfig:%v", discoveryInstance, extraDiscoveryConfig)
+	return e.discoveryClient.Register(discoveryInstance, extraDiscoveryConfig)
 }
 
 func (e *Executor) Start() {
@@ -111,12 +110,12 @@ func (e *Executor) Start() {
 }
 
 func (e *Executor) Stop() {
-	_ = e.discoveryClient.DiscoverServices(e.instanceID)
+	_ = e.discoveryClient.DeRegister(e.instanceID)
 	e.executeService.Stop()
 }
 
 func (e *Executor) GracefulStop() {
-	klog.Info("Executor start graceful stop")
+	klog.Info("ServiceData start graceful stop")
 	//1.从服务发现处注销自己。如果是consul之类的中间件，那么调用其取消注册api，新的scheduler下一次就不会发现自己了。
 	//而如果是k8s，这里不需要取消注册，k8s滚动更新，如果决定干掉本pod，就不会导入流量给本pod了。所以不需要处理（from 常哥的指导）
 	//这样做的好处是Executor和Scheduler之间的连接不需要断开。而如果Scheduler检测到来自Executor的连接断开，直接返回即可。
@@ -148,8 +147,8 @@ func (e *Executor) GracefulStop() {
 		if leftUnReplyRequest == 0 {
 			break
 		}
-		klog.Infof("Executor is waiting for leftUnReplyRequest, count: %v", leftUnReplyRequest)
+		klog.Infof("ServiceData is waiting for leftUnReplyRequest, count: %v", leftUnReplyRequest)
 	}
 
-	klog.Info("Executor graceful stop success")
+	klog.Info("ServiceData graceful stop success")
 }

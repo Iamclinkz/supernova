@@ -499,10 +499,10 @@ var file_executor_proto_depIdxs = []int32{
 	8, // 2: api.Job.param:type_name -> api.Job.ParamEntry
 	3, // 3: api.RunJobResponse.result:type_name -> api.JobResult
 	6, // 4: api.HeartBeatResponse.healthStatus:type_name -> api.HealthStatus
-	4, // 5: api.Executor.HeartBeat:input_type -> api.HeartBeatRequest
-	0, // 6: api.Executor.RunJob:input_type -> api.RunJobRequest
-	5, // 7: api.Executor.HeartBeat:output_type -> api.HeartBeatResponse
-	2, // 8: api.Executor.RunJob:output_type -> api.RunJobResponse
+	4, // 5: api.ServiceData.HeartBeat:input_type -> api.HeartBeatRequest
+	0, // 6: api.ServiceData.RunJob:input_type -> api.RunJobRequest
+	5, // 7: api.ServiceData.HeartBeat:output_type -> api.HeartBeatResponse
+	2, // 8: api.ServiceData.RunJob:output_type -> api.RunJobResponse
 	7, // [7:9] is the sub-list for method output_type
 	5, // [5:7] is the sub-list for method input_type
 	5, // [5:5] is the sub-list for extension type_name

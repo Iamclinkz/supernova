@@ -60,9 +60,7 @@ func (g *GrpcOperator) CheckStatus(timeout time.Duration) (*model.ExecutorStatus
 		return nil, err
 	}
 
-	status := new(model.ExecutorStatus)
-	status.FromPb(resp)
-	return status, nil
+	return model.NewExecutorStatusFromPb(resp), nil
 }
 
 func (g *GrpcOperator) RunJob(request *api.RunJobRequest) error {

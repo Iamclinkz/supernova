@@ -12,7 +12,7 @@ type Exporter interface {
 }
 
 func NewExporter(executeService *service.ExecuteService,
-	statisticsService *service.StatisticsService, serviceConf *discovery.ServiceServeConf) Exporter {
+	statisticsService *service.StatisticsService, serviceConf *discovery.ExecutorServiceServeConf) Exporter {
 	switch serviceConf.Protoc {
 	case discovery.ProtocTypeGrpc:
 		return NewGrpcExporter(executeService, statisticsService, serviceConf)

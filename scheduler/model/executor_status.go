@@ -5,12 +5,13 @@ import (
 )
 
 type ExecutorStatus struct {
-	RunningJob int
-	Cpu        int
-	Memory     int
-	Workload   float32
+	Workload        float32
+	GracefulStopped bool
 }
 
-func (s *ExecutorStatus) FromPb(response *api.HeartBeatResponse) {
-	s.Workload = response.HealthStatus.Workload
+func NewExecutorStatusFromPb(response *api.HeartBeatResponse) *ExecutorStatus {
+	return &ExecutorStatus{
+		Workload:        response.HealthStatus.Workload,
+		GracefulStopped: response.HealthStatus.GracefulStopped,
+	}
 }

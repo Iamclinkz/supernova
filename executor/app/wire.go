@@ -14,8 +14,8 @@ func genExecutor(
 	instanceID string,
 	tags []string,
 	processor map[string]processor.JobProcessor,
-	serveConf *discovery.ServiceServeConf,
-	processorCount int, client discovery.Client,
+	serveConf *discovery.ExecutorServiceServeConf,
+	processorCount int, client discovery.ExecutorDiscoveryClient,
 	extraConf map[string]string,
 ) (*Executor, error) {
 	wire.Build(

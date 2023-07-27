@@ -10,7 +10,7 @@ import (
 
 type SchedulerBuilder struct {
 	scheduleOperator     schedule_operator.Operator
-	discoveryClient      discovery.Client
+	discoveryClient      discovery.ExecutorDiscoveryClient
 	schedulerWorkerCount int
 	err                  error
 }
@@ -24,7 +24,7 @@ func (b *SchedulerBuilder) WithConsulDiscovery(config *conf.ConsulConf) *Schedul
 		Type: discovery.TypeConsul,
 		Host: config.Host,
 		Port: config.Port,
-	})
+	}, nil)
 	if err != nil && b.err == nil {
 		b.err = err
 	} else {

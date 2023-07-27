@@ -10,7 +10,7 @@ import (
 	"supernova/scheduler/service"
 )
 
-func genScheduler(scheduleOperator schedule_operator.Operator, client discovery.Client, schedulerWorkerCount int) (*Scheduler, error) {
+func genScheduler(scheduleOperator schedule_operator.Operator, client discovery.ExecutorDiscoveryClient, schedulerWorkerCount int) (*Scheduler, error) {
 	wire.Build(
 		newSchedulerInner,
 

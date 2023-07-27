@@ -5,7 +5,6 @@ import (
 	"strconv"
 	myConstance "supernova/executor/constance"
 	"supernova/executor/processor"
-	"supernova/pkg/conf"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 )
@@ -14,9 +13,9 @@ type ExecutorBuilder struct {
 	instanceID      string
 	tags            []string
 	processor       map[string]processor.JobProcessor
-	serveConf       *discovery.ServiceServeConf
+	serveConf       *discovery.ExecutorServiceServeConf
 	processorCount  int
-	discoveryClient discovery.Client
+	discoveryClient discovery.ExecutorDiscoveryClient
 	extraConf       map[string]string
 	err             error
 }
@@ -72,12 +71,14 @@ func (b *ExecutorBuilder) WithCustomTag(tag string) *ExecutorBuilder {
 	return b
 }
 
-func (b *ExecutorBuilder) WithConsulDiscovery(config *conf.ConsulConf, healthCheckPort int) *ExecutorBuilder {
-	discoveryClient, err := discovery.NewDiscoveryClient(&discovery.MiddlewareConfig{
-		Type: discovery.TypeConsul,
-		Host: config.Host,
-		Port: config.Port,
-	})
+func (b *ExecutorBuilder) WithConsulDiscovery(consulHost, consulPort string,
+	healthCheckPort int) *ExecutorBuilder {
+	discoveryClient, err := discovery.NewDiscoveryClient(discovery.TypeConsul,
+		map[string]string{
+			discovery.ConsulMiddlewareConfigConsulHostFieldName: consulHost,
+			discovery.ConsulMiddlewareConfigConsulPortFieldName: consulPort,
+		},
+	)
 	if err != nil && b.err == nil {
 		b.err = err
 	} else {
@@ -101,7 +102,7 @@ func (b *ExecutorBuilder) WithProcessor(p processor.JobProcessor) *ExecutorBuild
 }
 
 func (b *ExecutorBuilder) WithGrpcServe(host string, port int) *ExecutorBuilder {
-	b.serveConf = new(discovery.ServiceServeConf)
+	b.serveConf = new(discovery.ExecutorServiceServeConf)
 	b.serveConf.Host = host
 	b.serveConf.Port = port
 	b.serveConf.Protoc = discovery.ProtocTypeGrpc
