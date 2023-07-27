@@ -1,9 +1,16 @@
 # 测试说明
 
+## 0.测试准备
+
+```sh
+#在项目根目录下
+make all
+```
+
 ## 1.压力测试
 
 ```sh
- go test -v stress_test.go
+go test -v stress_test.go
 ```
 
 ## 2.极限情况失败测试
