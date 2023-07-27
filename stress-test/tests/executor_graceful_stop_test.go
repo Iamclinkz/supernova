@@ -39,8 +39,9 @@ func TestExecutorGracefulStop(t *testing.T) {
 	)
 
 	var (
-		err error
-		pid atomic.Int32
+		LogName = fmt.Sprintf("graceful-stop-executor-%v.log", time.Now().Format("15:04:05"))
+		err     error
+		pid     atomic.Int32
 	)
 
 	//开2个Scheduler和3个Executor
@@ -66,7 +67,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 
 	go func() {
 		//使用bin启动一个Scheduler，把日志输出到graceful-stop-executor.log中
-		logFile, err := os.OpenFile("graceful-stop-executor.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		logFile, err := os.OpenFile(LogName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if err != nil {
 			panic(err)
 		}

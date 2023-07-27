@@ -1,15 +1,16 @@
 package exporter
 
 import (
-	"github.com/cloudwego/kitex/pkg/klog"
-	"github.com/cloudwego/kitex/server"
-	"github.com/kitex-contrib/obs-opentelemetry/tracing"
 	"net"
 	"strconv"
 	"supernova/executor/handler"
 	"supernova/executor/service"
 	"supernova/pkg/api/executor"
 	"supernova/pkg/discovery"
+
+	"github.com/cloudwego/kitex/pkg/klog"
+	"github.com/cloudwego/kitex/server"
+	"github.com/kitex-contrib/obs-opentelemetry/tracing"
 )
 
 type GrpcExporter struct {
@@ -38,7 +39,9 @@ func (e *GrpcExporter) StartServe() {
 	)
 	klog.Infof("executor try start serve, protoc:grpc, port:%v", e.serviceConf.Port)
 	if err := e.grpcServer.Run(); err != nil {
-		panic(err)
+		//panic(err)
+		//更新优雅退出后，如果这里返回错误，可能是优雅推出关闭grpc了。不需要panic
+		klog.Errorf("grpc server stopped, error:%v", err)
 	}
 }
 
