@@ -147,7 +147,7 @@ func (s *ScheduleService) handleRunJobResponse(response *api.RunJobResponse) {
 		//对于这几种情况，已经成功/已经失败不需要处理。数据库连接失败最多也就是多尝试执行一次这个失败的任务。
 		//总之不是很严重的问题，先不处理了。
 		_ = s.onFireService.UpdateOnFireLogFail(context.TODO(), uint(response.OnFireLogID), response.Result.Err)
-		klog.Warnf("Receive from executor, [onFireLog:%v] execute failed, error:%v",
+		klog.Debug("Receive from executor, [onFireLog:%v] execute failed, error:%v",
 			response.OnFireLogID, response.Result.Err)
 		return
 	}

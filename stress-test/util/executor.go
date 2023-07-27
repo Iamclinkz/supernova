@@ -2,6 +2,7 @@ package util
 
 import (
 	"fmt"
+	"strconv"
 	"supernova/executor/app"
 	"supernova/pkg/conf"
 	processor_plugin_http "supernova/processor-plugin/processor-plugin-http"
@@ -44,7 +45,8 @@ func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf) {
 		cfg := conf.GetCommonConfig(conf.Dev)
 		httpExecutor := new(processor_plugin_http.HTTP)
 		builder := app.NewExecutorBuilder()
-		executor, err := builder.WithInstanceID(instanceConf.InstanceID).WithConsulDiscovery(cfg.ConsulConf, instanceConf.HealthCheckPort).
+		executor, err := builder.WithInstanceID(instanceConf.InstanceID).WithConsulDiscovery(
+			cfg.ConsulConf.Host, strconv.Itoa(cfg.ConsulConf.Port), instanceConf.HealthCheckPort).
 			WithProcessor(httpExecutor).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).Build()
 
 		if err != nil {

@@ -116,7 +116,7 @@ func (e *ExecuteService) work() {
 
 			//给时间轮加一个定时事件，如果超时，那么返回一个失败的response
 			task := e.timeWheel.Add(time.Microsecond*time.Duration(jobRequest.Job.ExecutorExecuteTimeoutMs), func() {
-				klog.Warnf("on job overtime:%v", jobRequest.OnFireLogID)
+				klog.Debugf("on job overtime:%v", jobRequest.OnFireLogID)
 				e.jobResponseCh <- &api.RunJobResponse{
 					OnFireLogID: jobRequest.OnFireLogID,
 					Result: &api.JobResult{

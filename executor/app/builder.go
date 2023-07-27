@@ -73,11 +73,10 @@ func (b *ExecutorBuilder) WithCustomTag(tag string) *ExecutorBuilder {
 
 func (b *ExecutorBuilder) WithConsulDiscovery(consulHost, consulPort string,
 	healthCheckPort int) *ExecutorBuilder {
-	discoveryClient, err := discovery.NewDiscoveryClient(discovery.TypeConsul,
-		map[string]string{
-			discovery.ConsulMiddlewareConfigConsulHostFieldName: consulHost,
-			discovery.ConsulMiddlewareConfigConsulPortFieldName: consulPort,
-		},
+	discoveryClient, err := discovery.NewDiscoveryClient(
+		discovery.TypeConsul,
+		discovery.NewConsulMiddlewareConfig(consulHost, consulPort),
+		discovery.NewConsulRegisterConfig(strconv.Itoa(healthCheckPort)),
 	)
 	if err != nil && b.err == nil {
 		b.err = err
