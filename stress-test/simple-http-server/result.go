@@ -98,7 +98,8 @@ func (s *SimpleHttpServer) GetResult() *Result {
 	return result
 }
 
-func (s *SimpleHttpServer) WaitResult(maxWaitTime time.Duration, exit bool) {
+// WaitResult return ok
+func (s *SimpleHttpServer) WaitResult(maxWaitTime time.Duration, exit bool) bool {
 	timeout := time.After(maxWaitTime)
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -112,17 +113,17 @@ func (s *SimpleHttpServer) WaitResult(maxWaitTime time.Duration, exit bool) {
 					log.Fatalf("CheckResult failed: %v\n, result:%v\n", err, result)
 				} else {
 					log.Printf("CheckResult failed: %v\n, result:%v\n", err, result)
-					return
+					return false
 				}
 			} else {
 				log.Printf("result ok:\n%v\n", result)
-				return
+				return true
 			}
 		case <-ticker.C:
 			err, result := s.CheckResult()
 			if err == nil {
 				log.Printf("result ok:\n%v\n", result)
-				return
+				return true
 			}
 		}
 	}

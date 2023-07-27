@@ -1,7 +1,9 @@
 package tests
 
 import (
+	"bytes"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strconv"
@@ -65,19 +67,16 @@ func TestExecutorGracefulStop(t *testing.T) {
 	executorStopWg := sync.WaitGroup{}
 	executorStopWg.Add(1)
 
+	var buf bytes.Buffer
 	go func() {
 		//使用bin启动一个Scheduler，把日志输出到graceful-stop-executor.log中
-		logFile, err := os.OpenFile(LogName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-		if err != nil {
-			panic(err)
-		}
-		defer logFile.Close()
+
 		cmd := exec.Command(BinPath,
 			fmt.Sprintf("-grpcHost=%v", ExecutorGrpcHost), fmt.Sprintf("-grpcPort=%v", ExecutorGrpcPort),
 			fmt.Sprintf("-logLevel=%v", ExecutorLogLevel), fmt.Sprintf("-healthCheckPort=%v", ExecutorHealthCheckPort),
 			fmt.Sprintf("-consulHost=%v", ExecutorConsulHost), fmt.Sprintf("-consulPort=%v", ExecutorConsulPort))
-		cmd.Stdout = logFile
-		cmd.Stderr = logFile
+		cmd.Stdout = &buf
+		cmd.Stderr = &buf
 		err = cmd.Start()
 		if err != nil {
 			panic(err)
@@ -149,5 +148,17 @@ func TestExecutorGracefulStop(t *testing.T) {
 	}()
 
 	util.RegisterTriggers(util.SchedulerAddress, triggers)
-	httpServer.WaitResult(MaxWaitGracefulStopTime, false)
+	ok := httpServer.WaitResult(MaxWaitGracefulStopTime, false)
+	if !ok {
+		logFile, err := os.OpenFile(LogName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			panic(err)
+		}
+		defer logFile.Close()
+
+		err = ioutil.WriteFile(LogName, buf.Bytes(), 0644)
+		if err != nil {
+			panic(err)
+		}
+	}
 }

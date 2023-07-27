@@ -94,7 +94,9 @@ func (s *ExecutorManageService) updateExecutor() {
 		operator, err := executor_operator.NewOperatorByProtoc(newInstanceServiceData.Protoc,
 			newInstanceServiceData.Host, newInstanceServiceData.Port, s.onJobResponseNotifyFuncFunc)
 		if err != nil {
-			panic(err)
+			//可能是优雅退出？不管了先
+			klog.Errorf("fail to connect executor by grpc, error:%v", err)
+			continue
 		}
 
 		newExecutors[newInstanceServiceData.InstanceId] = &Executor{

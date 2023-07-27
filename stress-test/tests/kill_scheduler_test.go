@@ -1,7 +1,9 @@
 package tests
 
 import (
+	"bytes"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strconv"
@@ -29,8 +31,9 @@ func TestForceKillScheduler(t *testing.T) {
 	)
 
 	var (
-		err error
-		pid atomic.Int32
+		LogName = fmt.Sprintf("graceful-stop-executor-%v.log", time.Now().Format("15:04:05"))
+		err     error
+		pid     atomic.Int32
 	)
 
 	//开2个Scheduler和3个Executor
@@ -53,17 +56,12 @@ func TestForceKillScheduler(t *testing.T) {
 
 	schedulerStopWg := sync.WaitGroup{}
 	schedulerStopWg.Add(1)
-
-	go func() { //使用bin启动一个Scheduler，把日志输出到killed-scheduler.log中
-		logFile, err := os.OpenFile("killed-scheduler.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-		if err != nil {
-			panic(err)
-		}
-		defer logFile.Close()
+	var buf bytes.Buffer
+	go func() {
 		cmd := exec.Command(BinPath,
-			fmt.Sprintf("-port=%d", HttpServePort), fmt.Sprintf("-logLevel=%d", klog.LevelTrace))
-		cmd.Stdout = logFile
-		cmd.Stderr = logFile
+			fmt.Sprintf("-httpPort=%d", HttpServePort), fmt.Sprintf("-logLevel=%d", klog.LevelTrace))
+		cmd.Stdout = &buf
+		cmd.Stderr = &buf
 		err = cmd.Start()
 		if err != nil {
 			panic(err)
@@ -135,5 +133,17 @@ func TestForceKillScheduler(t *testing.T) {
 	}()
 
 	util.RegisterTriggers(util.SchedulerAddress, triggers)
-	httpServer.WaitResult(10*time.Second, true)
+	ok := httpServer.WaitResult(10*time.Second, false)
+	if !ok {
+		logFile, err := os.OpenFile(LogName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			panic(err)
+		}
+		defer logFile.Close()
+
+		err = ioutil.WriteFile(LogName, buf.Bytes(), 0644)
+		if err != nil {
+			panic(err)
+		}
+	}
 }
