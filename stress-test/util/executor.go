@@ -2,9 +2,7 @@ package util
 
 import (
 	"fmt"
-	"strconv"
 	"supernova/executor/app"
-	"supernova/pkg/conf"
 	processor_plugin_http "supernova/processor-plugin/processor-plugin-http"
 
 	"github.com/google/uuid"
@@ -44,11 +42,10 @@ func GenExecutorInstanceConf(id int) *ExecutorInstanceConf {
 
 func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf) {
 	for _, instanceConf := range instanceConfigs {
-		cfg := conf.GetCommonConfig(conf.Dev)
 		httpExecutor := new(processor_plugin_http.HTTP)
 		builder := app.NewExecutorBuilder()
 		executor, err := builder.WithInstanceID(GenUnderCloudExecutorID()).WithConsulDiscovery(
-			cfg.ConsulConf.Host, strconv.Itoa(cfg.ConsulConf.Port), instanceConf.HealthCheckPort).
+			DevConsulHost, DevConsulPort, instanceConf.HealthCheckPort).
 			WithProcessor(httpExecutor).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).Build()
 
 		if err != nil {

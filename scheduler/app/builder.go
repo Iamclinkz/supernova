@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"strconv"
 	"supernova/pkg/conf"
 	"supernova/pkg/discovery"
 	"supernova/scheduler/dal"
@@ -20,9 +19,9 @@ func NewSchedulerBuilder() *SchedulerBuilder {
 	return &SchedulerBuilder{}
 }
 
-func (b *SchedulerBuilder) WithConsulDiscovery(config *conf.ConsulConf) *SchedulerBuilder {
+func (b *SchedulerBuilder) WithConsulDiscovery(consulHost, consulPort string) *SchedulerBuilder {
 	discoveryClient, err := discovery.NewDiscoveryClient(discovery.TypeConsul,
-		discovery.NewConsulMiddlewareConfig(config.Host, strconv.Itoa(config.Port)), nil)
+		discovery.NewConsulMiddlewareConfig(consulHost, consulPort), nil)
 	if err != nil && b.err == nil {
 		b.err = err
 	} else {
