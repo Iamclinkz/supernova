@@ -18,7 +18,7 @@ var GrpcPort = flag.Int("grpcPort", 20001, "grpc port")
 var LogLevel = flag.Int("logLevel", 4, "log level")
 
 // discovery config
-var HealthCheckPort = flag.Int("healthCheckPort", 8080, "health check port")
+var HealthCheckPort = flag.Int("healthCheckPort", 9090, "health check port")
 var ConsulHost = flag.String("consulHost", "9.134.5.191", "consul host")
 var ConsulPort = flag.Int("consulPort", 8500, "consul port")
 

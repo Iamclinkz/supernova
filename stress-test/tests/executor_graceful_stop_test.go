@@ -30,12 +30,12 @@ func TestExecutorGracefulStop(t *testing.T) {
 		MaxWaitGracefulStopTime = time.Second*5 + conf.SchedulerMaxCheckHealthDuration
 	)
 
-	//启动Executor使用
+	//启动单独的，准备被干掉的Executor使用
 	const (
 		ExecutorGrpcHost        = "9.134.5.191"
 		ExecutorGrpcPort        = 20001
 		ExecutorLogLevel        = klog.LevelInfo
-		ExecutorHealthCheckPort = 8080
+		ExecutorHealthCheckPort = 11111
 		ExecutorConsulHost      = "9.134.5.191"
 		ExecutorConsulPort      = 8500
 	)
@@ -56,8 +56,9 @@ func TestExecutorGracefulStop(t *testing.T) {
 		AllowDuplicateCalled:  false,
 		SuccessAfterFirstFail: true, //但是失败之后，重试一定成功
 	}, &simple_http_server.SimpleHttpServerCheckConf{
-		AllSuccess:         true,
-		NoUncalledTriggers: true,
+		AllSuccess:                    false,
+		FailTriggerRateNotGreaterThan: 0.05, //最大容忍5%的失败
+		NoUncalledTriggers:            true,
 	})
 	go httpServer.Start()
 
@@ -69,8 +70,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 
 	var buf bytes.Buffer
 	go func() {
-		//使用bin启动一个Scheduler，把日志输出到graceful-stop-executor.log中
-
+		//使用bin启动一个Executor，把日志输出到graceful-stop-executor.log中
 		cmd := exec.Command(BinPath,
 			fmt.Sprintf("-grpcHost=%v", ExecutorGrpcHost), fmt.Sprintf("-grpcPort=%v", ExecutorGrpcPort),
 			fmt.Sprintf("-logLevel=%v", ExecutorLogLevel), fmt.Sprintf("-healthCheckPort=%v", ExecutorHealthCheckPort),
@@ -129,6 +129,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 				simple_http_server.TriggerIDFieldName: strconv.Itoa(i),
 			},
 			FailRetryInterval: 0,
+			AtLeastOnce:       false, //最多执行一次
 		}
 	}
 

@@ -1,23 +1,10 @@
 RUN_NAME := shell-executor
-#IMAGE_NAME := slyflash/shell-executor
-#TAG := dev
-#DEPLOYMENT_NAME := shell-executor-service
 
-image-runnable:
+build-binary:
 	@echo "--------------------------------------Building ${RUN_NAME} binary..."
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/${RUN_NAME} *.go
+	go build -o build/${RUN_NAME} *.go
 
-#docker-build:
-#	@echo "--------------------------------------Building docker image ${IMAGE_NAME}:${TAG}"
-#	docker build -t ${IMAGE_NAME}:${TAG} .
-#
-#minikube-load:
-#	@echo "--------------------------------------Load image to minikube: ${IMAGE_NAME}:${TAG}"
-#	minikube kubectl -- delete -f ${YAML}
-#	minikube image load ${IMAGE_NAME}:${TAG} --overwrite=true
-#	minikube kubectl -- apply -f ${YAML}
-
-all: image-runnable #docker-build minikube-load
+all: build-binary
 
 clean:
 	rm -rf build/${RUN_NAME}

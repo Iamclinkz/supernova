@@ -96,7 +96,7 @@ func (consulClient *ConsulDiscoveryClient) Register(instance *ExecutorServiceIns
 		Check: &api.AgentServiceCheck{
 			DeregisterCriticalServiceAfter: "30s",
 			HTTP:                           "http://" + instance.Host + ":" + healthCheckPort + "/health",
-			Interval:                       fmt.Sprintf("%vs", conf.ConsulCheckHeartBeatDuration.Seconds()),
+			Interval:                       fmt.Sprintf("%vs", conf.DiscoveryMiddlewareCheckHeartBeatDuration.Seconds()),
 		},
 	}
 

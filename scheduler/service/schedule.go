@@ -118,7 +118,7 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 	}
 
 	executorWrapper, err := s.executorSelectService.ChooseJobExecutor(job, onFireLog, retry)
-	if err != nil {
+	if err != nil || executorWrapper == nil {
 		_ = s.onFireService.UpdateOnFireLogFail(context.TODO(), onFireLog.ID, "No matched executors")
 		return err
 	}

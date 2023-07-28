@@ -135,6 +135,7 @@ func (s *ExecutorManageService) updateExecutor() {
 			delete(newExecutors, r.instanceID)
 			klog.Warnf("updateExecutor executor:%v failed with error:%v", r.instanceID, r.err)
 		} else {
+			newExecutors[r.instanceID].Status = r.status
 			klog.Infof("updateExecutor executor:%v success, status:%+v", r.instanceID, r.status)
 		}
 	}
@@ -147,38 +148,38 @@ func (s *ExecutorManageService) updateExecutor() {
 
 // CheckExecutorAlive 其他service发现某个executor有问题，让manager看看要不要删掉
 // 经过常哥的指点，Scheduler和Executor的连接如果单方面断开，就可以认为连接不可用了。直接退出连接处理即可，不需要再去检查。
-func (s *ExecutorManageService) CheckExecutorAlive(instanceID string) {
-	s.executorLock.Lock()
-	unhealthyExecutor := s.executors[instanceID]
-	seqNum := s.checkSequenceNum
-	if unhealthyExecutor == nil {
-		//如果根本没有instance，不用Check
-		s.executorLock.Unlock()
-		return
-	}
-	if !unhealthyExecutor.Operator.Alive() {
-		//如果确实狗带了，那么删除掉
-		delete(s.executors, instanceID)
-	}
-	s.executorLock.Unlock()
+// func (s *ExecutorManageService) CheckExecutorAlive(instanceID string) {
+// 	s.executorLock.Lock()
+// 	unhealthyExecutor := s.executors[instanceID]
+// 	seqNum := s.checkSequenceNum
+// 	if unhealthyExecutor == nil {
+// 		//如果根本没有instance，不用Check
+// 		s.executorLock.Unlock()
+// 		return
+// 	}
+// 	if !unhealthyExecutor.Operator.Alive() {
+// 		//如果确实狗带了，那么删除掉
+// 		delete(s.executors, instanceID)
+// 	}
+// 	s.executorLock.Unlock()
 
-	//代码执行到这里，其他地方反应狗带了，但是还是Alive的，那么需要检查
-	go func() {
-		_, err := unhealthyExecutor.Operator.CheckStatus(s.statisticsService.GetHeartBeatTimeout())
-		if err != nil {
-			//如果确实不健康
-			s.executorLock.Lock()
-			if s.checkSequenceNum == seqNum {
-				//如果已经updateExecutor更新过一次了，那么自己不更新了
-				delete(s.executors, instanceID)
-				klog.Errorf("find executorID:%v dead", instanceID)
-				//虽然在listener也做了幂等，但是还是加锁吧
-				s.NotifyExecutorListener()
-			}
-			s.executorLock.Unlock()
-		}
-	}()
-}
+// 	//代码执行到这里，其他地方反应狗带了，但是还是Alive的，那么需要检查
+// 	go func() {
+// 		_, err := unhealthyExecutor.Operator.CheckStatus(s.statisticsService.GetHeartBeatTimeout())
+// 		if err != nil {
+// 			//如果确实不健康
+// 			s.executorLock.Lock()
+// 			if s.checkSequenceNum == seqNum {
+// 				//如果已经updateExecutor更新过一次了，那么自己不更新了
+// 				delete(s.executors, instanceID)
+// 				klog.Errorf("find executorID:%v dead", instanceID)
+// 				//虽然在listener也做了幂等，但是还是加锁吧
+// 				s.NotifyExecutorListener()
+// 			}
+// 			s.executorLock.Unlock()
+// 		}
+// 	}()
+// }
 
 func (s *ExecutorManageService) AddUpdateExecutorListener(l UpdateExecutorListener) {
 	s.updateExecutorListeners = append(s.updateExecutorListeners, l)

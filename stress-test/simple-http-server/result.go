@@ -44,17 +44,17 @@ func (s *SimpleHttpServer) CheckResult() (error, *Result) {
 
 	if s.CheckResultConf.AllSuccess && result.SuccessCount != s.serveConfig.TriggerCount {
 		//检查失败
-		return fmt.Errorf("not all triggers successed:%s", result.String()), result
+		return fmt.Errorf("not all triggers successed"), result
 	}
 
 	if s.CheckResultConf.NoUncalledTriggers && len(result.UncalledTriggers) != 0 {
 		//有任何一个trigger一次都没有被执行过
-		return fmt.Errorf("not all triggers called:%s", result.String()), result
+		return fmt.Errorf("not all triggers called"), result
 	}
 
 	if s.CheckResultConf.FailTriggerRateNotGreaterThan < result.FailTriggerRate {
 		//失败率检查
-		return fmt.Errorf("high fail rate:%s", result.String()), nil
+		return fmt.Errorf("high fail rate"), nil
 	}
 
 	return nil, result

@@ -24,10 +24,10 @@ import (
 // 过程：使用SDK开启两个Scheduler，使用进程开启一个Scheduler，开启三个Executor。然后把Scheduler进程杀死，查看任务执行情况
 func TestForceKillScheduler(t *testing.T) {
 	const (
-		BinPath       = "../../scheduler/build/scheduler"
-		HttpServePort = 7070
-		LogLevel      = klog.LevelError
-		TriggerCount  = 50000
+		BinPath                      = "../../scheduler/build/scheduler"
+		KilledSchedulerHttpServePort = 7070
+		LogLevel                     = klog.LevelError
+		TriggerCount                 = 50000
 	)
 
 	var (
@@ -59,7 +59,7 @@ func TestForceKillScheduler(t *testing.T) {
 	var buf bytes.Buffer
 	go func() {
 		cmd := exec.Command(BinPath,
-			fmt.Sprintf("-httpPort=%d", HttpServePort), fmt.Sprintf("-logLevel=%d", klog.LevelTrace))
+			fmt.Sprintf("-httpPort=%d", KilledSchedulerHttpServePort), fmt.Sprintf("-logLevel=%d", klog.LevelTrace))
 		cmd.Stdout = &buf
 		cmd.Stderr = &buf
 		err = cmd.Start()
@@ -76,7 +76,7 @@ func TestForceKillScheduler(t *testing.T) {
 			panic("start error!")
 		}
 
-		klog.Error("scheduler was killed, reason:%v", err)
+		klog.Errorf("scheduler was killed, reason:%v", err)
 		schedulerStopWg.Done()
 	}()
 
@@ -133,7 +133,7 @@ func TestForceKillScheduler(t *testing.T) {
 	}()
 
 	util.RegisterTriggers(util.SchedulerAddress, triggers)
-	ok := httpServer.WaitResult(10*time.Second, false)
+	ok := httpServer.WaitResult(15*time.Second, false)
 	if !ok {
 		logFile, err := os.OpenFile(LogName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if err != nil {

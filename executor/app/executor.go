@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/cloudwego/kitex/pkg/klog"
 	"os"
 	"os/signal"
 	myConstance "supernova/executor/constance"
@@ -12,6 +11,8 @@ import (
 	"supernova/pkg/discovery"
 	"syscall"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 type Executor struct {
@@ -141,7 +142,7 @@ func (e *Executor) GracefulStop() {
 	e.statisticsService.OnGracefulStop()
 
 	//4.等待一个服务发现周期
-	time.Sleep(conf.SchedulerMaxCheckHealthDuration)
+	time.Sleep(conf.SchedulerMaxCheckHealthDuration + conf.DiscoveryMiddlewareCheckHeartBeatDuration)
 
 	//5.等待所有任务处理结束
 	for {
