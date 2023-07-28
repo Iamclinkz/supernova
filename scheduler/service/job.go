@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"supernova/pkg/constance"
+	"supernova/pkg/discovery"
 	"supernova/pkg/util"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
@@ -94,7 +94,7 @@ func (s *JobService) ValidateJob(job *model.Job) error {
 
 func (s *JobService) insertGlueTag(job *model.Job) {
 	//检查用户指定的glueType是否已经加到了Tag中，作为executor筛选的条件之一
-	glueTag := constance.GlueTypeTagPrefix + job.GlueType
+	glueTag := discovery.GlueTypeTagPrefix + job.GlueType
 	userTagsSlice := util.DecodeTags(job.Tags)
 	found := false
 	for _, tag := range userTagsSlice {

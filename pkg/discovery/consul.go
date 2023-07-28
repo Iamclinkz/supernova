@@ -17,16 +17,17 @@ import (
 
 // 使用者consul配置使用
 const (
-	//ConsulExtraConfigHealthcheckPortFieldName 指定consul心跳检查的Port
-	ConsulExtraConfigHealthcheckPortFieldName = "HealthCheckPort"
 	ConsulMiddlewareConfigConsulHostFieldName = "ConsulHost"
 	ConsulMiddlewareConfigConsulPortFieldName = "ConsulPort"
+
+	//ConsulRegisterConfigHealthcheckPortFieldName 指定consul心跳检查自己健康的Port
+	ConsulRegisterConfigHealthcheckPortFieldName = "HealthCheckPort"
 )
 
 // consul自用
 const (
-	serviceProtocFieldName = "X-Protoc-Type"
-	serviceTagFieldName    = "X-Tag"
+	consulMetaDataServiceProtocFieldName = "X-Protoc-Type"
+	consulMetaDataServiceTagFieldName    = "X-Tag"
 )
 
 type ConsulDiscoveryClient struct {
@@ -50,7 +51,7 @@ func NewConsulMiddlewareConfig(consulHost, consulPort string) MiddlewareConfig {
 
 func NewConsulRegisterConfig(healthCheckPort string) RegisterConfig {
 	return RegisterConfig{
-		ConsulExtraConfigHealthcheckPortFieldName: healthCheckPort,
+		ConsulRegisterConfigHealthcheckPortFieldName: healthCheckPort,
 	}
 }
 
@@ -77,15 +78,15 @@ func newConsulDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig 
 }
 
 func (consulClient *ConsulDiscoveryClient) Register(instance *ExecutorServiceInstance) error {
-	if consulClient.registerConfig[ConsulExtraConfigHealthcheckPortFieldName] == "" {
+	if consulClient.registerConfig[ConsulRegisterConfigHealthcheckPortFieldName] == "" {
 		panic("")
 	}
 
-	healthCheckPort := consulClient.registerConfig[ConsulExtraConfigHealthcheckPortFieldName]
+	healthCheckPort := consulClient.registerConfig[ConsulRegisterConfigHealthcheckPortFieldName]
 	consulMeta := make(map[string]string, 2)
 	//编码protoc和tag到consul的meta data中，方便对端解出
-	consulMeta[serviceProtocFieldName] = string(instance.Protoc)
-	consulMeta[serviceTagFieldName] = util.EncodeTag(instance.Tags)
+	consulMeta[consulMetaDataServiceProtocFieldName] = string(instance.Protoc)
+	consulMeta[consulMetaDataServiceTagFieldName] = util.EncodeTag(instance.Tags)
 
 	serviceRegistration := &api.AgentServiceRegistration{
 		ID:      instance.InstanceId,
@@ -193,19 +194,19 @@ func (consulClient *ConsulDiscoveryClient) DiscoverServices() []*ExecutorService
 
 func convertConsulAgentServiceToServiceInstance(agentService *api.AgentService) *ExecutorServiceInstance {
 	if agentService.Meta == nil ||
-		agentService.Meta[serviceProtocFieldName] == "" ||
-		agentService.Meta[serviceTagFieldName] == "" {
+		agentService.Meta[consulMetaDataServiceProtocFieldName] == "" ||
+		agentService.Meta[consulMetaDataServiceTagFieldName] == "" {
 		return nil
 	}
 
 	return &ExecutorServiceInstance{
 		InstanceId: agentService.ID,
 		ExecutorServiceServeConf: ExecutorServiceServeConf{
-			Protoc: ProtocType(agentService.Meta[serviceProtocFieldName]),
+			Protoc: ProtocType(agentService.Meta[consulMetaDataServiceProtocFieldName]),
 			Host:   agentService.Address,
 			Port:   agentService.Port,
 		},
-		Tags: util.DecodeTags(agentService.Meta[serviceTagFieldName]),
+		Tags: util.DecodeTags(agentService.Meta[consulMetaDataServiceTagFieldName]),
 	}
 }
 

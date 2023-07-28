@@ -2,6 +2,7 @@ all:
 	cd scheduler && make all
 	cd executor-example/http-executor && make all
 	cd executor-example/shell-executor && make all
+	cd executor-example/http-executor-k8s && make all
 	@echo "finished make all"
 
 test: all

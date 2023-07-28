@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"strconv"
 	"supernova/executor/app"
 	processor_plugin_http "supernova/processor-plugin/processor-plugin-http"
 	"time"
@@ -11,16 +10,16 @@ import (
 )
 
 // service config
-var GrpcHost = flag.String("grpcHost", "9.134.5.191", "grpc host")
-var GrpcPort = flag.Int("grpcPort", 20001, "grpc port")
+var GrpcPort = flag.Int("grpcPort", 7070, "grpc port")
 
 // log config
 var LogLevel = flag.Int("logLevel", 4, "log level")
 
 // discovery config
-var HealthCheckPort = flag.Int("healthCheckPort", 9090, "health check port")
-var ConsulHost = flag.String("consulHost", "9.134.5.191", "consul host")
-var ConsulPort = flag.Int("consulPort", 8500, "consul port")
+var K8sHealthCheckPort = flag.String("k8sHealthCheckPort", "9090", "health check port")
+
+// namespace
+var K8sNamespace = flag.String("k8sNamespace", "supernova", "k8s namespace")
 
 func main() {
 	flag.Parse()
@@ -28,12 +27,9 @@ func main() {
 	httpExecutor := new(processor_plugin_http.HTTP)
 	builder := app.NewExecutorBuilder()
 	executor, err := builder.
-		WithCustomTag("A").
-		WithResourceTag("LargeMemory").
-		WithInstanceID("instance-1").
-		WithConsulDiscovery(*ConsulHost, strconv.Itoa(*ConsulPort), *HealthCheckPort).
+		WithK8sDiscovery(*K8sNamespace, *K8sHealthCheckPort).
 		WithProcessor(httpExecutor).
-		WithGrpcServe(*GrpcHost, *GrpcPort).
+		WithGrpcServe("0.0.0.0", *GrpcPort).
 		Build()
 
 	if err != nil {
@@ -42,5 +38,5 @@ func main() {
 
 	go executor.Start()
 
-	time.Sleep(12 * time.Hour)
+	time.Sleep(100 * 24 * time.Hour)
 }

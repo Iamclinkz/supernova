@@ -4,96 +4,115 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
+	"supernova/pkg/constance"
+	"supernova/pkg/util"
+	"sync"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
-type K8sDiscoveryClient struct {
-	clientset      *kubernetes.Clientset
-	httpServer     *http.Server
-	namespace      string
-	labelSelector  string
-	instancePrefix string
+// 给外部使用，用于指定k8s服务发现的初始化内容
+const (
+	K8sMiddlewareNamespaceFieldName = "Namespace"
+
+	//K8sRegisterConfigHealthcheckPortFieldName 用于指定k8s检查自己健康的端口
+	K8sRegisterConfigHealthcheckPortFieldName = "HealthCheckPort"
+)
+
+// k8s自用，用于约定yaml中，部分label的名称。Scheduler会通过label的名称分析Executor原信息
+const (
+	k8sYamlLabelProtocFieldName = "ExecutorProtoc"
+	k8sYamlLabelTagFieldName    = "ExecutorTag"
+)
+
+func NewK8sMiddlewareConfig(namespace string) MiddlewareConfig {
+	return MiddlewareConfig{
+		K8sMiddlewareNamespaceFieldName: namespace,
+	}
 }
 
-func NewK8sDiscoveryClient(namespace, labelSelector, instancePrefix string) (ExecutorDiscoveryClient, error) {
+func NewK8sRegisterConfig(healthCheckPort string) RegisterConfig {
+	return RegisterConfig{
+		K8sRegisterConfigHealthcheckPortFieldName: healthCheckPort,
+	}
+}
+
+type K8sDiscoveryClient struct {
+	clientSet        *kubernetes.Clientset
+	httpServer       *http.Server
+	namespace        string
+	instancesMap     sync.Map
+	mutex            sync.Mutex
+	middlewareConfig MiddlewareConfig
+	registerConfig   RegisterConfig
+}
+
+func newK8sDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig RegisterConfig) (ExecutorDiscoveryClient, error) {
+	if middlewareConfig[K8sMiddlewareNamespaceFieldName] == "" {
+		panic("")
+	}
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		config, err = clientcmd.BuildConfigFromFlags("", "/path/to/kubeconfig")
-		if err != nil {
-			return nil, err
-		}
+		return nil, fmt.Errorf("failed to get in-cluster config: %v", err)
 	}
 
-	clientset, err := kubernetes.NewForConfig(config)
+	clientSet, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create clientSet: %v", err)
 	}
+	klog.Infof("k8s discovery client init success, namespace:%+v", middlewareConfig[K8sMiddlewareNamespaceFieldName])
 
 	return &K8sDiscoveryClient{
-		clientset:      clientset,
-		namespace:      namespace,
-		labelSelector:  labelSelector,
-		instancePrefix: instancePrefix,
+		clientSet:        clientSet,
+		namespace:        middlewareConfig[K8sMiddlewareNamespaceFieldName],
+		middlewareConfig: middlewareConfig,
+		registerConfig:   registerConfig,
 	}, nil
 }
 
+// Register k8s的register启动service的时候就已经帮忙做了，这里启动一下http探针的handler即可
 func (k *K8sDiscoveryClient) Register(instance *ExecutorServiceInstance) error {
-	healthCheckPort := 8080 // You can customize this port
+	if k.registerConfig[K8sRegisterConfigHealthcheckPortFieldName] == "" {
+		panic("")
+	}
+	healthCheckPort := k.registerConfig[K8sRegisterConfigHealthcheckPortFieldName]
 
 	k.httpServer = &http.Server{
-		Addr: fmt.Sprintf(":%d", healthCheckPort),
+		Addr: fmt.Sprintf(":%v", healthCheckPort),
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("OK"))
+			switch r.URL.Path {
+			case "/healthz":
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("OK"))
+			case "/readyz":
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("OK"))
+			default:
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte("Not found"))
+				//todo 删掉！
+				panic("")
+			}
 		}),
 	}
 
 	go func() {
+		klog.Infof("try start HTTP server for health check at port:%v", healthCheckPort)
 		if err := k.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			klog.Errorf("Error starting HTTP server for health check: %v", err)
 		}
 	}()
-
-	// You may need to customize the readinessProbe and livenessProbe settings according to your needs
-	readinessProbe := &corev1.Probe{
-		HTTPGet: &corev1.HTTPGetAction{
-			Path: "/health",
-			Port: intstr.FromInt(healthCheckPort),
-		},
-		InitialDelaySeconds: 5,
-		PeriodSeconds:       10,
-	}
-
-	livenessProbe := &corev1.Probe{
-		HTTPGet: &corev1.HTTPGetAction{
-			Path: "/health",
-			Port: intstr.FromInt(healthCheckPort),
-		},
-		InitialDelaySeconds: 15,
-		PeriodSeconds:       20,
-	}
-
-	// Update your Pod's readinessProbe and livenessProbe
-	_, err := k.clientset.CoreV1().Pods(k.namespace).Patch(context.TODO(), instance.InstanceId, types.StrategicMergePatchType, []byte(fmt.Sprintf(`{"spec": {"containers": [{"name": "your-container-name", "readinessProbe": %v, "livenessProbe": %v}]}}`, readinessProbe, livenessProbe)), metav1.PatchOptions{})
-	if err != nil {
-		klog.Errorf("Failed to update Pod's probes: %v", err)
-		return err
-	}
 
 	return nil
 }
 
 func (k *K8sDiscoveryClient) DeRegister(instanceId string) error {
 	if k.httpServer != nil {
+		klog.Infof("try stop HTTP server for health check")
 		if err := k.httpServer.Shutdown(context.Background()); err != nil {
 			klog.Errorf("Error stopping HTTP server for health check: %v", err)
 		}
@@ -103,8 +122,53 @@ func (k *K8sDiscoveryClient) DeRegister(instanceId string) error {
 }
 
 func (k *K8sDiscoveryClient) DiscoverServices() []*ExecutorServiceInstance {
-	services, err := k.clientset.CoreV1().Services(k.namespace).List(context.TODO(), metav1.ListOptions{
-		LabelSelector: k.labelSelector,
+	instanceList, ok := k.instancesMap.Load(constance.ExecutorServiceName)
+	if ok {
+		return instanceList.([]*ExecutorServiceInstance)
+	}
+	k.mutex.Lock()
+	defer k.mutex.Unlock()
+	instanceList, ok = k.instancesMap.Load(constance.ExecutorServiceName)
+	if ok {
+		return instanceList.([]*ExecutorServiceInstance)
+	} else {
+		go func() {
+			watcher, err := k.clientSet.CoreV1().Services(k.namespace).Watch(context.TODO(), metav1.ListOptions{
+				LabelSelector: constance.ExecutorServiceName,
+				Watch:         true,
+			})
+			if err != nil {
+				klog.Errorf("DiscoverServices watch error: %v", err)
+				return
+			}
+			defer watcher.Stop()
+
+			for event := range watcher.ResultChan() {
+				svc, ok := event.Object.(*corev1.Service)
+				if !ok {
+					continue
+				}
+
+				endpoints, err := k.clientSet.CoreV1().Endpoints(k.namespace).Get(context.TODO(), svc.Name, metav1.GetOptions{})
+				if err != nil {
+					klog.Errorf("Failed to get endpoints for service %s: %v", svc.Name, err)
+					continue
+				}
+
+				instances := k.getInstancesFromEndpoints(endpoints, svc.Labels)
+				k.instancesMap.Store(constance.ExecutorServiceName, instances)
+			}
+		}()
+	}
+
+	instances := k.getInstancesFromServices()
+	k.instancesMap.Store(constance.ExecutorServiceName, instances)
+	return instances
+}
+
+func (k *K8sDiscoveryClient) getInstancesFromServices() []*ExecutorServiceInstance {
+	services, err := k.clientSet.CoreV1().Services(k.namespace).List(context.TODO(), metav1.ListOptions{
+		LabelSelector: constance.ExecutorServiceName,
 	})
 	if err != nil {
 		klog.Errorf("Failed to list services: %v", err)
@@ -113,44 +177,79 @@ func (k *K8sDiscoveryClient) DiscoverServices() []*ExecutorServiceInstance {
 
 	var instances []*ExecutorServiceInstance
 	for _, svc := range services.Items {
-		endpoints, err := k.clientset.CoreV1().Endpoints(k.namespace).Get(context.TODO(), svc.Name, metav1.GetOptions{})
+		endpoints, err := k.clientSet.CoreV1().Endpoints(k.namespace).Get(context.TODO(), svc.Name, metav1.GetOptions{})
 		if err != nil {
 			klog.Errorf("Failed to get endpoints for service %s: %v", svc.Name, err)
 			continue
 		}
 
-		for _, subset := range endpoints.Subsets {
-			for _, address := range subset.Addresses {
-				podName := address.TargetRef.Name
-				if podName == "" {
-					continue
-				}
+		instances = append(instances, k.getInstancesFromEndpoints(endpoints, svc.Labels)...)
+	}
 
-				instance := &ExecutorServiceInstance{
-					InstanceId: podName,
-					ExecutorServiceServeConf: ExecutorServiceServeConf{
-						Protoc: yourProtocValue, // Replace with the correct value for Protoc
-						Host:   address.IP,
-						Port:   int(subset.Ports[0].Port),
-					},
-					Tags: extractTags(svc.Labels),
-				}
-				instances = append(instances, instance)
+	return instances
+}
+
+func (k *K8sDiscoveryClient) getInstancesFromEndpoints(endpoints *corev1.Endpoints, labels map[string]string) []*ExecutorServiceInstance {
+	tags, protoc, err := extractTagsAndProtoc(labels)
+	if err != nil {
+		//todo 删掉
+		panic(err)
+	}
+
+	var instances []*ExecutorServiceInstance
+	for _, subset := range endpoints.Subsets {
+		for _, address := range subset.Addresses {
+			podName := address.TargetRef.Name
+			if podName == "" {
+				klog.Warnf("find podName empty:%+v", address)
+				continue
 			}
+
+			instance := &ExecutorServiceInstance{
+				InstanceId: podName,
+				ExecutorServiceServeConf: ExecutorServiceServeConf{
+					Protoc: protoc,
+					Host:   address.IP,
+					Port:   int(subset.Ports[0].Port),
+				},
+				Tags: tags,
+			}
+			instances = append(instances, instance)
 		}
 	}
 
 	return instances
 }
 
-func extractTags(labels map[string]string) []string {
-	var tags []string
-	for key, value := range labels {
-		if strings.HasPrefix(key, "X-Tag-") {
-			tags = append(tags, value)
+func extractTagsAndProtoc(labels map[string]string) ([]string, ProtocType, error) {
+	var (
+		tags   []string
+		protoc ProtocType
+	)
+
+	protocStr, ok := labels[k8sYamlLabelProtocFieldName]
+	if !ok {
+		return nil, "", fmt.Errorf("can not find proto in labels:%v", labels)
+	} else {
+		switch ProtocType(protocStr) {
+		case ProtocTypeGrpc:
+			protoc = ProtocTypeGrpc
+			break
+		case ProtocTypeHttp:
+			protoc = ProtocTypeHttp
+			break
+		default:
+			return nil, "", fmt.Errorf("can not decode proto type:%v", protocStr)
 		}
 	}
-	return tags
+
+	tagStr, ok := labels[k8sYamlLabelTagFieldName]
+	if !ok || tagStr == "" {
+		return nil, "", fmt.Errorf("can not find tags in labels:%v", labels)
+	}
+	tags = util.DecodeTags(tagStr)
+
+	return tags, protoc, nil
 }
 
 var _ ExecutorDiscoveryClient = (*K8sDiscoveryClient)(nil)

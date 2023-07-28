@@ -3,9 +3,7 @@ package app
 import (
 	"errors"
 	"strconv"
-	myConstance "supernova/executor/constance"
 	"supernova/executor/processor"
-	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 )
 
@@ -43,7 +41,7 @@ func (b *ExecutorBuilder) WithEnvTag(tag string) *ExecutorBuilder {
 	if tag == "" && b.err == nil {
 		b.err = errors.New("empty tag")
 	} else {
-		b.tags = append(b.tags, constance.EnvTagPrefix+tag)
+		b.tags = append(b.tags, discovery.EnvTagPrefix+tag)
 	}
 
 	return b
@@ -54,7 +52,7 @@ func (b *ExecutorBuilder) WithResourceTag(tag string) *ExecutorBuilder {
 	if tag == "" && b.err == nil {
 		b.err = errors.New("empty tag")
 	} else {
-		b.tags = append(b.tags, constance.ResourceTagPrefix+tag)
+		b.tags = append(b.tags, discovery.ResourceTagPrefix+tag)
 	}
 
 	return b
@@ -65,7 +63,7 @@ func (b *ExecutorBuilder) WithCustomTag(tag string) *ExecutorBuilder {
 	if tag == "" && b.err == nil {
 		b.err = errors.New("empty tag")
 	} else {
-		b.tags = append(b.tags, constance.CustomTagPrefix+tag)
+		b.tags = append(b.tags, discovery.CustomTagPrefix+tag)
 	}
 
 	return b
@@ -81,7 +79,21 @@ func (b *ExecutorBuilder) WithConsulDiscovery(consulHost, consulPort string,
 	if err != nil && b.err == nil {
 		b.err = err
 	} else {
-		b.extraConf[myConstance.ConsulHealthCheckPortExtraConfKeyName] = strconv.Itoa(healthCheckPort)
+		b.discoveryClient = discoveryClient
+	}
+
+	return b
+}
+
+func (b *ExecutorBuilder) WithK8sDiscovery(namespace, k8sCheckHealthPort string) *ExecutorBuilder {
+	discoveryClient, err := discovery.NewDiscoveryClient(
+		discovery.TypeK8s,
+		discovery.NewK8sMiddlewareConfig(namespace),
+		discovery.NewK8sRegisterConfig(k8sCheckHealthPort),
+	)
+	if err != nil && b.err == nil {
+		b.err = err
+	} else {
 		b.discoveryClient = discoveryClient
 	}
 
@@ -96,7 +108,7 @@ func (b *ExecutorBuilder) WithProcessor(p processor.JobProcessor) *ExecutorBuild
 	}
 
 	b.processor[glueType] = p
-	b.tags = append(b.tags, constance.GlueTypeTagPrefix+glueType)
+	b.tags = append(b.tags, discovery.GlueTypeTagPrefix+glueType)
 	return b
 }
 

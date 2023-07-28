@@ -1,7 +1,8 @@
 RUN_NAME := http-executor
 IMAGE_NAME := exiasun/http-executor
-TAG := dev
+TAG := latest
 DEPLOYMENT_NAME := http-executor-service
+YAML := "../../deployment/executor-example/http-executor.yaml"
 
 image-runnable:
 	@echo "--------------------------------------Building ${RUN_NAME} binary..."
@@ -17,7 +18,7 @@ minikube-load:
 	minikube image load ${IMAGE_NAME}:${TAG} --overwrite=true
 	minikube kubectl -- apply -f ${YAML}
 
-all: image-runnable #docker-build minikube-load
+all: image-runnable docker-build minikube-load
 
 clean:
 	rm -rf build/${RUN_NAME}

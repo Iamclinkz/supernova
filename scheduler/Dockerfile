@@ -6,9 +6,7 @@ EXPOSE 8080
 ENV env=k8s \
     httpPort=8080 \
     logLevel=1 \
-    discoveryType=consul \
-    consulHost=9.134.5.191 \
-    consulPort=8500 \
+    discoveryType=k8s \
     dbType=mysql \
     mysqlHost=9.134.5.191 \
     mysqlPort=3306 \
@@ -22,8 +20,6 @@ CMD ["./scheduler", \
      "-httpPort", "${httpPort}", \
      "-logLevel", "${logLevel}", \
      "-discoveryType", "${discoveryType}", \
-     "-consulHost", "${consulHost}", \
-     "-consulPort", "${consulPort}", \
      "-dbType", "${dbType}", \
      "-mysqlHost", "${mysqlHost}", \
      "-mysqlPort", "${mysqlPort}", \

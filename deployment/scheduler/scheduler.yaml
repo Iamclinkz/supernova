@@ -16,19 +16,31 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: scheduler
+  name: http-executor
   namespace: supernova
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: scheduler
+      app: http-executor
   template:
     metadata:
       labels:
-        app: scheduler
+        app: http-executor
     spec:
       containers:
-      - name: user-api
-        image: exiasun/scheduler:latest
-        imagePullPolicy: Never
+        - name: http-executor
+          image: exiasun/http-executor:latest
+          imagePullPolicy: Never
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 3

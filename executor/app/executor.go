@@ -3,7 +3,6 @@ package app
 import (
 	"os"
 	"os/signal"
-	myConstance "supernova/executor/constance"
 	"supernova/executor/exporter"
 	"supernova/executor/processor"
 	"supernova/executor/service"
@@ -81,10 +80,7 @@ func (e *Executor) register() error {
 		Tags:                     e.tags,
 	}
 
-	extraDiscoveryConfig := make(map[string]string, 1)
-	extraDiscoveryConfig[discovery.ConsulExtraConfigHealthcheckPortFieldName] = e.extraConf[myConstance.ConsulHealthCheckPortExtraConfKeyName]
-
-	klog.Infof("executor try register service: %+v, extraDiscoveryConfig:%v", discoveryInstance, extraDiscoveryConfig)
+	klog.Infof("executor try register service: %+v", discoveryInstance)
 	return e.discoveryClient.Register(discoveryInstance)
 }
 
