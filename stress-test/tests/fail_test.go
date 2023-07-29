@@ -16,7 +16,9 @@ import (
 // 目标：只要Scheduler和Executor都不宕机，那么任务一定能精准执行（成功）一次，即使失败多次。
 func TestFail(t *testing.T) {
 	var triggerCount = 10000
-	util.InitTest(3, 3, klog.LevelWarn)
+	supernovaTest := util.StartTest(3, 3, klog.LevelWarn)
+	defer supernovaTest.EndTest()
+
 	httpServer := simple_http_server.NewSimpleHttpServer(
 		&simple_http_server.SimpleHttpServerInitConf{
 			FailRate:              0.80, //80%的概率失败

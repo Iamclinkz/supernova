@@ -40,7 +40,8 @@ func GenExecutorInstanceConf(id int) *ExecutorInstanceConf {
 	}
 }
 
-func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf) {
+func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf) []*app.Executor {
+	ret := make([]*app.Executor, 0, len(instanceConfigs))
 	for _, instanceConf := range instanceConfigs {
 		httpExecutor := new(processor_plugin_http.HTTP)
 		builder := app.NewExecutorBuilder()
@@ -52,8 +53,11 @@ func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf) {
 			panic(err)
 		}
 
+		ret = append(ret, executor)
 		go executor.Start()
 	}
+
+	return ret
 }
 
 // GenUnderCloudExecutorID 为云下测试生成一个唯一的ExecutorID（云上直接用pod名，不会重复）

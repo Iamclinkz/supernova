@@ -47,7 +47,8 @@ func TestExecutorGracefulStop(t *testing.T) {
 	)
 
 	//开2个Scheduler和3个Executor
-	util.InitTest(2, 2, LogLevel)
+	supernovaTest := util.StartTest(2, 2, LogLevel)
+	defer supernovaTest.EndTest()
 
 	httpServer := simple_http_server.NewSimpleHttpServer(&simple_http_server.SimpleHttpServerInitConf{
 		FailRate:              0.10, //10%的概率失败

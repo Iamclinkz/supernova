@@ -9,15 +9,17 @@ import (
 	"github.com/cloudwego/kitex/pkg/klog"
 )
 
-func StartSchedulers(count int) {
+func StartSchedulers(count int) []*app.Scheduler {
+	ret := make([]*app.Scheduler, 0, count)
 	for i := 0; i <= count; i++ {
 		builder := app.NewSchedulerBuilder()
 		scheduler, err := builder.WithMysqlStore(DevMysqlConfig).WithConsulDiscovery(DevConsulHost, DevConsulPort).Build()
-		scheduler.Start()
-
 		if err != nil {
 			panic(err)
 		}
+
+		ret = append(ret, scheduler)
+		scheduler.Start()
 
 		router := http.InitHttpHandler(scheduler)
 		klog.Infof("Start the server at %v", SchedulerServePortStart+i)
@@ -29,4 +31,6 @@ func StartSchedulers(count int) {
 		}(SchedulerServePortStart + i)
 		time.Sleep(1 * time.Second)
 	}
+
+	return ret
 }

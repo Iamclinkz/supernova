@@ -19,7 +19,7 @@ func serviceInfo() *kitex.ServiceInfo {
 var executorServiceInfo = NewServiceInfo()
 
 func NewServiceInfo() *kitex.ServiceInfo {
-	serviceName := "ServiceData"
+	serviceName := "Executor"
 	handlerType := (*api.Executor)(nil)
 	methods := map[string]kitex.MethodInfo{
 		"HeartBeat": kitex.NewMethodInfo(heartBeatHandler, newHeartBeatArgs, newHeartBeatResult, false),

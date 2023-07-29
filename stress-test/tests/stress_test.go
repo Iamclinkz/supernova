@@ -21,7 +21,9 @@ func TestWithoutFail(t *testing.T) {
 
 	var triggerCount = 100000
 
-	util.InitTest(3, 3, klog.LevelWarn)
+	supernovaTest := util.StartTest(3, 3, klog.LevelWarn)
+	defer supernovaTest.EndTest()
+
 	httpServer := simple_http_server.NewSimpleHttpServer(
 		&simple_http_server.SimpleHttpServerInitConf{
 			FailRate:             0,
