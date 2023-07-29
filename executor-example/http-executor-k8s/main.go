@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"os"
 	"supernova/executor/app"
 	processor_plugin_http "supernova/processor-plugin/processor-plugin-http"
 	"time"
@@ -9,27 +10,33 @@ import (
 	"github.com/cloudwego/kitex/pkg/klog"
 )
 
-// service config
-var GrpcPort = flag.Int("grpcPort", 7070, "grpc port")
+type SetupConfig struct {
+	GrpcPort           int
+	LogLevel           int
+	K8sHealthCheckPort string
+	K8sNamespace       string
+}
 
-// log config
-var LogLevel = flag.Int("logLevel", 4, "log level")
+var setupConfig SetupConfig
 
-// discovery config
-var K8sHealthCheckPort = flag.String("k8sHealthCheckPort", "9090", "health check port")
-
-// namespace
-var K8sNamespace = flag.String("k8sNamespace", "supernova", "k8s namespace")
+func init() {
+	flag.IntVar(&setupConfig.GrpcPort, "grpcPort", 7070, "grpc serve port")
+	flag.IntVar(&setupConfig.LogLevel, "logLevel", 1, "log level")
+	flag.StringVar(&setupConfig.K8sHealthCheckPort, "k8sHealthCheckPort", "9090", "health check port")
+	flag.StringVar(&setupConfig.K8sNamespace, "k8sNamespace", "supernova", "k8s namespace")
+	flag.Parse()
+}
 
 func main() {
-	flag.Parse()
-	klog.SetLevel(klog.Level(*LogLevel))
+	klog.Infof("use config:%v", setupConfig)
+	klog.SetLevel(klog.Level(setupConfig.LogLevel))
 	httpExecutor := new(processor_plugin_http.HTTP)
 	builder := app.NewExecutorBuilder()
 	executor, err := builder.
-		WithK8sDiscovery(*K8sNamespace, *K8sHealthCheckPort).
+		WithK8sDiscovery(setupConfig.K8sNamespace, setupConfig.K8sHealthCheckPort).
 		WithProcessor(httpExecutor).
-		WithGrpcServe("0.0.0.0", *GrpcPort).
+		WithGrpcServe("0.0.0.0", setupConfig.GrpcPort).
+		WithInstanceID(os.Getenv("HOSTNAME")).
 		Build()
 
 	if err != nil {

@@ -3,12 +3,17 @@ kind: Service
 metadata:
   name: http-executor
   namespace: supernova
+  labels:
+    SupernovaExecutor: "1"
+    #需要同discovery/k8s.go中对应上
+    ExecutorProtoc: "Grpc"
+    ExecutorTag: "X-Tag-Glue-Http"
 spec:
   ports:
     - protocol: TCP
-      name: http
-      port: 8080
-      targetPort: 8080
+      name: grpc
+      port: 7070
+      targetPort: 7070
   selector:
     app: http-executor
 
@@ -19,7 +24,7 @@ metadata:
   name: http-executor
   namespace: supernova
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: http-executor
@@ -32,3 +37,15 @@ spec:
       - name: http-executor
         image: exiasun/http-executor:latest
         imagePullPolicy: Never
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+          initialDelaySeconds: 5
+          periodSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
+          initialDelaySeconds: 3
+          periodSeconds: 3

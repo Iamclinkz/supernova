@@ -8,7 +8,7 @@ import (
 var (
 	SimpleWebServerPort     = 9000
 	SchedulerServePortStart = 8080
-	SchedulerPort           = SchedulerServePortStart + 1
+	SchedulerPort           = SchedulerServePortStart
 	SchedulerAddress        = "http://localhost:" + strconv.Itoa(SchedulerPort)
 )
 

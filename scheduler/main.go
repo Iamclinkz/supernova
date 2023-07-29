@@ -11,20 +11,21 @@ import (
 func main() {
 	klog.SetLevel(klog.Level(setupConfig.LogLevel))
 
+	klog.Infof("init with setupConfig:%+v", setupConfig)
 	builder := app.NewSchedulerBuilder()
 
 	//db
 	switch strings.ToLower(setupConfig.DBType) {
 	case "mysql":
 		builder.WithMysqlStore(&setupConfig.MysqlConf)
-		break
 	}
 
 	//discovery
 	switch strings.ToLower(setupConfig.DiscoveryType) {
 	case "consul":
 		builder.WithConsulDiscovery(setupConfig.ConsulHost, setupConfig.ConsulPort)
-		break
+	case "k8s":
+		builder.WithK8sDiscovery(setupConfig.K8sNamespace)
 	}
 
 	scheduler, err := builder.Build()

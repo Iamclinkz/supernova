@@ -2,8 +2,9 @@ package main
 
 import (
 	"flag"
-	"github.com/cloudwego/kitex/tool/internal_pkg/log"
 	"supernova/pkg/conf"
+
+	"github.com/cloudwego/kitex/tool/internal_pkg/log"
 )
 
 type SetupConfig struct {
@@ -15,6 +16,7 @@ type SetupConfig struct {
 	DBType        string
 	MysqlConf     conf.MysqlConf
 	OTelConf      conf.OTelConf
+	K8sNamespace  string
 }
 
 var setupConfig SetupConfig
@@ -33,6 +35,7 @@ func init() {
 	flag.StringVar(&setupConfig.MysqlConf.DbName, "mysqlDbname", "supernova", "MySQL database name")
 	flag.IntVar(&setupConfig.MysqlConf.MaxIdleConnections, "mysqlMaxIdleConn", 16, "MySQL max idle connections")
 	flag.IntVar(&setupConfig.MysqlConf.MaxOpenConnections, "mysqlMaxOpenConn", 128, "MySQL max open connections")
+	flag.StringVar(&setupConfig.K8sNamespace, "k8sNamespace", "supernova", "k8s namespace")
 	flag.Parse()
 	log.Infof("find configs: %+v", setupConfig)
 }

@@ -24,7 +24,7 @@ import (
 // 过程：使用SDK开启两个Scheduler，使用进程开启一个Scheduler，开启三个Executor。然后把Scheduler进程杀死，查看任务执行情况
 func TestForceKillScheduler(t *testing.T) {
 	const (
-		BinPath                      = "../../scheduler/build/scheduler"
+		BinPath                      = "../../scheduler/build/bin/scheduler"
 		KilledSchedulerHttpServePort = 7070
 		LogLevel                     = klog.LevelError
 		TriggerCount                 = 50000

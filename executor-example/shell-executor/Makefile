@@ -2,7 +2,7 @@ RUN_NAME := shell-executor
 
 build-binary:
 	@echo "--------------------------------------Building ${RUN_NAME} binary..."
-	go build -o build/${RUN_NAME} *.go
+	go build -o build/bin/${RUN_NAME} *.go
 
 all: build-binary
 

@@ -3,7 +3,6 @@ package dal
 import (
 	"supernova/pkg/api/executor"
 	"supernova/pkg/constance"
-	"supernova/pkg/middleware"
 
 	"github.com/cloudwego/kitex/client"
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
@@ -21,7 +20,7 @@ func NewExecutorServiceClient(host, port string) (*ExecutorRpcClient, error) {
 		client.WithHostPorts(host+":"+port),
 		client.WithSuite(tracing.NewClientSuite()),
 		client.WithClientBasicInfo(&rpcinfo.EndpointBasicInfo{ServiceName: constance.SchedulerServiceName}),
-		client.WithMiddleware(middleware.PrintKitexRequestResponse),
+		//client.WithMiddleware(middleware.PrintKitexRequestResponse),
 		client.WithTransportProtocol(transport.GRPC)); err != nil {
 		return nil, err
 	} else {

@@ -24,7 +24,7 @@ import (
 func TestExecutorGracefulStop(t *testing.T) {
 	//测试使用
 	const (
-		BinPath                 = "../../executor-example/http-executor/build/http-executor"
+		BinPath                 = "../../executor-example/http-executor/build/bin/http-executor"
 		LogLevel                = klog.LevelInfo
 		TriggerCount            = 50000
 		MaxWaitGracefulStopTime = time.Second*5 + conf.SchedulerMaxCheckHealthDuration

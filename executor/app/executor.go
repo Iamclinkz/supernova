@@ -101,6 +101,7 @@ func (e *Executor) Start() {
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
 
+	klog.Infof("executor started: %+v", e)
 	s := <-signalCh
 	klog.Infof("found signal:%v, start graceful stop", s)
 	e.GracefulStop()

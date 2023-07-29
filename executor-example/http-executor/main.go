@@ -15,7 +15,7 @@ var GrpcHost = flag.String("grpcHost", "9.134.5.191", "grpc host")
 var GrpcPort = flag.Int("grpcPort", 20001, "grpc port")
 
 // log config
-var LogLevel = flag.Int("logLevel", 4, "log level")
+var LogLevel = flag.Int("logLevel", 5, "log level")
 
 // discovery config
 var HealthCheckPort = flag.Int("healthCheckPort", 9090, "health check port")

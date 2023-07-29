@@ -20,8 +20,22 @@ func NewSchedulerBuilder() *SchedulerBuilder {
 }
 
 func (b *SchedulerBuilder) WithConsulDiscovery(consulHost, consulPort string) *SchedulerBuilder {
-	discoveryClient, err := discovery.NewDiscoveryClient(discovery.TypeConsul,
-		discovery.NewConsulMiddlewareConfig(consulHost, consulPort), nil)
+	discoveryClient, err := discovery.NewDiscoveryClient(
+		discovery.TypeConsul,
+		discovery.NewConsulMiddlewareConfig(consulHost, consulPort),
+		nil)
+	if err != nil && b.err == nil {
+		b.err = err
+	} else {
+		b.discoveryClient = discoveryClient
+	}
+
+	return b
+}
+
+func (b *SchedulerBuilder) WithK8sDiscovery(namespace string) *SchedulerBuilder {
+	discoveryClient, err := discovery.NewDiscoveryClient(discovery.TypeK8s,
+		discovery.NewK8sMiddlewareConfig(namespace), nil)
 	if err != nil && b.err == nil {
 		b.err = err
 	} else {

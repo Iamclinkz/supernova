@@ -1,6 +1,7 @@
 package constance
 
 const (
-	ExecutorServiceName  = "ServiceData"
+	ExecutorServiceName  = "Executor"
 	SchedulerServiceName = "Scheduler"
+	K8sExecutorLabelName = "SupernovaExecutor"
 )
