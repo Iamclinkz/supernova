@@ -167,7 +167,7 @@ func (e *ExecuteService) work() {
 
 			klog.Tracef("worker start handle job, OnFireID:%v", jobRequest.OnFireLogID)
 			if doTrace {
-				_, executeSpan = e.tracer.Start(workCtx, "ExecuteTask")
+				_, executeSpan = e.tracer.Start(workCtx, "executeTask")
 			}
 			e.notifyOnStartExecute(jobRequest)
 			jobResponse := new(api.RunJobResponse)

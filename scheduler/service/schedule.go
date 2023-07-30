@@ -240,7 +240,7 @@ func (s *ScheduleService) work() {
 				klog.Debugf("onFireOvertimeJob:%v fire error:%v", overtimeOnFireLog, fireErr)
 			}
 		case <-s.stopCh:
-			klog.Infof("ScheduleService worker stop working")
+			klog.Debug("ScheduleService worker stop working")
 			s.wg.Done()
 			return
 		}
