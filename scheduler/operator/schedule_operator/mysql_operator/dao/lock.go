@@ -1,4 +1,4 @@
-package model
+package dao
 
 type Lock struct {
 	LockName string `gorm:"column:lock_name;type:varchar(64);primarykey"`

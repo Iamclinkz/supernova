@@ -1,45 +1,43 @@
 package model
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/google/btree"
 	"strings"
 	"supernova/pkg/util"
 	"supernova/scheduler/constance"
 	"time"
 
 	"github.com/robfig/cron/v3"
-	"gorm.io/gorm"
 )
 
 type Trigger struct {
-	gorm.Model `json:"-"`
-	//Name       string `gorm:"column:name;type:varchar(64);unique"`
-	Name string `gorm:"column:name;type:varchar(64)"`
+	ID        uint
+	UpdatedAt time.Time
+	Name      string
 	//关联的任务ID
-	JobID uint `gorm:"not null;index"`
+	JobID uint
 	// 选择调度的策略（None表示不触发，Cron表示使用Cron表达式，
-	ScheduleType constance.ScheduleType `gorm:"column:schedule_type;type:tinyint(4);not null"`
+	ScheduleType constance.ScheduleType
 	// 配合调度策略，这里的配置信息
-	ScheduleConf string `gorm:"column:schedule_conf;type:varchar(128)"`
+	ScheduleConf string
 	// 如果错过了本次执行，应该采取的策略。和Fail-Retry概念不一样，misfire指任务本身没有发生错误，但是
 	// 例如Scheduler有太多任务做不过来等原因，使得调度到本trigger的时候，已经错过了本trigger的执行时间。
 	//todo 待实现
-	MisfireStrategy constance.MisfireStrategyType `gorm:"column:misfire_strategy;type:tinyint(4);not null"`
+	MisfireStrategy constance.MisfireStrategyType
 	// 如果出错，最大重试次数。
-	FailRetryCount int `gorm:"column:executor_fail_retry_count;not null"`
+	FailRetryCount int
 	// executor执行的最大时间。要求用户一定指定。如果超时，则减少OnFireLog中的RetryCount字段
-	ExecuteTimeout    time.Duration `gorm:"column:execute_timeout;type:bigint;not null"`
-	FailRetryInterval time.Duration `gorm:"column:fail_retry_interval"` //失败重试间隔，为0则立刻重试
+	ExecuteTimeout    time.Duration
+	FailRetryInterval time.Duration //失败重试间隔，为0则立刻重试
 	// 上次触发时间
-	TriggerLastTime time.Time `gorm:"column:trigger_last_time;type:timestamp;not null"`
+	TriggerLastTime time.Time
 	// 下次触发时间
-	TriggerNextTime time.Time `gorm:"column:trigger_next_time;type:timestamp;not null;index"`
+	TriggerNextTime time.Time
 	// 当前状态
-	Status      constance.TriggerStatus `gorm:"column:status;type:tinyint(4);not null"`
-	ParamToDB   string                  `gorm:"column:param"`
-	Param       map[string]string       `gorm:"-"`
-	AtLeastOnce bool                    `gorm:"column:at_least_once"` //语义，至少一次。如果为false，则为至多一次
+	Status      constance.TriggerStatus
+	Param       map[string]string
+	AtLeastOnce bool //语义，至少一次。如果为false，则为至多一次
 }
 
 func (t *Trigger) String() string {
@@ -57,10 +55,6 @@ func (t *Trigger) String() string {
 		t.TriggerNextTime.Format(time.RFC3339),
 		t.Status,
 	)
-}
-
-func (t *Trigger) TableName() string {
-	return "t_trigger"
 }
 
 // SecondParser 精确到秒的parser
@@ -100,37 +94,6 @@ func TriggersToString(triggers []*Trigger) string {
 	return builder.String()
 }
 
-func (t *Trigger) BeforeCreate(tx *gorm.DB) error {
-	return t.prepareParam()
-}
-
-func (t *Trigger) BeforeUpdate(tx *gorm.DB) error {
-	return t.prepareParam()
-}
-
-func (t *Trigger) AfterFind(tx *gorm.DB) error {
-	return t.parseParam()
-}
-
-func (t *Trigger) prepareParam() error {
-	if t.Param != nil && len(t.Param) != 0 {
-		jsonData, err := json.Marshal(t.Param)
-		if err != nil {
-			return err
-		}
-		t.ParamToDB = string(jsonData)
-	}
-	return nil
-}
-
-func (t *Trigger) parseParam() error {
-	if t.ParamToDB != "" {
-		var paramMap map[string]string
-		err := json.Unmarshal([]byte(t.ParamToDB), &paramMap)
-		if err != nil {
-			return err
-		}
-		t.Param = paramMap
-	}
-	return nil
+func (t *Trigger) Less(than btree.Item) bool {
+	return t.TriggerNextTime.Before(than.(*Trigger).TriggerNextTime)
 }

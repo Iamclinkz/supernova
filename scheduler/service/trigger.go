@@ -241,7 +241,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog,
 	ret := make([]*model.OnFireLog, 0, len(onFireLogs))
 	mu := sync.Mutex{}
 	//因为不考虑极端的情况下，失败的应该不多？且各个Scheduler动态调整捞取过期OnFireLog时间+捞取间隔较长，
-	//所以这里用了乐观锁，取到过期的OnFireLog之后，尝试更新RedoAt字段。如果更新成功，则自己执行。更新失败则说明要不
+	//所以这里用了乐观锁，取到过期的OnFireLog之后，尝试更新RedoAt字段。如果更新成功，则自己执行。更新失败则说明要不任务已经
 	//成功了，要不让另一个进程抢先了，总之不是自己执行。
 	const batchSize = 100
 	var wg sync.WaitGroup

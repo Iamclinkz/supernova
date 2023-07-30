@@ -24,6 +24,11 @@ func (x *RunJobRequest) FastRead(buf []byte, _type int8, number int32) (offset i
 		if err != nil {
 			goto ReadFieldError
 		}
+	case 3:
+		offset, err = x.fastReadField3(buf, _type)
+		if err != nil {
+			goto ReadFieldError
+		}
 	default:
 		offset, err = fastpb.Skip(buf, _type, number)
 		if err != nil {
@@ -49,6 +54,28 @@ func (x *RunJobRequest) fastReadField2(buf []byte, _type int8) (offset int, err 
 		return offset, err
 	}
 	x.Job = &v
+	return offset, nil
+}
+
+func (x *RunJobRequest) fastReadField3(buf []byte, _type int8) (offset int, err error) {
+	if x.TraceContext == nil {
+		x.TraceContext = make(map[string]string)
+	}
+	var key string
+	var value string
+	offset, err = fastpb.ReadMapEntry(buf, _type,
+		func(buf []byte, _type int8) (offset int, err error) {
+			key, offset, err = fastpb.ReadString(buf, _type)
+			return offset, err
+		},
+		func(buf []byte, _type int8) (offset int, err error) {
+			value, offset, err = fastpb.ReadString(buf, _type)
+			return offset, err
+		})
+	if err != nil {
+		return offset, err
+	}
+	x.TraceContext[key] = value
 	return offset, nil
 }
 
@@ -153,6 +180,11 @@ func (x *RunJobResponse) FastRead(buf []byte, _type int8, number int32) (offset 
 		if err != nil {
 			goto ReadFieldError
 		}
+	case 3:
+		offset, err = x.fastReadField3(buf, _type)
+		if err != nil {
+			goto ReadFieldError
+		}
 	default:
 		offset, err = fastpb.Skip(buf, _type, number)
 		if err != nil {
@@ -178,6 +210,28 @@ func (x *RunJobResponse) fastReadField2(buf []byte, _type int8) (offset int, err
 		return offset, err
 	}
 	x.Result = &v
+	return offset, nil
+}
+
+func (x *RunJobResponse) fastReadField3(buf []byte, _type int8) (offset int, err error) {
+	if x.TraceContext == nil {
+		x.TraceContext = make(map[string]string)
+	}
+	var key string
+	var value string
+	offset, err = fastpb.ReadMapEntry(buf, _type,
+		func(buf []byte, _type int8) (offset int, err error) {
+			key, offset, err = fastpb.ReadString(buf, _type)
+			return offset, err
+		},
+		func(buf []byte, _type int8) (offset int, err error) {
+			value, offset, err = fastpb.ReadString(buf, _type)
+			return offset, err
+		})
+	if err != nil {
+		return offset, err
+	}
+	x.TraceContext[key] = value
 	return offset, nil
 }
 
@@ -310,6 +364,7 @@ func (x *RunJobRequest) FastWrite(buf []byte) (offset int) {
 	}
 	offset += x.fastWriteField1(buf[offset:])
 	offset += x.fastWriteField2(buf[offset:])
+	offset += x.fastWriteField3(buf[offset:])
 	return offset
 }
 
@@ -326,6 +381,22 @@ func (x *RunJobRequest) fastWriteField2(buf []byte) (offset int) {
 		return offset
 	}
 	offset += fastpb.WriteMessage(buf[offset:], 2, x.GetJob())
+	return offset
+}
+
+func (x *RunJobRequest) fastWriteField3(buf []byte) (offset int) {
+	if x.TraceContext == nil {
+		return offset
+	}
+	for k, v := range x.GetTraceContext() {
+		offset += fastpb.WriteMapEntry(buf[offset:], 3,
+			func(buf []byte, numTagOrKey, numIdxOrVal int32) int {
+				offset := 0
+				offset += fastpb.WriteString(buf[offset:], numTagOrKey, k)
+				offset += fastpb.WriteString(buf[offset:], numIdxOrVal, v)
+				return offset
+			})
+	}
 	return offset
 }
 
@@ -394,6 +465,7 @@ func (x *RunJobResponse) FastWrite(buf []byte) (offset int) {
 	}
 	offset += x.fastWriteField1(buf[offset:])
 	offset += x.fastWriteField2(buf[offset:])
+	offset += x.fastWriteField3(buf[offset:])
 	return offset
 }
 
@@ -410,6 +482,22 @@ func (x *RunJobResponse) fastWriteField2(buf []byte) (offset int) {
 		return offset
 	}
 	offset += fastpb.WriteMessage(buf[offset:], 2, x.GetResult())
+	return offset
+}
+
+func (x *RunJobResponse) fastWriteField3(buf []byte) (offset int) {
+	if x.TraceContext == nil {
+		return offset
+	}
+	for k, v := range x.GetTraceContext() {
+		offset += fastpb.WriteMapEntry(buf[offset:], 3,
+			func(buf []byte, numTagOrKey, numIdxOrVal int32) int {
+				offset := 0
+				offset += fastpb.WriteString(buf[offset:], numTagOrKey, k)
+				offset += fastpb.WriteString(buf[offset:], numIdxOrVal, v)
+				return offset
+			})
+	}
 	return offset
 }
 
@@ -501,6 +589,7 @@ func (x *RunJobRequest) Size() (n int) {
 	}
 	n += x.sizeField1()
 	n += x.sizeField2()
+	n += x.sizeField3()
 	return n
 }
 
@@ -517,6 +606,22 @@ func (x *RunJobRequest) sizeField2() (n int) {
 		return n
 	}
 	n += fastpb.SizeMessage(2, x.GetJob())
+	return n
+}
+
+func (x *RunJobRequest) sizeField3() (n int) {
+	if x.TraceContext == nil {
+		return n
+	}
+	for k, v := range x.GetTraceContext() {
+		n += fastpb.SizeMapEntry(3,
+			func(numTagOrKey, numIdxOrVal int32) int {
+				n := 0
+				n += fastpb.SizeString(numTagOrKey, k)
+				n += fastpb.SizeString(numIdxOrVal, v)
+				return n
+			})
+	}
 	return n
 }
 
@@ -585,6 +690,7 @@ func (x *RunJobResponse) Size() (n int) {
 	}
 	n += x.sizeField1()
 	n += x.sizeField2()
+	n += x.sizeField3()
 	return n
 }
 
@@ -601,6 +707,22 @@ func (x *RunJobResponse) sizeField2() (n int) {
 		return n
 	}
 	n += fastpb.SizeMessage(2, x.GetResult())
+	return n
+}
+
+func (x *RunJobResponse) sizeField3() (n int) {
+	if x.TraceContext == nil {
+		return n
+	}
+	for k, v := range x.GetTraceContext() {
+		n += fastpb.SizeMapEntry(3,
+			func(numTagOrKey, numIdxOrVal int32) int {
+				n := 0
+				n += fastpb.SizeString(numTagOrKey, k)
+				n += fastpb.SizeString(numIdxOrVal, v)
+				return n
+			})
+	}
 	return n
 }
 
@@ -689,6 +811,7 @@ func (x *HealthStatus) sizeField2() (n int) {
 var fieldIDToName_RunJobRequest = map[int32]string{
 	1: "OnFireLogID",
 	2: "Job",
+	3: "TraceID",
 }
 
 var fieldIDToName_Job = map[int32]string{
@@ -701,6 +824,7 @@ var fieldIDToName_Job = map[int32]string{
 var fieldIDToName_RunJobResponse = map[int32]string{
 	1: "OnFireLogID",
 	2: "Result",
+	3: "TraceID",
 }
 
 var fieldIDToName_JobResult = map[int32]string{

@@ -1,6 +1,10 @@
 package service
 
 import (
+	"context"
+	"errors"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	"supernova/executor/constance"
 	"supernova/pkg/api"
 	"supernova/pkg/util"
@@ -21,10 +25,12 @@ type ExecuteService struct {
 	wg                *sync.WaitGroup
 	timeWheel         *util.TimeWheel
 	executeListeners  []ExecuteListener
+	enableOTel        bool
+	tracer            trace.Tracer
 }
 
 func NewExecuteService(statisticsService *StatisticsService, processorService *ProcessorService,
-	duplicateService *DuplicateService, processorCount int) *ExecuteService {
+	duplicateService *DuplicateService, processorCount int, enableOTel bool) *ExecuteService {
 	if processorCount <= 0 || processorCount > 512 {
 		processorCount = 512
 	}
@@ -46,6 +52,10 @@ func NewExecuteService(statisticsService *StatisticsService, processorService *P
 		wg:                &sync.WaitGroup{},
 		timeWheel:         tw,
 		executeListeners:  make([]ExecuteListener, 0, 2),
+		enableOTel:        enableOTel,
+	}
+	if enableOTel {
+		ret.tracer = otel.Tracer("ExecuteTracer")
 	}
 	ret.RegisterExecuteListener(statisticsService)
 	ret.RegisterExecuteListener(duplicateService)
@@ -53,7 +63,6 @@ func NewExecuteService(statisticsService *StatisticsService, processorService *P
 }
 
 func (e *ExecuteService) PushJobRequest(jobRequest *api.RunJobRequest) {
-	klog.Tracef("receive execute jobRequest, OnFireID:%v", jobRequest.OnFireLogID)
 	e.jobRequestCh <- jobRequest
 }
 
@@ -92,6 +101,20 @@ func (e *ExecuteService) work() {
 			e.wg.Done()
 			return
 		case jobRequest := <-e.jobRequestCh:
+			var (
+				doTrace = len(jobRequest.TraceContext) != 0 && e.enableOTel
+
+				workCtx context.Context
+
+				workSpan             trace.Span
+				dupWaitExecuteSpan   trace.Span
+				executeSpan          trace.Span
+				pushResponseChanSpan trace.Span
+			)
+			if doTrace {
+				workCtx, workSpan = util.NewSpanFromTraceContext("executorWork", e.tracer, jobRequest.TraceContext)
+			}
+
 			//防止重复执行已经成功的任务
 			resp, myWaitCh := e.duplicateService.CheckDuplicateExecuteSuccessJobAndConcurrentExecute(uint(jobRequest.OnFireLogID))
 			if resp != nil {
@@ -102,14 +125,26 @@ func (e *ExecuteService) work() {
 				//之前执行过，且执行成功了，直接返回
 				klog.Warnf("receive duplicate execute success job request, OnFireID:%v", jobRequest.OnFireLogID)
 				e.jobResponseCh <- resp
+				if doTrace {
+					workSpan.RecordError(errors.New("duplicate execute success job"))
+					workSpan.End()
+				}
 				continue
 			}
 
 			//防止当前并发执行同一个任务
 			if myWaitCh != nil {
 				klog.Warnf("find concurrent execute job request, onFireID:%v", jobRequest.OnFireLogID)
+				if doTrace {
+					_, dupWaitExecuteSpan = e.tracer.Start(workCtx, "dupWaitExecute")
+				}
 				needDo := <-myWaitCh
 				if !needDo {
+					if doTrace {
+						dupWaitExecuteSpan.RecordError(errors.New("previous task executed successfully"))
+						dupWaitExecuteSpan.End()
+						workSpan.End()
+					}
 					e.statisticsService.OnNoNeedSendResponse(jobRequest)
 					continue
 				}
@@ -119,7 +154,8 @@ func (e *ExecuteService) work() {
 			task := e.timeWheel.Add(time.Microsecond*time.Duration(jobRequest.Job.ExecutorExecuteTimeoutMs), func() {
 				klog.Debugf("on job overtime:%v", jobRequest.OnFireLogID)
 				e.jobResponseCh <- &api.RunJobResponse{
-					OnFireLogID: jobRequest.OnFireLogID,
+					OnFireLogID:  jobRequest.OnFireLogID,
+					TraceContext: jobRequest.TraceContext,
 					Result: &api.JobResult{
 						Ok:     false,
 						Err:    constance.ExecuteTimeoutErrMsg,
@@ -129,9 +165,13 @@ func (e *ExecuteService) work() {
 			}, false)
 
 			klog.Tracef("worker start handle job, OnFireID:%v", jobRequest.OnFireLogID)
+			if doTrace {
+				_, executeSpan = e.tracer.Start(workCtx, "ExecuteTask")
+			}
 			e.notifyOnStartExecute(jobRequest)
 			jobResponse := new(api.RunJobResponse)
 			jobResponse.OnFireLogID = jobRequest.OnFireLogID
+			jobResponse.TraceContext = jobRequest.TraceContext
 
 			processor := e.processorService.GetRegister(jobRequest.Job.GlueType)
 			if processor == nil {
@@ -152,13 +192,31 @@ func (e *ExecuteService) work() {
 			//这种情况下，如果本次虽然超时，但是任务执行成功了，则扔回去一个成功回复。而如果执行失败，就不再扔回去失败回复了。
 			//反正已经是扣除失败次数了
 			if ok {
-				e.jobResponseCh <- jobResponse
-			} else if !ok && jobResponse.Result.Ok {
-				e.statisticsService.OnOverTimeTaskExecuteSuccess(jobRequest, jobResponse)
-				e.jobResponseCh <- jobResponse
+				executeSpan.End()
+				if doTrace {
+					_, pushResponseChanSpan = e.tracer.Start(workCtx, "pushResponseChan")
+					e.jobResponseCh <- jobResponse
+					pushResponseChanSpan.End()
+				}
+			} else {
+				if doTrace {
+					executeSpan.RecordError(errors.New("execute overtime"))
+					executeSpan.End()
+				}
+				if jobResponse.Result.Ok {
+					e.statisticsService.OnOverTimeTaskExecuteSuccess(jobRequest, jobResponse)
+					if doTrace {
+						_, pushResponseChanSpan = e.tracer.Start(workCtx, "pushResponseChan")
+						e.jobResponseCh <- jobResponse
+						pushResponseChanSpan.End()
+					}
+				}
 			}
 
 			klog.Tracef("worker execute job finished:%+v", jobResponse)
+			if doTrace {
+				workSpan.End()
+			}
 		}
 	}
 }

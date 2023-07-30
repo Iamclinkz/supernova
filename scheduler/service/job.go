@@ -60,9 +60,9 @@ func (s *JobService) AddJobs(ctx context.Context, jobs []*model.Job) error {
 	return nil
 }
 
-func (s *JobService) FindJobByName(ctx context.Context, name string) (*model.Job, error) {
-	return s.scheduleOperator.FindJobByName(ctx, name)
-}
+//func (s *JobService) FindJobByName(ctx context.Context, name string) (*model.Job, error) {
+//	return s.scheduleOperator.FindJobByName(ctx, name)
+//}
 
 func (s *JobService) DeleteJob(ctx context.Context, jobID uint) error {
 	if err := s.scheduleOperator.DeleteJobFromID(ctx, jobID); err != nil {

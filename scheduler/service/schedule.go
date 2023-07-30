@@ -3,6 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+	"strconv"
 	"supernova/pkg/api"
 	"supernova/pkg/util"
 	"supernova/scheduler/constance"
@@ -28,12 +33,14 @@ type ScheduleService struct {
 	jobResponseTaskCh     chan *api.RunJobResponse
 	wg                    sync.WaitGroup
 	workerCount           int
+	enableOTel            bool
+	tracer                trace.Tracer
 }
 
 func NewScheduleService(statisticsService *StatisticsService,
 	jobService *JobService, triggerService *TriggerService, onFireService *OnFireService,
 	executorSelectService *ExecutorRouteService,
-	workerCount int, executorManageService *ExecutorManageService) *ScheduleService {
+	workerCount int, executorManageService *ExecutorManageService, enableOTel bool) *ScheduleService {
 	tw, _ := util.NewTimeWheel(time.Millisecond*200, 512, util.TickSafeMode())
 	ret := &ScheduleService{
 		stopCh:                make(chan struct{}),
@@ -50,6 +57,10 @@ func NewScheduleService(statisticsService *StatisticsService,
 		jobResponseTaskCh:   make(chan *api.RunJobResponse, workerCount*20),
 		wg:                  sync.WaitGroup{},
 		workerCount:         workerCount,
+		enableOTel:          enableOTel,
+	}
+	if enableOTel {
+		ret.tracer = otel.Tracer("ScheduleTracer")
 	}
 	ret.executorManageService.RegisterReceiveMsgNotifyFunc(ret.onReceiveJobResponse)
 	return ret
@@ -123,21 +134,51 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 		return err
 	}
 
+	//确认fire了，搞一个trace
+	var (
+		span     trace.Span
+		traceCtx context.Context
+	)
+
+	if s.enableOTel {
+		//如果是第一次执行，或者onFireLog中没有Trace信息，那么我们搞一个Trace信息
+		if !retry || onFireLog.TraceContext == "" {
+			traceAttrs := []attribute.KeyValue{
+				attribute.String("onFireID", strconv.Itoa(int(onFireLog.ID))),
+			}
+			traceCtx, span = s.tracer.Start(context.Background(), "fire", trace.WithAttributes(traceAttrs...))
+			onFireLog.TraceContext = util.TraceCtx2String(traceCtx)
+		} else {
+			parentCtx := util.String2TraceCtx(onFireLog.TraceContext)
+			traceCtx, span = s.tracer.Start(parentCtx, "redo fire")
+		}
+	}
+
 	//更新db中的onFireLog的状态，以及ExecutorInstance实例信息
 	onFireLog.ExecutorInstance = executorWrapper.ServiceData.InstanceId
 	onFireLog.Status = constance.OnFireStatusExecuting
-	if err = s.onFireService.UpdateOnFireLogExecutorStatus(context.TODO(), onFireLog, retry); err != nil {
+
+	if err = s.onFireService.UpdateOnFireLogExecutorStatus(context.TODO(), onFireLog); err != nil {
+		if s.enableOTel {
+			span.RecordError(fmt.Errorf("fail to update on fire log executor status:%v", err))
+			span.End()
+		}
 		return errors.New("update on fire log status fail:" + err.Error())
 	}
 
-	if err = executorWrapper.Operator.RunJob(model.GenRunJobRequest(onFireLog, job)); err != nil {
+	if err = executorWrapper.Operator.RunJob(model.GenRunJobRequest(onFireLog, job, util.GenTraceContext(traceCtx))); err != nil {
 		//如果执行出错，说明是流错误。不扣除RetryCount。等下次再执行
+		span.RecordError(fmt.Errorf("fail to run job:%v", err))
+		span.End()
 		return errors.New("run job fail:" + err.Error())
 	}
 	return nil
 }
 
 func (s *ScheduleService) handleRunJobResponse(response *api.RunJobResponse) {
+	_, mySpan := util.NewSpanFromTraceContext("handleRunJobResponse", s.tracer, response.TraceContext)
+	defer mySpan.End()
+
 	if !response.Result.Ok {
 		//如果执行出现了错误，那么需要扣除RetryCount，并且根据总重试次数，和当前重试次数更新下次的执行时间。
 		//这里的思考是这样的：
@@ -149,6 +190,7 @@ func (s *ScheduleService) handleRunJobResponse(response *api.RunJobResponse) {
 		_ = s.onFireService.UpdateOnFireLogFail(context.TODO(), uint(response.OnFireLogID), response.Result.Err)
 		klog.Debugf("Receive from executor, [onFireLog:%v] execute failed, error:%v",
 			response.OnFireLogID, response.Result.Err)
+		mySpan.RecordError(fmt.Errorf("fail to run job:%v", response.Result))
 		return
 	}
 

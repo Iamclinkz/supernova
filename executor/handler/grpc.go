@@ -3,8 +3,11 @@ package handler
 import (
 	"context"
 	"errors"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	"supernova/executor/service"
 	"supernova/pkg/api"
+	"supernova/pkg/util"
 	"sync"
 	"sync/atomic"
 
@@ -15,13 +18,23 @@ type GrpcHandler struct {
 	executeService    *service.ExecuteService
 	statisticsService *service.StatisticsService
 	gracefulStopped   atomic.Bool
+	enableOTel        bool
+	tracer            trace.Tracer
 }
 
-func NewGrpcHandler(executeService *service.ExecuteService, statisticsService *service.StatisticsService) *GrpcHandler {
-	return &GrpcHandler{
+func NewGrpcHandler(executeService *service.ExecuteService,
+	statisticsService *service.StatisticsService, enableOTel bool) *GrpcHandler {
+	ret := &GrpcHandler{
 		executeService:    executeService,
 		statisticsService: statisticsService,
+		enableOTel:        enableOTel,
 	}
+
+	if enableOTel {
+		ret.tracer = otel.Tracer("GrpcTracer")
+	}
+
+	return ret
 }
 
 // HeartBeat implements the ExecutorImpl interface.
@@ -52,9 +65,15 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 				wg.Done()
 				return
 			}
-
 			e.statisticsService.OnReceiveRunJobRequest(req)
+
+			doTrace := len(req.TraceContext) != 0 && e.enableOTel
+			var pushJobRequestChSpan trace.Span
+			if doTrace {
+				_, pushJobRequestChSpan = util.NewSpanFromTraceContext("executorWork", e.tracer, req.TraceContext)
+			}
 			e.executeService.PushJobRequest(req)
+			pushJobRequestChSpan.End()
 		}
 	}()
 
@@ -73,8 +92,16 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 				return
 			}
 
+			doTrace := len(resp.TraceContext) != 0 && e.enableOTel
+			var streamSendSpan trace.Span
+			if doTrace {
+				_, streamSendSpan = util.NewSpanFromTraceContext("executorWork", e.tracer, resp.TraceContext)
+			}
+
 			connError = stream.Send(resp)
 			if connError != nil {
+				streamSendSpan.RecordError(connError)
+				streamSendSpan.End()
 				//再把这个JobResult扔回去，让别的Scheduler发送
 				e.executeService.PushJobResponse(resp)
 				stop.Store(true)
@@ -82,6 +109,7 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 				return
 			}
 
+			streamSendSpan.End()
 			e.statisticsService.OnSendRunJobResponseSuccess(resp)
 		}
 	}()

@@ -7,6 +7,7 @@
 package app
 
 import (
+	"github.com/kitex-contrib/obs-opentelemetry/provider"
 	"supernova/pkg/discovery"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/service"
@@ -14,14 +15,14 @@ import (
 
 // Injectors from wire.go:
 
-func genScheduler(scheduleOperator schedule_operator.Operator, client discovery.ExecutorDiscoveryClient, schedulerWorkerCount int) (*Scheduler, error) {
-	statisticsService := service.NewStatisticsService()
+func genScheduler(instanceID string, enableTrace bool, traceProvider provider.OtelProvider, scheduleOperator schedule_operator.Operator, client discovery.ExecutorDiscoveryClient, schedulerWorkerCount int) (*Scheduler, error) {
+	statisticsService := service.NewStatisticsService(instanceID, enableTrace)
 	jobService := service.NewJobService(scheduleOperator, statisticsService)
 	triggerService := service.NewTriggerService(scheduleOperator, statisticsService)
 	onFireService := service.NewOnFireService(scheduleOperator, statisticsService)
 	executorManageService := service.NewExecutorManageService(statisticsService, client)
 	executorRouteService := service.NewExecutorRouteService(executorManageService)
-	scheduleService := service.NewScheduleService(statisticsService, jobService, triggerService, onFireService, executorRouteService, schedulerWorkerCount, executorManageService)
-	scheduler := newSchedulerInner(scheduleOperator, scheduleService, statisticsService, executorRouteService, executorManageService, jobService, triggerService, onFireService)
+	scheduleService := service.NewScheduleService(statisticsService, jobService, triggerService, onFireService, executorRouteService, schedulerWorkerCount, executorManageService, enableTrace)
+	scheduler := newSchedulerInner(instanceID, traceProvider, enableTrace, scheduleOperator, scheduleService, statisticsService, executorRouteService, executorManageService, jobService, triggerService, onFireService)
 	return scheduler, nil
 }

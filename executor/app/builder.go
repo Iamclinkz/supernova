@@ -2,9 +2,13 @@ package app
 
 import (
 	"errors"
+	"github.com/kitex-contrib/obs-opentelemetry/provider"
 	"strconv"
 	"supernova/executor/processor"
+	"supernova/pkg/conf"
+	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
+	"supernova/pkg/session/trace"
 )
 
 type ExecutorBuilder struct {
@@ -15,6 +19,7 @@ type ExecutorBuilder struct {
 	processorCount  int
 	discoveryClient discovery.ExecutorDiscoveryClient
 	extraConf       map[string]string
+	oTelProvider    provider.OtelProvider
 	err             error
 }
 
@@ -126,6 +131,11 @@ func (b *ExecutorBuilder) WithProcessorCount(count int) *ExecutorBuilder {
 	return b
 }
 
+func (b *ExecutorBuilder) WithTraceProvider(instrumentConf *conf.OTelConf) *ExecutorBuilder {
+	b.oTelProvider = trace.InitProvider(constance.SchedulerServiceName, instrumentConf)
+	return b
+}
+
 func (b *ExecutorBuilder) Build() (*Executor, error) {
 	if b.err != nil {
 		return nil, b.err
@@ -151,5 +161,6 @@ func (b *ExecutorBuilder) Build() (*Executor, error) {
 		return nil, errors.New("no selected service discovery")
 	}
 
-	return genExecutor(b.instanceID, b.tags, b.processor, b.serveConf, b.processorCount, b.discoveryClient, b.extraConf)
+	return genExecutor(b.instanceID, b.oTelProvider == nil, b.oTelProvider, b.tags,
+		b.processor, b.serveConf, b.processorCount, b.discoveryClient, b.extraConf)
 }

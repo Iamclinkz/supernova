@@ -1,20 +1,19 @@
 package model
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/google/btree"
 	"strings"
 	"supernova/pkg/api"
 	"supernova/scheduler/constance"
 	"time"
-
-	"gorm.io/gorm"
 )
 
 // OnFireLog 表示一次trigger的执行
 type OnFireLog struct {
 	//任务执行阶段取
-	gorm.Model
+	ID                uint
+	UpdatedAt         time.Time
 	TriggerID         uint                   `gorm:"column:trigger_id;not null;"`
 	JobID             uint                   `gorm:"column:job_id;not null;"`
 	Status            constance.OnFireStatus `gorm:"column:status;type:tinyint(4);not null"`
@@ -22,10 +21,10 @@ type OnFireLog struct {
 	LeftTryCount      int                    `gorm:"column:left_try_count"`         //剩余的重试次数
 	ExecutorInstance  string                 `gorm:"column:executor_instance"`      //上一个执行的Executor的InstanceID
 	RedoAt            time.Time              `gorm:"column:redo_at;not null;index"` //超时时间
-	ParamToDB         string                 `gorm:"column:param"`
 	Param             map[string]string      `gorm:"-"`
 	FailRetryInterval time.Duration          `gorm:"column:fail_retry_interval"` //失败重试间隔，为0则立刻重试
 	AtLeastOnce       bool                   `gorm:"column:at_least_once"`       //语义，至少一次。如果为false，则为至多一次
+	TraceContext      string                 `gorm:"trace_context"`              //trace相关
 
 	//任务结束阶段使用
 	Success bool   `gorm:"success"`
@@ -36,13 +35,10 @@ type OnFireLog struct {
 	ExecuteTimeout time.Duration
 }
 
-func (o *OnFireLog) TableName() string {
-	return "t_on_fire"
-}
-
-func GenRunJobRequest(onFireLog *OnFireLog, job *Job) *api.RunJobRequest {
+func GenRunJobRequest(onFireLog *OnFireLog, job *Job, traceContext map[string]string) *api.RunJobRequest {
 	return &api.RunJobRequest{
-		OnFireLogID: uint32(onFireLog.ID),
+		OnFireLogID:  uint32(onFireLog.ID),
+		TraceContext: traceContext,
 		Job: &api.Job{
 			GlueType:                 job.GlueType,
 			Source:                   job.GlueSource,
@@ -50,41 +46,6 @@ func GenRunJobRequest(onFireLog *OnFireLog, job *Job) *api.RunJobRequest {
 			ExecutorExecuteTimeoutMs: onFireLog.ExecuteTimeout.Milliseconds(),
 		},
 	}
-}
-
-func (o *OnFireLog) BeforeCreate(tx *gorm.DB) error {
-	return o.prepareParam()
-}
-
-func (o *OnFireLog) BeforeUpdate(tx *gorm.DB) error {
-	return o.prepareParam()
-}
-
-func (o *OnFireLog) AfterFind(tx *gorm.DB) error {
-	return o.parseParam()
-}
-
-func (o *OnFireLog) prepareParam() error {
-	if o.Param != nil && len(o.Param) != 0 {
-		jsonData, err := json.Marshal(o.Param)
-		if err != nil {
-			return err
-		}
-		o.ParamToDB = string(jsonData)
-	}
-	return nil
-}
-
-func (o *OnFireLog) parseParam() error {
-	if o.ParamToDB != "" {
-		var paramMap map[string]string
-		err := json.Unmarshal([]byte(o.ParamToDB), &paramMap)
-		if err != nil {
-			return err
-		}
-		o.Param = paramMap
-	}
-	return nil
 }
 
 func OnFireLogsToString(onFireLogs []*OnFireLog) string {
@@ -97,8 +58,9 @@ func OnFireLogsToString(onFireLogs []*OnFireLog) string {
 }
 
 func (o *OnFireLog) String() string {
-	return fmt.Sprintf("OnFireLog(Model=%v, TriggerID=%d, JobID=%d, Status=%s, TryCount=%d, LeftTryCount=%d, ExecutorInstance=%s, RedoAt=%v, Param=%v, Success=%t, Result=%s, ShouldFireAt=%v, ExecuteTimeout=%v)",
-		o.Model,
+	return fmt.Sprintf("OnFireLog(ID=%v, UpdatedAt=%v, TriggerID=%d, JobID=%d, Status=%s, TryCount=%d, LeftTryCount=%d, ExecutorInstance=%s, RedoAt=%v, Param=%v, Success=%t, Result=%s, ShouldFireAt=%v, ExecuteTimeout=%v)",
+		o.ID,
+		o.UpdatedAt,
 		o.TriggerID,
 		o.JobID,
 		o.Status,
@@ -118,4 +80,8 @@ func (o *OnFireLog) String() string {
 // 旧超时时间 +  （经过了几次超时+1） * 用户指定的重试间隔 + 用户指定的Task最大执行时间
 func (o *OnFireLog) GetNextRedoAt() time.Time {
 	return o.RedoAt.Add(time.Duration(o.TryCount-o.LeftTryCount+1)*o.FailRetryInterval + o.ExecuteTimeout)
+}
+
+func (o *OnFireLog) Less(than btree.Item) bool {
+	return o.RedoAt.Before(than.(*OnFireLog).RedoAt)
 }

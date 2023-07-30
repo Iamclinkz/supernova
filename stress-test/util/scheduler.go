@@ -13,7 +13,11 @@ func StartSchedulers(count int) []*app.Scheduler {
 	ret := make([]*app.Scheduler, 0, count)
 	for i := 0; i <= count; i++ {
 		builder := app.NewSchedulerBuilder()
-		scheduler, err := builder.WithMysqlStore(DevMysqlConfig).WithConsulDiscovery(DevConsulHost, DevConsulPort).Build()
+		scheduler, err := builder.WithMysqlStore(DevMysqlConfig).
+			WithConsulDiscovery(DevConsulHost, DevConsulPort).
+			WithInstanceID("Test-Scheduler-" + strconv.Itoa(i)).
+			Build()
+		
 		if err != nil {
 			panic(err)
 		}

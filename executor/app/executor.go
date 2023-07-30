@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/kitex-contrib/obs-opentelemetry/provider"
 	"os"
 	"os/signal"
 	"supernova/executor/exporter"
@@ -23,6 +24,10 @@ type Executor struct {
 	processorCount int
 	extraConf      map[string]string
 
+	//trace
+	enableOTel   bool
+	OTelProvider provider.OtelProvider
+
 	//discovery
 	discoveryClient discovery.ExecutorDiscoveryClient
 
@@ -37,6 +42,8 @@ type Executor struct {
 
 func newExecutorInner(
 	instanceID string,
+	enableOTel bool,
+	provider provider.OtelProvider,
 	tags []string,
 	processor map[string]processor.JobProcessor,
 	serveConf *discovery.ExecutorServiceServeConf,
@@ -54,6 +61,8 @@ func newExecutorInner(
 		tags:              tags,
 		processor:         processor,
 		serveConf:         serveConf,
+		enableOTel:        enableOTel,
+		OTelProvider:      provider,
 		extraConf:         extraConf,
 		processorCount:    processorCount,
 		discoveryClient:   discoveryClient,

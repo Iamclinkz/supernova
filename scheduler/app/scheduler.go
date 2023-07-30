@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"github.com/kitex-contrib/obs-opentelemetry/provider"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/service"
 
@@ -8,6 +10,13 @@ import (
 )
 
 type Scheduler struct {
+	//config
+	instanceID string //for debug
+
+	//openTelemetry
+	enableOTel    bool
+	traceProvider provider.OtelProvider
+
 	//operator
 	jobOperator schedule_operator.Operator
 
@@ -22,6 +31,13 @@ type Scheduler struct {
 }
 
 func newSchedulerInner(
+	//config
+	instanceID string,
+
+	//trace
+	traceProvider provider.OtelProvider,
+	enableOTel bool,
+
 	//operator
 	jobOperator schedule_operator.Operator,
 	//service
@@ -34,6 +50,9 @@ func newSchedulerInner(
 	onFireService *service.OnFireService,
 ) *Scheduler {
 	return &Scheduler{
+		instanceID:    instanceID,
+		enableOTel:    enableOTel,
+		traceProvider: traceProvider,
 		//operator
 		jobOperator: jobOperator,
 
@@ -57,6 +76,11 @@ func (s *Scheduler) Start() {
 func (s *Scheduler) Stop() {
 	s.scheduleService.Stop()
 	s.manageService.Stop()
+	if s.enableOTel {
+		if err := s.traceProvider.Shutdown(context.TODO()); err != nil {
+			klog.Errorf("stop oTelProvider error:%v", err)
+		}
+	}
 	klog.Info("Scheduler stopped")
 }
 

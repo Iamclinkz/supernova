@@ -2,16 +2,24 @@ package app
 
 import (
 	"errors"
+	"fmt"
+	"github.com/google/uuid"
+	"github.com/kitex-contrib/obs-opentelemetry/provider"
 	"supernova/pkg/conf"
+	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
+	"supernova/pkg/session/trace"
 	"supernova/scheduler/dal"
 	"supernova/scheduler/operator/schedule_operator"
+	"supernova/scheduler/operator/schedule_operator/mysql_operator"
 )
 
 type SchedulerBuilder struct {
+	instanceID           string
 	scheduleOperator     schedule_operator.Operator
 	discoveryClient      discovery.ExecutorDiscoveryClient
 	schedulerWorkerCount int
+	oTelProvider         provider.OtelProvider
 	err                  error
 }
 
@@ -50,12 +58,17 @@ func (b *SchedulerBuilder) WithMysqlStore(config *conf.MysqlConf) *SchedulerBuil
 	if err != nil && b.err == nil {
 		b.err = err
 	} else {
-		b.scheduleOperator, err = schedule_operator.NewMysqlScheduleOperator(mysqlCli)
+		b.scheduleOperator, err = mysql_operator.NewMysqlScheduleOperator(mysqlCli)
 		if err != nil && b.err == nil {
 			b.err = err
 		}
 	}
 
+	return b
+}
+
+func (b *SchedulerBuilder) WithMemoryStore() *SchedulerBuilder {
+	b.scheduleOperator = schedule_operator.NewMemoryScheduleOperator()
 	return b
 }
 
@@ -66,6 +79,21 @@ func (b *SchedulerBuilder) WithSchedulerWorkerCount(count int) *SchedulerBuilder
 		b.schedulerWorkerCount = count
 	}
 
+	return b
+}
+
+func (b *SchedulerBuilder) WithInstanceID(instanceID string) *SchedulerBuilder {
+	if instanceID == "" {
+		b.err = errors.New("empty instanceID")
+	} else {
+		b.instanceID = instanceID
+	}
+
+	return b
+}
+
+func (b *SchedulerBuilder) WithTraceProvider(instrumentConf *conf.OTelConf) *SchedulerBuilder {
+	b.oTelProvider = trace.InitProvider(constance.SchedulerServiceName, instrumentConf)
 	return b
 }
 
@@ -82,6 +110,10 @@ func (b *SchedulerBuilder) Build() (*Scheduler, error) {
 	if b.schedulerWorkerCount == 0 {
 		b.schedulerWorkerCount = 512
 	}
+	if b.instanceID == "" {
+		b.instanceID = fmt.Sprintf("Scheduler-%v", uuid.New())
+	}
 
-	return genScheduler(b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)
+	return genScheduler(b.instanceID, b.oTelProvider == nil, b.oTelProvider, b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)
+	//return nil, nil
 }

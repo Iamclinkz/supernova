@@ -1,15 +1,28 @@
 package service
 
 import (
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	"supernova/pkg/util"
 	"time"
 )
 
 type StatisticsService struct {
+	instanceID string
+	enableOTel bool
+	tracer     trace.Tracer
 }
 
-func NewStatisticsService() *StatisticsService {
-	return &StatisticsService{}
+func NewStatisticsService(instanceID string, enableOTel bool) *StatisticsService {
+	ret := &StatisticsService{
+		instanceID: instanceID,
+		enableOTel: enableOTel,
+	}
+	if enableOTel {
+		ret.tracer = otel.Tracer("StatisticTracer")
+	}
+
+	return ret
 }
 
 func (s *StatisticsService) GetHandleTriggerDuration() time.Duration {

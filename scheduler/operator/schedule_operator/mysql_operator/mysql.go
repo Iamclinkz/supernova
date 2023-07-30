@@ -1,4 +1,4 @@
-package schedule_operator
+package mysql_operator
 
 import (
 	"context"
@@ -8,19 +8,21 @@ import (
 	"supernova/scheduler/constance"
 	"supernova/scheduler/dal"
 	"supernova/scheduler/model"
+	"supernova/scheduler/operator/schedule_operator"
+	"supernova/scheduler/operator/schedule_operator/mysql_operator/dao"
 	"time"
 
 	"gorm.io/gorm"
 )
 
-var _ Operator = (*MysqlOperator)(nil)
+var _ schedule_operator.Operator = (*MysqlOperator)(nil)
 
 type MysqlOperator struct {
 	db             *dal.MysqlClient
-	emptyJob       *model.Job
-	emptyTrigger   *model.Trigger
-	emptyOnFireLog *model.OnFireLog
-	emptyLock      *model.Lock
+	emptyJob       *dao.Job
+	emptyTrigger   *dao.Trigger
+	emptyOnFireLog *dao.OnFireLog
+	emptyLock      *dao.Lock
 }
 
 var (
@@ -30,10 +32,10 @@ var (
 func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
 	ret := &MysqlOperator{
 		db:             cli,
-		emptyOnFireLog: &model.OnFireLog{},
-		emptyTrigger:   &model.Trigger{},
-		emptyJob:       &model.Job{},
-		emptyLock:      &model.Lock{},
+		emptyOnFireLog: &dao.OnFireLog{},
+		emptyTrigger:   &dao.Trigger{},
+		emptyJob:       &dao.Job{},
+		emptyLock:      &dao.Lock{},
 	}
 	//todo 测试用，记得删掉
 	cli.DB().Migrator().DropTable(ret.emptyTrigger)
@@ -59,22 +61,27 @@ func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
 	}
 
 	//初始化锁结构
-	cli.DB().Create(&model.Lock{LockName: constance.FetchUpdateMarkTriggerLockName})
+	cli.DB().Create(&dao.Lock{LockName: constance.FetchUpdateMarkTriggerLockName})
 	return ret, nil
 }
 
 func (m *MysqlOperator) UpdateOnFireLogRedoAt(ctx context.Context, onFireLog *model.OnFireLog) error {
-	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	db, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
-		tx = m.db.DB()
+		db = m.db.DB()
 	}
 
-	result := tx.Model(onFireLog).
-		Where("id = ?", onFireLog.ID).
+	dOnFireLog, err := dao.FromModelOnFireLog(onFireLog)
+	if err != nil {
+		return err
+	}
+
+	result := db.Model(dOnFireLog).
+		Where("id = ?", dOnFireLog.ID).
 		Where("status != ?", constance.OnFireStatusFinished).
-		Where("updated_at = ?", onFireLog.UpdatedAt).
+		Where("updated_at = ?", dOnFireLog.UpdatedAt).
 		Updates(map[string]interface{}{
-			"redo_at": onFireLog.RedoAt,
+			"redo_at": dOnFireLog.RedoAt,
 		})
 
 	if result.Error != nil {
@@ -82,37 +89,52 @@ func (m *MysqlOperator) UpdateOnFireLogRedoAt(ctx context.Context, onFireLog *mo
 	}
 
 	if result.RowsAffected == 0 {
-		return ErrNotFound
+		return schedule_operator.ErrNotFound
 	}
 
 	return nil
 }
 
 func (m *MysqlOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time) ([]*model.OnFireLog, error) {
-	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	db, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
-		tx = m.db.DB()
+		db = m.db.DB()
 	}
 
-	var logs []*model.OnFireLog
-
-	err := tx.Select("id, trigger_id, job_id, executor_instance, param,redo_at,updated_at").
-		Where("redo_at > ? AND redo_at < ?", noEarlyThan, noLaterThan).
-		Where("status != ? ", constance.OnFireStatusFinished).
+	var dOnFireLogs []*dao.OnFireLog
+	err := db.Model(&dao.OnFireLog{}).
+		Select("id, trigger_id, job_id, executor_instance, param, redo_at, updated_at,trace_context").
+		Where("redo_at BETWEEN ? AND ?", noEarlyThan, noLaterThan).
+		Where("status != ?", constance.OnFireStatusFinished).
 		Where("left_try_count > 0").
-		Limit(maxCount).Find(&logs).Error
-	return logs, err
+		Limit(maxCount).
+		Find(&dOnFireLogs).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	onFireLogs := make([]*model.OnFireLog, len(dOnFireLogs))
+	for i, dOnFireLog := range dOnFireLogs {
+		onFireLog, err := dao.ToModelOnFireLog(dOnFireLog)
+		if err != nil {
+			return nil, err
+		}
+		onFireLogs[i] = onFireLog
+	}
+
+	return onFireLogs, nil
 }
 
 func (m *MysqlOperator) UpdateOnFireLogStop(ctx context.Context, onFireLogID uint, msg string) error {
-	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	db, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
-		tx = m.db.DB()
+		db = m.db.DB()
 	}
 
 	// 更新满足条件的记录
-	return tx.Model(&model.OnFireLog{}).
-		Where("id = ? AND status != ?", onFireLogID, constance.OnFireStatusFinished).
+	return db.Model(&dao.OnFireLog{}).
+		Where("id = ?", onFireLogID).
 		Updates(map[string]interface{}{
 			"status":  constance.OnFireStatusFinished,
 			"result":  msg,
@@ -121,13 +143,13 @@ func (m *MysqlOperator) UpdateOnFireLogStop(ctx context.Context, onFireLogID uin
 }
 
 func (m *MysqlOperator) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID uint, result string) error {
-	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	db, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
-		tx = m.db.DB()
+		db = m.db.DB()
 	}
 
 	// 更新满足条件的记录
-	return tx.Model(&model.OnFireLog{}).
+	return db.Model(&dao.OnFireLog{}).
 		Where("id = ? AND status != ?", onFireLogID, constance.OnFireStatusFinished).
 		Updates(map[string]interface{}{
 			"success": true,
@@ -138,13 +160,13 @@ func (m *MysqlOperator) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID 
 }
 
 func (m *MysqlOperator) UpdateOnFireLogFail(ctx context.Context, onFireLogID uint, errorMsg string) error {
-	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	db, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
-		tx = m.db.DB()
+		db = m.db.DB()
 	}
 
 	// 更新满足条件的记录
-	return tx.Model(&model.OnFireLog{}).
+	return db.Model(&dao.OnFireLog{}).
 		Where("id = ? AND status != ? AND left_try_count > 0", onFireLogID, constance.OnFireStatusFinished).
 		Updates(map[string]interface{}{
 			"left_try_count": reduceRedoAtExpr,
@@ -152,30 +174,44 @@ func (m *MysqlOperator) UpdateOnFireLogFail(ctx context.Context, onFireLogID uin
 		}).Error
 }
 
-func (m *MysqlOperator) FindOnFireLogByJobID(ctx context.Context, jobID uint) ([]*model.OnFireLog, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MysqlOperator) FetchOnFireLogByID(ctx context.Context, jobID uint) (*model.OnFireLog, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MysqlOperator) FindOnFireLogByTriggerID(ctx context.Context, triggerID uint) ([]*model.OnFireLog, error) {
-	//TODO implement me
-	panic("implement me")
-}
+//func (m *MysqlOperator) FindOnFireLogByJobID(ctx context.Context, jobID uint) ([]*model.OnFireLog, error) {
+//	//TODO implement me
+//	panic("implement me")
+//}
+//
+//func (m *MysqlOperator) FetchOnFireLogByID(ctx context.Context, jobID uint) (*model.OnFireLog, error) {
+//	//TODO implement me
+//	panic("implement me")
+//}
+//
+//func (m *MysqlOperator) FindOnFireLogByTriggerID(ctx context.Context, triggerID uint) ([]*model.OnFireLog, error) {
+//	//TODO implement me
+//	panic("implement me")
+//}
 
 func (m *MysqlOperator) InsertJobs(ctx context.Context, jobs []*model.Job) error {
-	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	db, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
-		tx = m.db.DB()
+		db = m.db.DB()
 	}
 
-	err := tx.Create(jobs).Error
+	dJobs := make([]*dao.Job, len(jobs))
+	for i, job := range jobs {
+		dJob, err := dao.FromModelJob(job)
+		if err != nil {
+			return err
+		}
+		dJobs[i] = dJob
+	}
+
+	err := db.Create(dJobs).Error
 	if err != nil {
-		return fmt.Errorf("failed to insert job: %w", err)
+		return fmt.Errorf("failed to insert jobs: %w", err)
+	}
+
+	for i, dJob := range dJobs {
+		jobs[i].ID = dJob.ID
+		jobs[i].UpdatedAt = dJob.UpdatedAt
 	}
 
 	return nil
@@ -191,7 +227,7 @@ func (m *MysqlOperator) FindJobByName(ctx context.Context, jobName string) (*mod
 	err := db.Where("job_name = ?", jobName).Find(job).Error
 
 	if job.ID == 0 || err == gorm.ErrRecordNotFound {
-		return nil, ErrNotFound
+		return nil, schedule_operator.ErrNotFound
 	}
 
 	if err != nil {
@@ -202,14 +238,28 @@ func (m *MysqlOperator) FindJobByName(ctx context.Context, jobName string) (*mod
 }
 
 func (m *MysqlOperator) InsertTriggers(ctx context.Context, triggers []*model.Trigger) error {
-	tx, ok := ctx.Value(transactionKey).(*gorm.DB)
+	db, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
-		tx = m.db.DB()
+		db = m.db.DB()
 	}
 
-	err := tx.Create(triggers).Error
+	dTriggers := make([]*dao.Trigger, len(triggers))
+	for i, trigger := range triggers {
+		dTrigger, err := dao.FromModelTrigger(trigger)
+		if err != nil {
+			return err
+		}
+		dTriggers[i] = dTrigger
+	}
+
+	err := db.Create(dTriggers).Error
 	if err != nil {
-		return fmt.Errorf("failed to insert trigger: %w", err)
+		return fmt.Errorf("failed to insert triggers: %w", err)
+	}
+
+	for i, dTrigger := range dTriggers {
+		triggers[i].ID = dTrigger.ID
+		triggers[i].UpdatedAt = dTrigger.UpdatedAt
 	}
 
 	return nil
@@ -221,13 +271,18 @@ func (m *MysqlOperator) FindTriggerByName(ctx context.Context, triggerName strin
 		db = m.db.DB()
 	}
 
-	trigger := new(model.Trigger)
-	err := db.Where("trigger_name = ?", triggerName).Find(trigger).Error
+	dTrigger := new(dao.Trigger)
+	err := db.Where("name = ?", triggerName).Find(dTrigger).Error
 
-	if trigger.ID == 0 || err == gorm.ErrRecordNotFound {
-		return nil, ErrNotFound
+	if dTrigger.ID == 0 || err == gorm.ErrRecordNotFound {
+		return nil, schedule_operator.ErrNotFound
 	}
 
+	if err != nil {
+		return nil, err
+	}
+
+	trigger, err := dao.ToModelTrigger(dTrigger)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +296,7 @@ func (m *MysqlOperator) Lock(ctx context.Context, lockName string) error {
 		tx = m.db.DB()
 	}
 
-	var lock model.Lock
+	var lock dao.Lock
 	return tx.Raw("SELECT * FROM t_lock WHERE lock_name = ? FOR UPDATE", lockName).Scan(&lock).Error
 }
 
@@ -251,10 +306,10 @@ func (m *MysqlOperator) DeleteTriggerFromID(ctx context.Context, triggerID uint)
 		tx = m.db.DB()
 	}
 
-	if result := tx.Unscoped().Where("id = ?", triggerID).Delete(m.emptyTrigger); result.Error != nil {
+	if result := tx.Unscoped().Where("id = ?", triggerID).Delete(&dao.Trigger{}); result.Error != nil {
 		return result.Error
 	} else if result.RowsAffected == 0 {
-		return fmt.Errorf("no triggerID:%v", triggerID)
+		return fmt.Errorf("no triggerID: %v", triggerID)
 	}
 
 	return nil
@@ -295,11 +350,20 @@ func (m *MysqlOperator) FetchRecentTriggers(ctx context.Context, maxCount int, n
 		db = m.db.DB()
 	}
 
-	var triggers []*model.Trigger
+	var dTriggers []*dao.Trigger
 	err := db.Where("trigger_next_time BETWEEN ? AND ?", noEarlyThan, noLaterThan).
-		Where("status = ?", constance.TriggerStatusNormal).Limit(maxCount).Find(&triggers).Error
+		Where("status = ?", constance.TriggerStatusNormal).Limit(maxCount).Find(&dTriggers).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch triggers: %w", err)
+	}
+
+	triggers := make([]*model.Trigger, len(dTriggers))
+	for i, dTrigger := range dTriggers {
+		trigger, err := dao.ToModelTrigger(dTrigger)
+		if err != nil {
+			return nil, err
+		}
+		triggers[i] = trigger
 	}
 
 	return triggers, nil
@@ -311,7 +375,16 @@ func (m *MysqlOperator) UpdateTriggers(ctx context.Context, triggers []*model.Tr
 		db = m.db.DB()
 	}
 
-	err := db.Save(triggers).Error
+	dTriggers := make([]*dao.Trigger, len(triggers))
+	for i, trigger := range triggers {
+		dTrigger, err := dao.FromModelTrigger(trigger)
+		if err != nil {
+			return err
+		}
+		dTriggers[i] = dTrigger
+	}
+
+	err := db.Save(dTriggers).Error
 	if err != nil {
 		return fmt.Errorf("failed to update triggers: %w", err)
 	}
@@ -325,9 +398,23 @@ func (m *MysqlOperator) InsertOnFires(ctx context.Context, onFires []*model.OnFi
 		db = m.db.DB()
 	}
 
-	err := db.Create(onFires).Error
+	dOnFires := make([]*dao.OnFireLog, len(onFires))
+	for i, onFire := range onFires {
+		dOnFire, err := dao.FromModelOnFireLog(onFire)
+		if err != nil {
+			return err
+		}
+		dOnFires[i] = dOnFire
+	}
+
+	err := db.Create(dOnFires).Error
 	if err != nil {
 		return fmt.Errorf("failed to insert on_fire record: %w", err)
+	}
+
+	for i, dOnFire := range dOnFires {
+		onFires[i].ID = dOnFire.ID
+		onFires[i].UpdatedAt = dOnFire.UpdatedAt
 	}
 
 	return nil
@@ -352,13 +439,18 @@ func (m *MysqlOperator) FetchJobFromID(ctx context.Context, jobID uint) (*model.
 		db = m.db.DB()
 	}
 
-	job := new(model.Job)
-	err := db.Where("id = ?", jobID).Find(job).Error
+	dJob := new(dao.Job)
+	err := db.Where("id = ?", jobID).Find(dJob).Error
 
-	if job.ID == 0 || err == gorm.ErrRecordNotFound {
-		return nil, ErrNotFound
+	if dJob.ID == 0 || err == gorm.ErrRecordNotFound {
+		return nil, schedule_operator.ErrNotFound
 	}
 
+	if err != nil {
+		return nil, err
+	}
+
+	job, err := dao.ToModelJob(dJob)
 	if err != nil {
 		return nil, err
 	}
@@ -383,17 +475,24 @@ func (m *MysqlOperator) UpdateOnFireLogExecutorStatus(ctx context.Context, onFir
 
 	//为了避免同一个任务在多个Executor实例处重复执行，这里需要更新Executor的InstanceID。
 	//测试用例跑了1000次发现个问题，就是假设SchedulerA取了TriggerA，并且插入了OnFireLogA，但是SchedulerA内部任务太多，
-	//轮到OnFireLogA执行的时候，已经到了OnFireLogA中指定的RedoAt之后。这种情况下，另一个ShedulerB（或者该Scheduler自己）
+	//轮到OnFireLogA执行的时候，已经到了OnFireLogA中指定的RedoAt之后。这种情况下，另一个SchedulerB（或者该Scheduler自己）
 	//拿到了过期的OnFireLog执行的话，发现Executor的InstanceID为空，所以自己按照用户指定的路由策略，分配一个Executor。
 	//但是如果用户指定的是例如随机策略，那么很可能SchedulerA和SchedulerB就把同一个任务分配到不同的Executor上了。
 	//但两个不同的Executor之间没有防重，所以同一个Trigger的一次触发被执行了两次。解决这个问题的方法是在任务执行之前，
 	//通过redo_at字段再通过数据库看看，是不是我这次执行。如果失败，那么说明另一处已经要执行了。自己不需要不执行。
-	result := db.Model(onFireLog).
-		Where("id = ?", onFireLog.ID).
-		Where("updated_at = ?", onFireLog.UpdatedAt).
+	dOnFireLog, err := dao.FromModelOnFireLog(onFireLog)
+	if err != nil {
+		return err
+	}
+
+	result := db.Model(dOnFireLog).
+		Where("id = ?", dOnFireLog.ID).
+		Where("status != ?", constance.OnFireStatusFinished).
+		Where("updated_at = ?", dOnFireLog.UpdatedAt).
 		Updates(map[string]interface{}{
-			"executor_instance": onFireLog.ExecutorInstance,
-			"status":            onFireLog.Status,
+			"executor_instance": dOnFireLog.ExecutorInstance,
+			"status":            dOnFireLog.Status,
+			"trace_context":     dOnFireLog.TraceContext,
 		})
 
 	if result.Error != nil {
@@ -401,7 +500,7 @@ func (m *MysqlOperator) UpdateOnFireLogExecutorStatus(ctx context.Context, onFir
 	}
 
 	if result.RowsAffected == 0 {
-		return ErrNotFound
+		return schedule_operator.ErrNotFound
 	}
 
 	return nil
@@ -413,11 +512,18 @@ func (m *MysqlOperator) InsertJob(ctx context.Context, job *model.Job) error {
 		db = m.db.DB()
 	}
 
-	err := db.Create(job).Error
+	dJob, err := dao.FromModelJob(job)
+	if err != nil {
+		return err
+	}
+
+	err = db.Create(dJob).Error
 	if err != nil {
 		return fmt.Errorf("failed to insert job: %w", err)
 	}
 
+	job.ID = dJob.ID
+	job.UpdatedAt = dJob.UpdatedAt
 	return nil
 }
 
@@ -427,11 +533,18 @@ func (m *MysqlOperator) InsertTrigger(ctx context.Context, trigger *model.Trigge
 		db = m.db.DB()
 	}
 
-	err := db.Create(trigger).Error
+	dTrigger, err := dao.FromModelTrigger(trigger)
+	if err != nil {
+		return err
+	}
+
+	err = db.Create(dTrigger).Error
 	if err != nil {
 		return fmt.Errorf("failed to insert trigger: %w", err)
 	}
 
+	trigger.ID = dTrigger.ID
+	trigger.UpdatedAt = dTrigger.UpdatedAt
 	return nil
 }
 
@@ -441,16 +554,22 @@ func (m *MysqlOperator) FetchTriggerFromID(ctx context.Context, triggerID uint) 
 		db = m.db.DB()
 	}
 
-	trigger := new(model.Trigger)
-	err := db.Where("id = ?", triggerID).Find(trigger).Error
+	dTrigger := new(dao.Trigger)
+	err := db.Where("id = ?", triggerID).Find(dTrigger).Error
 
-	if trigger.ID == 0 || err == gorm.ErrRecordNotFound {
-		return nil, ErrNotFound
+	if dTrigger.ID == 0 || err == gorm.ErrRecordNotFound {
+		return nil, schedule_operator.ErrNotFound
 	}
 
 	if err != nil {
 		return nil, err
 	}
+
+	trigger, err := dao.ToModelTrigger(dTrigger)
+	if err != nil {
+		return nil, err
+	}
+
 	return trigger, nil
 }
 
@@ -460,10 +579,10 @@ func (m *MysqlOperator) DeleteJobFromID(ctx context.Context, jobID uint) error {
 		tx = m.db.DB()
 	}
 
-	if result := tx.Unscoped().Where("id = ?", jobID).Delete(m.emptyJob); result.Error != nil {
+	if result := tx.Unscoped().Where("id = ?", jobID).Delete(&dao.Job{}); result.Error != nil {
 		return result.Error
 	} else if result.RowsAffected == 0 {
-		return fmt.Errorf("no jobID:%v", jobID)
+		return fmt.Errorf("no jobID: %v", jobID)
 	}
 
 	return nil
@@ -476,7 +595,7 @@ func (m *MysqlOperator) IsJobIDExist(ctx context.Context, jobID uint) (bool, err
 		return true, nil
 	}
 
-	if err == ErrNotFound {
+	if err == schedule_operator.ErrNotFound {
 		return false, nil
 	}
 
