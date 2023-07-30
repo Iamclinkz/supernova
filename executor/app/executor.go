@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"go.opentelemetry.io/otel/sdk/metric"
 	"os"
 	"os/signal"
 	"supernova/executor/exporter"
@@ -26,8 +27,9 @@ type Executor struct {
 	extraConf      map[string]string
 
 	//trace
-	enableOTel   bool
-	oTelProvider *trace.TracerProvider
+	enableOTel     bool
+	tracerProvider *trace.TracerProvider
+	meterProvider  *metric.MeterProvider
 
 	//discovery
 	discoveryClient discovery.ExecutorDiscoveryClient
@@ -44,7 +46,8 @@ type Executor struct {
 func newExecutorInner(
 	instanceID string,
 	enableOTel bool,
-	provider *trace.TracerProvider,
+	tracerProvider *trace.TracerProvider,
+	meterProvider *metric.MeterProvider,
 	tags []string,
 	processor map[string]processor.JobProcessor,
 	serveConf *discovery.ExecutorServiceServeConf,
@@ -63,7 +66,8 @@ func newExecutorInner(
 		processor:         processor,
 		serveConf:         serveConf,
 		enableOTel:        enableOTel,
-		oTelProvider:      provider,
+		tracerProvider:    tracerProvider,
+		meterProvider:     meterProvider,
 		extraConf:         extraConf,
 		processorCount:    processorCount,
 		discoveryClient:   discoveryClient,
@@ -122,8 +126,11 @@ func (e *Executor) Stop() {
 	e.executeService.Stop()
 	e.serviceExporter.Stop()
 	if e.enableOTel {
-		if err := e.oTelProvider.Shutdown(context.TODO()); err != nil {
-			klog.Warnf("oTelProvider stop error:%v", err)
+		if err := e.tracerProvider.Shutdown(context.TODO()); err != nil {
+			klog.Warnf("tracerProvider stop error:%v", err)
+		}
+		if err := e.meterProvider.Shutdown(context.TODO()); err != nil {
+			klog.Warnf("meterProvider stop error:%v", err)
 		}
 	}
 }

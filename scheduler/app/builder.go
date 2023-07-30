@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"supernova/pkg/conf"
 	"supernova/pkg/constance"
@@ -21,6 +22,7 @@ type SchedulerBuilder struct {
 	discoveryClient      discovery.ExecutorDiscoveryClient
 	schedulerWorkerCount int
 	tracerProvider       *sdktrace.TracerProvider
+	meterProvider        *metric.MeterProvider
 	err                  error
 }
 
@@ -95,7 +97,7 @@ func (b *SchedulerBuilder) WithInstanceID(instanceID string) *SchedulerBuilder {
 
 func (b *SchedulerBuilder) WithOTelCollector(instrumentConf *conf.OTelConf) *SchedulerBuilder {
 	var err error
-	b.tracerProvider, err = trace.InitProvider(constance.SchedulerServiceName, instrumentConf)
+	b.tracerProvider, b.meterProvider, err = trace.InitProvider(constance.SchedulerServiceName, instrumentConf)
 	if err != nil && b.err != nil {
 		b.err = err
 	}
@@ -120,6 +122,7 @@ func (b *SchedulerBuilder) Build() (*Scheduler, error) {
 		b.instanceID = fmt.Sprintf("Scheduler-%v", uuid.New())
 	}
 
-	//return genScheduler(b.instanceID, b.tracerProvider != nil, b.tracerProvider, b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)
+	//return genScheduler(b.instanceID, b.tracerProvider != nil && b.meterProvider != nil,
+	//	b.tracerProvider, b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)
 	return nil, nil
 }

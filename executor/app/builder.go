@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"strconv"
 	"supernova/executor/processor"
@@ -20,6 +21,7 @@ type ExecutorBuilder struct {
 	discoveryClient discovery.ExecutorDiscoveryClient
 	extraConf       map[string]string
 	traceProvider   *sdktrace.TracerProvider
+	metricsProvider *sdkmetrics.MeterProvider
 	err             error
 }
 
@@ -133,7 +135,7 @@ func (b *ExecutorBuilder) WithProcessorCount(count int) *ExecutorBuilder {
 
 func (b *ExecutorBuilder) WithOTelCollector(instrumentConf *conf.OTelConf) *ExecutorBuilder {
 	var err error
-	b.traceProvider, err = tconf.InitProvider(constance.SchedulerServiceName, instrumentConf)
+	b.traceProvider, b.metricsProvider, err = tconf.InitProvider(constance.SchedulerServiceName, instrumentConf)
 	if err != nil && b.err != nil {
 		b.err = err
 	}
@@ -165,6 +167,7 @@ func (b *ExecutorBuilder) Build() (*Executor, error) {
 		return nil, errors.New("no selected service discovery")
 	}
 
-	return genExecutor(b.instanceID, b.traceProvider == nil, b.traceProvider, b.tags,
-		b.processor, b.serveConf, b.processorCount, b.discoveryClient, b.extraConf)
+	return genExecutor(b.instanceID, b.traceProvider != nil && b.metricsProvider != nil,
+		b.traceProvider, b.metricsProvider, b.tags, b.processor,
+		b.serveConf, b.processorCount, b.discoveryClient, b.extraConf)
 }

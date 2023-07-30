@@ -5,6 +5,7 @@ package app
 
 import (
 	"github.com/google/wire"
+	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"supernova/executor/processor"
 	"supernova/executor/service"
@@ -14,7 +15,8 @@ import (
 func genExecutor(
 	instanceID string,
 	enableOTel bool,
-	provider *sdktrace.TracerProvider,
+	traceProvider *sdktrace.TracerProvider,
+	meterProvider *sdkmetrics.MeterProvider,
 	tags []string,
 	processor map[string]processor.JobProcessor,
 	serveConf *discovery.ExecutorServiceServeConf,
