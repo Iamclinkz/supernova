@@ -122,7 +122,6 @@ func (b *SchedulerBuilder) Build() (*Scheduler, error) {
 		b.instanceID = fmt.Sprintf("Scheduler-%v", uuid.New())
 	}
 
-	//return genScheduler(b.instanceID, b.tracerProvider != nil && b.meterProvider != nil,
-	//	b.tracerProvider, b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)
-	return nil, nil
+	return genScheduler(b.instanceID, b.tracerProvider != nil && b.meterProvider != nil,
+		b.tracerProvider, b.meterProvider, b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)
 }

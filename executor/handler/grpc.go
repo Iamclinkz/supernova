@@ -71,7 +71,7 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 			doTrace := len(req.TraceContext) != 0 && e.enableOTel
 			var pushJobRequestChSpan trace.Span
 			if doTrace {
-				_, pushJobRequestChSpan = util.NewSpanFromTraceContext("executorWork", e.tracer, req.TraceContext)
+				_, pushJobRequestChSpan = util.NewSpanFromTraceContext("pushJobToRequestCh", e.tracer, req.TraceContext)
 			}
 			e.executeService.PushJobRequest(req)
 			if doTrace {
@@ -98,7 +98,7 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 			doTrace := len(resp.TraceContext) != 0 && e.enableOTel
 			var streamSendSpan trace.Span
 			if doTrace {
-				_, streamSendSpan = util.NewSpanFromTraceContext("executorWork", e.tracer, resp.TraceContext)
+				_, streamSendSpan = util.NewSpanFromTraceContext("sendToGrpcStream", e.tracer, resp.TraceContext)
 			}
 
 			connError = stream.Send(resp)

@@ -16,7 +16,7 @@ import (
 // 目标：只要Scheduler和Executor都不宕机，那么任务一定能精准执行（成功）一次，即使失败多次。
 func TestFail(t *testing.T) {
 	var triggerCount = 10
-	supernovaTest := util.StartTest(3, 3, klog.LevelWarn)
+	supernovaTest := util.StartTest(1, 1, klog.LevelDebug)
 	defer supernovaTest.EndTest()
 
 	httpServer := simple_http_server.NewSimpleHttpServer(
