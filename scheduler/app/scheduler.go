@@ -33,17 +33,17 @@ type Scheduler struct {
 }
 
 func newSchedulerInner(
-//config
+	//config
 	instanceID string,
 
-//trace
+	//trace
 	enableOTel bool,
 	tracerProvider *sdktrace.TracerProvider,
 	meterProvider *metric.MeterProvider,
 
-//operator
+	//operator
 	jobOperator schedule_operator.Operator,
-//service
+	//service
 	scheduleService *service.ScheduleService,
 	statisticsService *service.StatisticsService,
 	routerService *service.ExecutorRouteService,
