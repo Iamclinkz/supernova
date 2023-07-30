@@ -92,6 +92,7 @@ func (m *MysqlOperator) UpdateOnFireLogRedoAt(ctx context.Context, onFireLog *mo
 		return schedule_operator.ErrNotFound
 	}
 
+	onFireLog.UpdatedAt = dOnFireLog.UpdatedAt
 	return nil
 }
 

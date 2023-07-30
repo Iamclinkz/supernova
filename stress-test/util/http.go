@@ -24,6 +24,10 @@ func RegisterTriggers(schedulerAddress string, triggers []*model.Trigger) {
 
 	for i := 0; i < groupCount; i++ {
 		wg.Add(1)
+		to := (i + 1) * groupSize
+		if to > len(triggers) {
+			to = len(triggers)
+		}
 		go func(start, end int) {
 			defer wg.Done()
 
@@ -36,7 +40,7 @@ func RegisterTriggers(schedulerAddress string, triggers []*model.Trigger) {
 				<-concurrencyLimit
 			}
 
-		}(i*groupSize, (i+1)*groupSize)
+		}(i*groupSize, to)
 	}
 
 	wg.Wait()

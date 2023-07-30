@@ -54,7 +54,7 @@ func (s *SimpleHttpServer) CheckResult() (error, *Result) {
 
 	if s.CheckResultConf.FailTriggerRateNotGreaterThan < result.FailTriggerRate {
 		//失败率检查
-		return fmt.Errorf("high fail rate"), nil
+		return fmt.Errorf("high fail rate"), result
 	}
 
 	return nil, result

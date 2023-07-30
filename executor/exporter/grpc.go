@@ -20,9 +20,11 @@ type GrpcExporter struct {
 }
 
 func NewGrpcExporter(executeService *service.ExecuteService,
-	statisticsService *service.StatisticsService, serviceConf *discovery.ExecutorServiceServeConf) *GrpcExporter {
+	statisticsService *service.StatisticsService,
+	serviceConf *discovery.ExecutorServiceServeConf,
+	enableOTel bool) *GrpcExporter {
 	e := new(GrpcExporter)
-	e.grpcHandler = handler.NewGrpcHandler(executeService, statisticsService)
+	e.grpcHandler = handler.NewGrpcHandler(executeService, statisticsService, enableOTel)
 	e.serviceConf = serviceConf
 	return e
 }

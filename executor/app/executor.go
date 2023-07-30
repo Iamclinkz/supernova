@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/kitex-contrib/obs-opentelemetry/provider"
 	"os"
 	"os/signal"
 	"supernova/executor/exporter"
@@ -11,6 +10,8 @@ import (
 	"supernova/pkg/discovery"
 	"syscall"
 	"time"
+
+	"github.com/kitex-contrib/obs-opentelemetry/provider"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
@@ -78,7 +79,7 @@ func newExecutorInner(
 		}
 	}
 
-	ret.serviceExporter = exporter.NewExporter(executeService, statisticsService, serveConf)
+	ret.serviceExporter = exporter.NewExporter(executeService, statisticsService, serveConf, enableOTel)
 	return ret
 }
 

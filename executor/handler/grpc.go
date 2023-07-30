@@ -3,13 +3,14 @@ package handler
 import (
 	"context"
 	"errors"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 	"supernova/executor/service"
 	"supernova/pkg/api"
 	"supernova/pkg/util"
 	"sync"
 	"sync/atomic"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
@@ -73,7 +74,9 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 				_, pushJobRequestChSpan = util.NewSpanFromTraceContext("executorWork", e.tracer, req.TraceContext)
 			}
 			e.executeService.PushJobRequest(req)
-			pushJobRequestChSpan.End()
+			if doTrace {
+				pushJobRequestChSpan.End()
+			}
 		}
 	}()
 
@@ -100,8 +103,10 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 
 			connError = stream.Send(resp)
 			if connError != nil {
-				streamSendSpan.RecordError(connError)
-				streamSendSpan.End()
+				if doTrace {
+					streamSendSpan.RecordError(connError)
+					streamSendSpan.End()
+				}
 				//再把这个JobResult扔回去，让别的Scheduler发送
 				e.executeService.PushJobResponse(resp)
 				stop.Store(true)
@@ -109,7 +114,9 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 				return
 			}
 
-			streamSendSpan.End()
+			if doTrace {
+				streamSendSpan.End()
+			}
 			e.statisticsService.OnSendRunJobResponseSuccess(resp)
 		}
 	}()

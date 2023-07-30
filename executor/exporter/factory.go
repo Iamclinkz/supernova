@@ -12,10 +12,12 @@ type Exporter interface {
 }
 
 func NewExporter(executeService *service.ExecuteService,
-	statisticsService *service.StatisticsService, serviceConf *discovery.ExecutorServiceServeConf) Exporter {
+	statisticsService *service.StatisticsService,
+	serviceConf *discovery.ExecutorServiceServeConf,
+	enableOTel bool) Exporter {
 	switch serviceConf.Protoc {
 	case discovery.ProtocTypeGrpc:
-		return NewGrpcExporter(executeService, statisticsService, serviceConf)
+		return NewGrpcExporter(executeService, statisticsService, serviceConf, enableOTel)
 	default:
 		//todo
 		panic("")

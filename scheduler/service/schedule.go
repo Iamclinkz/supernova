@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 	"strconv"
 	"supernova/pkg/api"
 	"supernova/pkg/util"
@@ -15,6 +12,10 @@ import (
 	"supernova/scheduler/operator/schedule_operator"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
@@ -176,8 +177,14 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 }
 
 func (s *ScheduleService) handleRunJobResponse(response *api.RunJobResponse) {
-	_, mySpan := util.NewSpanFromTraceContext("handleRunJobResponse", s.tracer, response.TraceContext)
-	defer mySpan.End()
+	var (
+		mySpan  trace.Span
+		doTrace = s.enableOTel && len(response.TraceContext) != 0
+	)
+	if doTrace {
+		_, mySpan = util.NewSpanFromTraceContext("handleRunJobResponse", s.tracer, response.TraceContext)
+		defer mySpan.End()
+	}
 
 	if !response.Result.Ok {
 		//如果执行出现了错误，那么需要扣除RetryCount，并且根据总重试次数，和当前重试次数更新下次的执行时间。
@@ -190,7 +197,9 @@ func (s *ScheduleService) handleRunJobResponse(response *api.RunJobResponse) {
 		_ = s.onFireService.UpdateOnFireLogFail(context.TODO(), uint(response.OnFireLogID), response.Result.Err)
 		klog.Debugf("Receive from executor, [onFireLog:%v] execute failed, error:%v",
 			response.OnFireLogID, response.Result.Err)
-		mySpan.RecordError(fmt.Errorf("fail to run job:%v", response.Result))
+		if doTrace {
+			mySpan.RecordError(fmt.Errorf("fail to run job:%v", response.Result))
+		}
 		return
 	}
 

@@ -3,8 +3,6 @@ package app
 import (
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/kitex-contrib/obs-opentelemetry/provider"
 	"supernova/pkg/conf"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
@@ -12,6 +10,9 @@ import (
 	"supernova/scheduler/dal"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/operator/schedule_operator/mysql_operator"
+
+	"github.com/google/uuid"
+	"github.com/kitex-contrib/obs-opentelemetry/provider"
 )
 
 type SchedulerBuilder struct {
@@ -92,7 +93,7 @@ func (b *SchedulerBuilder) WithInstanceID(instanceID string) *SchedulerBuilder {
 	return b
 }
 
-func (b *SchedulerBuilder) WithTraceProvider(instrumentConf *conf.OTelConf) *SchedulerBuilder {
+func (b *SchedulerBuilder) WithOTelCollector(instrumentConf *conf.OTelConf) *SchedulerBuilder {
 	b.oTelProvider = trace.InitProvider(constance.SchedulerServiceName, instrumentConf)
 	return b
 }
@@ -114,6 +115,6 @@ func (b *SchedulerBuilder) Build() (*Scheduler, error) {
 		b.instanceID = fmt.Sprintf("Scheduler-%v", uuid.New())
 	}
 
-	return genScheduler(b.instanceID, b.oTelProvider == nil, b.oTelProvider, b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)
+	return genScheduler(b.instanceID, b.oTelProvider != nil, b.oTelProvider, b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)
 	//return nil, nil
 }

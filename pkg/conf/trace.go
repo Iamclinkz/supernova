@@ -1,6 +1,6 @@
 package conf
 
 type OTelConf struct {
-	ExportEndpointHost string
-	ExportEndpointPort string
+	CollectorEndpointHost string
+	CollectorEndpointPort string
 }

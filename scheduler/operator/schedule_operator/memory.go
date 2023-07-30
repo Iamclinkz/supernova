@@ -3,12 +3,13 @@ package schedule_operator
 import (
 	"context"
 	"errors"
-	"github.com/google/btree"
 	"supernova/pkg/util"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
 	"sync"
 	"time"
+
+	"github.com/google/btree"
 )
 
 type MemoryOperator struct {
@@ -127,7 +128,7 @@ func (m *MemoryOperator) UpdateOnFireLogExecutorStatus(ctx context.Context, onFi
 	dbOnFireLog.ExecutorInstance = onFireLog.ExecutorInstance
 	dbOnFireLog.Status = onFireLog.Status
 	dbOnFireLog.UpdatedAt = time.Now()
-	dbOnFireLog.TraceContext = traceContext
+	dbOnFireLog.TraceContext = onFireLog.TraceContext
 	onFireLog.UpdatedAt = dbOnFireLog.UpdatedAt
 	return nil
 }
@@ -223,7 +224,9 @@ func (m *MemoryOperator) InsertTrigger(ctx context.Context, trigger *model.Trigg
 	m.triggerLock.Lock()
 	defer m.triggerLock.Unlock()
 
-	m.triggers[trigger.ID] = trigger
+	m.triggers[m.triggerIDCounter] = trigger
+	trigger.ID = m.triggerIDCounter
+	m.triggerIDCounter++
 	m.triggerTree.ReplaceOrInsert(trigger)
 	return nil
 }

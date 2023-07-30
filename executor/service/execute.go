@@ -3,13 +3,14 @@ package service
 import (
 	"context"
 	"errors"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 	"supernova/executor/constance"
 	"supernova/pkg/api"
 	"supernova/pkg/util"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
@@ -192,10 +193,12 @@ func (e *ExecuteService) work() {
 			//这种情况下，如果本次虽然超时，但是任务执行成功了，则扔回去一个成功回复。而如果执行失败，就不再扔回去失败回复了。
 			//反正已经是扣除失败次数了
 			if ok {
-				executeSpan.End()
 				if doTrace {
+					executeSpan.End()
 					_, pushResponseChanSpan = e.tracer.Start(workCtx, "pushResponseChan")
-					e.jobResponseCh <- jobResponse
+				}
+				e.jobResponseCh <- jobResponse
+				if doTrace {
 					pushResponseChanSpan.End()
 				}
 			} else {

@@ -3,6 +3,7 @@ package util
 import (
 	"context"
 	"encoding/json"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -26,13 +27,13 @@ func (mc MapCarrier) Keys() []string {
 }
 
 func GenTraceContext(ctx context.Context) map[string]string {
-	var ret MapCarrier
+	var ret MapCarrier = make(map[string]string, 0)
 	otel.GetTextMapPropagator().Inject(ctx, ret)
 	return ret
 }
 
 func TraceCtx2String(ctx context.Context) string {
-	var tmp MapCarrier
+	var tmp MapCarrier = make(map[string]string, 0)
 	otel.GetTextMapPropagator().Inject(ctx, tmp)
 	b, err := json.Marshal(tmp)
 	if err != nil {

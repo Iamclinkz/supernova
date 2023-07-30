@@ -30,7 +30,7 @@ var (
 
 	//trace
 	DevTraceConfig = &conf.OTelConf{
-		ExportEndpointHost: "9.134.5.191",
-		ExportEndpointPort: "4317",
+		CollectorEndpointHost: "9.134.5.191",
+		CollectorEndpointPort: "4317",
 	}
 )

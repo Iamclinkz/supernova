@@ -47,7 +47,8 @@ func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf) []*app.Executor
 		builder := app.NewExecutorBuilder()
 		executor, err := builder.WithInstanceID(GenUnderCloudExecutorID()).WithConsulDiscovery(
 			DevConsulHost, DevConsulPort, instanceConf.HealthCheckPort).
-			WithProcessor(httpExecutor).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).Build()
+			WithProcessor(httpExecutor).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).
+			WithOTelCollector(DevTraceConfig).Build()
 
 		if err != nil {
 			panic(err)

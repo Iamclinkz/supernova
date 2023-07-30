@@ -2,9 +2,10 @@ package app
 
 import (
 	"context"
-	"github.com/kitex-contrib/obs-opentelemetry/provider"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/service"
+
+	"github.com/kitex-contrib/obs-opentelemetry/provider"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )

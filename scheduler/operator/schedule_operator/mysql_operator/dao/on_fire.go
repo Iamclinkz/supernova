@@ -27,7 +27,7 @@ type OnFireLog struct {
 }
 
 func (o *OnFireLog) TableName() string {
-	return "t_on_fire_log"
+	return "t_on_fire"
 }
 
 func FromModelOnFireLog(mOnFireLog *model.OnFireLog) (*OnFireLog, error) {

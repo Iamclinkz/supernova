@@ -2,13 +2,14 @@ package app
 
 import (
 	"errors"
-	"github.com/kitex-contrib/obs-opentelemetry/provider"
 	"strconv"
 	"supernova/executor/processor"
 	"supernova/pkg/conf"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 	"supernova/pkg/session/trace"
+
+	"github.com/kitex-contrib/obs-opentelemetry/provider"
 )
 
 type ExecutorBuilder struct {
@@ -131,7 +132,7 @@ func (b *ExecutorBuilder) WithProcessorCount(count int) *ExecutorBuilder {
 	return b
 }
 
-func (b *ExecutorBuilder) WithTraceProvider(instrumentConf *conf.OTelConf) *ExecutorBuilder {
+func (b *ExecutorBuilder) WithOTelCollector(instrumentConf *conf.OTelConf) *ExecutorBuilder {
 	b.oTelProvider = trace.InitProvider(constance.SchedulerServiceName, instrumentConf)
 	return b
 }
