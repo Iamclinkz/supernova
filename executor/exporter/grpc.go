@@ -10,7 +10,6 @@ import (
 
 	"github.com/cloudwego/kitex/pkg/klog"
 	"github.com/cloudwego/kitex/server"
-	"github.com/kitex-contrib/obs-opentelemetry/tracing"
 )
 
 type GrpcExporter struct {
@@ -36,7 +35,7 @@ func (e *GrpcExporter) StartServe() {
 	}
 	e.grpcServer = executor.NewServer(e.grpcHandler,
 		server.WithServiceAddr(addr),
-		server.WithSuite(tracing.NewServerSuite()),
+		//server.WithSuite(tracing.NewServerSuite()),
 		//server.WithMiddleware(middleware.PrintKitexRequestResponse),
 	)
 	klog.Infof("executor try start serve, protoc:grpc, port:%v", e.serviceConf.Port)

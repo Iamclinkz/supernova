@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"supernova/executor/exporter"
@@ -11,9 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kitex-contrib/obs-opentelemetry/provider"
-
 	"github.com/cloudwego/kitex/pkg/klog"
+	"go.opentelemetry.io/otel/sdk/trace"
 )
 
 type Executor struct {
@@ -27,7 +27,7 @@ type Executor struct {
 
 	//trace
 	enableOTel   bool
-	OTelProvider provider.OtelProvider
+	oTelProvider *trace.TracerProvider
 
 	//discovery
 	discoveryClient discovery.ExecutorDiscoveryClient
@@ -44,7 +44,7 @@ type Executor struct {
 func newExecutorInner(
 	instanceID string,
 	enableOTel bool,
-	provider provider.OtelProvider,
+	provider *trace.TracerProvider,
 	tags []string,
 	processor map[string]processor.JobProcessor,
 	serveConf *discovery.ExecutorServiceServeConf,
@@ -63,7 +63,7 @@ func newExecutorInner(
 		processor:         processor,
 		serveConf:         serveConf,
 		enableOTel:        enableOTel,
-		OTelProvider:      provider,
+		oTelProvider:      provider,
 		extraConf:         extraConf,
 		processorCount:    processorCount,
 		discoveryClient:   discoveryClient,
@@ -121,6 +121,11 @@ func (e *Executor) Stop() {
 	_ = e.discoveryClient.DeRegister(e.instanceID)
 	e.executeService.Stop()
 	e.serviceExporter.Stop()
+	if e.enableOTel {
+		if err := e.oTelProvider.Shutdown(context.TODO()); err != nil {
+			klog.Warnf("oTelProvider stop error:%v", err)
+		}
+	}
 }
 
 func (e *Executor) GracefulStop() {

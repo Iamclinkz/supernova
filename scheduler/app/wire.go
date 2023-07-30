@@ -5,13 +5,13 @@ package app
 
 import (
 	"github.com/google/wire"
-	"github.com/kitex-contrib/obs-opentelemetry/provider"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"supernova/pkg/discovery"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/service"
 )
 
-func genScheduler(instanceID string, enableTrace bool, traceProvider provider.OtelProvider, scheduleOperator schedule_operator.Operator, client discovery.ExecutorDiscoveryClient, schedulerWorkerCount int) (*Scheduler, error) {
+func genScheduler(instanceID string, enableTrace bool, tracerProvider *sdktrace.TracerProvider, scheduleOperator schedule_operator.Operator, client discovery.ExecutorDiscoveryClient, schedulerWorkerCount int) (*Scheduler, error) {
 	wire.Build(
 		newSchedulerInner,
 

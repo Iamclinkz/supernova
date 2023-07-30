@@ -2,10 +2,9 @@ package app
 
 import (
 	"context"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/service"
-
-	"github.com/kitex-contrib/obs-opentelemetry/provider"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
@@ -15,8 +14,8 @@ type Scheduler struct {
 	instanceID string //for debug
 
 	//openTelemetry
-	enableOTel    bool
-	traceProvider provider.OtelProvider
+	enableOTel     bool
+	tracerProvider *sdktrace.TracerProvider
 
 	//operator
 	jobOperator schedule_operator.Operator
@@ -36,7 +35,7 @@ func newSchedulerInner(
 	instanceID string,
 
 	//trace
-	traceProvider provider.OtelProvider,
+	tracerProvider *sdktrace.TracerProvider,
 	enableOTel bool,
 
 	//operator
@@ -51,9 +50,9 @@ func newSchedulerInner(
 	onFireService *service.OnFireService,
 ) *Scheduler {
 	return &Scheduler{
-		instanceID:    instanceID,
-		enableOTel:    enableOTel,
-		traceProvider: traceProvider,
+		instanceID:     instanceID,
+		enableOTel:     enableOTel,
+		tracerProvider: tracerProvider,
 		//operator
 		jobOperator: jobOperator,
 
@@ -78,8 +77,8 @@ func (s *Scheduler) Stop() {
 	s.scheduleService.Stop()
 	s.manageService.Stop()
 	if s.enableOTel {
-		if err := s.traceProvider.Shutdown(context.TODO()); err != nil {
-			klog.Errorf("stop oTelProvider error:%v", err)
+		if err := s.tracerProvider.Shutdown(context.TODO()); err != nil {
+			klog.Errorf("stop tracerProvider error:%v", err)
 		}
 	}
 	klog.Info("Scheduler stopped")

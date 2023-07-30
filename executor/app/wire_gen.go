@@ -7,7 +7,7 @@
 package app
 
 import (
-	"github.com/kitex-contrib/obs-opentelemetry/provider"
+	"go.opentelemetry.io/otel/sdk/trace"
 	"supernova/executor/processor"
 	"supernova/executor/service"
 	"supernova/pkg/discovery"
@@ -15,11 +15,11 @@ import (
 
 // Injectors from wire.go:
 
-func genExecutor(instanceID string, enableOTel bool, provider2 provider.OtelProvider, tags []string, processor2 map[string]processor.JobProcessor, serveConf *discovery.ExecutorServiceServeConf, processorCount int, client discovery.ExecutorDiscoveryClient, extraConf map[string]string) (*Executor, error) {
+func genExecutor(instanceID string, enableOTel bool, provider *trace.TracerProvider, tags []string, processor2 map[string]processor.JobProcessor, serveConf *discovery.ExecutorServiceServeConf, processorCount int, client discovery.ExecutorDiscoveryClient, extraConf map[string]string) (*Executor, error) {
 	duplicateService := service.NewDuplicateService()
 	statisticsService := service.NewStatisticsService(enableOTel)
 	processorService := service.NewProcessorService()
 	executeService := service.NewExecuteService(statisticsService, processorService, duplicateService, processorCount, enableOTel)
-	executor := newExecutorInner(instanceID, enableOTel, provider2, tags, processor2, serveConf, processorCount, extraConf, client, duplicateService, executeService, processorService, statisticsService)
+	executor := newExecutorInner(instanceID, enableOTel, provider, tags, processor2, serveConf, processorCount, extraConf, client, duplicateService, executeService, processorService, statisticsService)
 	return executor, nil
 }

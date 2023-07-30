@@ -7,7 +7,6 @@ import (
 	"github.com/cloudwego/kitex/client"
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
 	"github.com/cloudwego/kitex/transport"
-	"github.com/kitex-contrib/obs-opentelemetry/tracing"
 )
 
 type ExecutorRpcClient struct {
@@ -18,7 +17,7 @@ func NewExecutorServiceClient(host, port string) (*ExecutorRpcClient, error) {
 	if cli, err := executor.NewClient(
 		constance.ExecutorServiceName,
 		client.WithHostPorts(host+":"+port),
-		client.WithSuite(tracing.NewClientSuite()),
+		//client.WithSuite(tracing.NewClientSuite()),
 		client.WithClientBasicInfo(&rpcinfo.EndpointBasicInfo{ServiceName: constance.SchedulerServiceName}),
 		//client.WithMiddleware(middleware.PrintKitexRequestResponse),
 		client.WithTransportProtocol(transport.GRPC)); err != nil {
