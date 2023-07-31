@@ -18,13 +18,13 @@ type StatisticsService struct {
 
 	meter                         metric.Meter
 	defaultMetricsOption          metric.MeasurementOption
-	fetchedTriggersCounter        metric.Int64Counter
-	foundTimeoutLogsCounter       metric.Int64Counter
-	holdTimeoutLogsFailureCounter metric.Int64Counter
-	holdTimeoutLogsSuccessCounter metric.Int64Counter
-	fireFailureCounter            metric.Int64Counter
-	fireSuccessCounter            metric.Int64Counter
-	scheduleDelayHistogram        metric.Int64Histogram
+	fetchedTriggersCounter        metric.Int64Counter   //获取待执行Trigger的个数
+	foundTimeoutLogsCounter       metric.Int64Counter   //查找到超时的OnFireLog记录的个数
+	holdTimeoutLogsFailureCounter metric.Int64Counter   //获取失败（乐观锁冲突）的OnFireLog记录的个数
+	holdTimeoutLogsSuccessCounter metric.Int64Counter   //获取成功（乐观锁成功）的OnFireLog记录的个数
+	fireFailureCounter            metric.Int64Counter   //fire失败的任务的个数
+	fireSuccessCounter            metric.Int64Counter   //fire成功的任务的个数
+	scheduleDelayHistogram        metric.Int64Histogram //调度时间（任务应该被安排执行时间 - 任务实际被安排执行时间）
 }
 
 func NewStatisticsService(instanceID string, enableOTel bool) *StatisticsService {
@@ -76,8 +76,7 @@ func NewStatisticsService(instanceID string, enableOTel bool) *StatisticsService
 			panic(err)
 		}
 
-		// 创建Histogram指标，并设置桶的边界
-		ret.scheduleDelayHistogram, err = ret.meter.Int64Histogram("scheduler.schedule_delay",
+		ret.scheduleDelayHistogram, err = ret.meter.Int64Histogram("schedule_delay",
 			metric.WithDescription("The difference between the scheduled execution time and the actual allocation time"),
 			metric.WithUnit("ms"),
 		)
@@ -126,19 +125,6 @@ const (
 	FireFailReasonFindJobError         FireFailReason = "CanNotFindJob"
 )
 
-func (s *StatisticsService) OnFireFail(reason FireFailReason) {
-	if s.enableOTel {
-		s.fireFailureCounter.Add(context.Background(), 1,
-			metric.WithAttributes(attribute.String("reason", string(reason))), s.defaultMetricsOption)
-	}
-}
-
-func (s *StatisticsService) OnFireSuccess() {
-	if s.enableOTel {
-		s.fireSuccessCounter.Add(context.Background(), 1, s.defaultMetricsOption)
-	}
-}
-
 func (s *StatisticsService) GetHandleTriggerDuration() time.Duration {
 	return time.Second * 15
 }
@@ -146,10 +132,6 @@ func (s *StatisticsService) GetHandleTriggerDuration() time.Duration {
 func (s *StatisticsService) GetHandleTriggerForwardDuration() time.Duration {
 	//todo 测试使用
 	return time.Since(util.VeryEarlyTime())
-}
-
-func (s *StatisticsService) GetHandleTriggerMaxCount() int {
-	return 6000
 }
 
 func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
@@ -172,14 +154,32 @@ func (s *StatisticsService) GetCheckExecutorHeartBeatTimeout() time.Duration {
 	return time.Second * 2
 }
 
+// RecordScheduleDelay 记录任务调度的时间。即任务应该被安排执行时间 - 任务实际被安排执行时间
 func (s *StatisticsService) RecordScheduleDelay(delay time.Duration) {
 	if !s.enableOTel {
 		return
 	}
 
-	// 将时间差值转换为毫秒
 	delayMs := float64(delay) / float64(time.Millisecond)
-
-	// 更新Histogram指标
 	s.scheduleDelayHistogram.Record(context.Background(), int64(delayMs), s.defaultMetricsOption)
+}
+
+// GetHandleTriggerMaxCount 获取本次最多获取多少条待触发的Trigger
+func (s *StatisticsService) GetHandleTriggerMaxCount() int {
+	return 6000
+}
+
+// OnFireFail 任务扔给Executor执行失败
+func (s *StatisticsService) OnFireFail(reason FireFailReason) {
+	if s.enableOTel {
+		s.fireFailureCounter.Add(context.Background(), 1,
+			metric.WithAttributes(attribute.String("reason", string(reason))), s.defaultMetricsOption)
+	}
+}
+
+// OnFireSuccess 任务扔给Executor执行成功
+func (s *StatisticsService) OnFireSuccess() {
+	if s.enableOTel {
+		s.fireSuccessCounter.Add(context.Background(), 1, s.defaultMetricsOption)
+	}
 }

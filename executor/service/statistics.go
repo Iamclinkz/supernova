@@ -4,6 +4,7 @@ import (
 	"context"
 	"supernova/pkg/api"
 	"sync/atomic"
+	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 	"go.opentelemetry.io/otel"
@@ -27,13 +28,15 @@ type StatisticsService struct {
 	//metrics
 	meter                               metric.Meter
 	defaultMetricsOption                metric.MeasurementOption
-	currentJobCountUpDownCounter        metric.Int64UpDownCounter //当前同时执行数量
-	unFinishedRequestCountUpDownCounter metric.Int64UpDownCounter //当前未处理的任务数
-	runJobResponseSuccessCounter        metric.Int64Counter       //执行成功的任务数量
-	noNeedSendResponseCounter           metric.Int64Counter       //不需要（排队成功/之前成功，直接返回）执行的任务数量
+	currentJobCountUpDownCounter        metric.Int64UpDownCounter //当前正在（并发）执行的任务的数量
+	unFinishedRequestCountUpDownCounter metric.Int64UpDownCounter //当前未处理的请求的数量
+	runJobResponseSuccessCounter        metric.Int64Counter       //发送执行任务结果成功数量
+	noNeedSendResponseCounter           metric.Int64Counter       //不需要（排队成功/之前成功，直接返回，可以视作异常）执行的任务数量
 	receiveRunJobRequestCounter         metric.Int64Counter       //接收的RunJobRequest消息的数量
-	overTimeTaskSuccessCounter          metric.Int64Counter       //超时，但执行成功的任务
-	overTimeTaskCounter                 metric.Int64Counter       //超时的任务
+	overTimeTaskSuccessCounter          metric.Int64Counter       //超时，但执行成功的任务的数量
+	overTimeTaskCounter                 metric.Int64Counter       //超时的任务的数量
+	runJobCount                         metric.Int64Counter       //执行任务的数量
+	executeHistogram                    metric.Int64Histogram     //纯执行时间
 }
 
 func NewStatisticsService(enableOTel bool, instanceID string) *StatisticsService {
@@ -87,6 +90,19 @@ func NewStatisticsService(enableOTel bool, instanceID string) *StatisticsService
 		if err != nil {
 			panic(err)
 		}
+		ret.runJobCount, err = ret.meter.Int64Counter("run_job_total",
+			metric.WithDescription("Total number of job execution"))
+		if err != nil {
+			panic(err)
+		}
+
+		ret.executeHistogram, err = ret.meter.Int64Histogram("execute_time",
+			metric.WithDescription("Execute time by executors"),
+			metric.WithUnit("ms"),
+		)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	return ret
@@ -129,6 +145,7 @@ func (s *StatisticsService) OnStartExecute(jobRequest *api.RunJobRequest) {
 	s.currentJobCount.Add(1)
 	if s.enableOTel {
 		s.currentJobCountUpDownCounter.Add(context.Background(), 1, s.defaultMetricsOption)
+		s.runJobCount.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
 }
 
@@ -161,4 +178,14 @@ func (s *StatisticsService) OnGracefulStop() {
 
 func (s *StatisticsService) GetUnReplyRequestCount() int64 {
 	return s.unFinishedRequestCount.Load()
+}
+
+// RecordExecuteTime 记录任务执行时间
+func (s *StatisticsService) RecordExecuteTime(delay time.Duration) {
+	if !s.enableOTel {
+		return
+	}
+
+	delayMs := float64(delay) / float64(time.Millisecond)
+	s.executeHistogram.Record(context.Background(), int64(delayMs), s.defaultMetricsOption)
 }

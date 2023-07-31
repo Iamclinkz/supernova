@@ -183,8 +183,11 @@ func (e *ExecuteService) work() {
 				jobResponse.Result.Ok = false
 				jobResponse.Result.Err = constance.CanNotFindProcessorErrMsg
 			} else {
-				//如果有Processor，那么用户自定义的Processor填充error
+				begin := time.Now()
+				//如果有Processor，那么用户自定义的Processor执行
 				jobResponse.Result = processor.Process(jobRequest.Job)
+				//更新任务执行时间
+				e.statisticsService.RecordExecuteTime(time.Now().Sub(begin))
 			}
 			e.notifyOnFinishExecute(jobRequest, jobResponse)
 

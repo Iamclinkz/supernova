@@ -18,7 +18,7 @@ func TestPureRun(t *testing.T) {
 		LogLevel = klog.LevelWarn
 	)
 
-	supernovaTest := util.StartTest(3, 3, LogLevel, util.StartIdleExecutors,
+	supernovaTest := util.StartTest(4, 4, LogLevel, util.StartIdleExecutors,
 		&processor_plugin_idle.IdleProcessorConfig{
 			DoLog:    false,
 			DoSleep:  true,
