@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/cloudwego/kitex/pkg/klog"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"supernova/pkg/api"
@@ -11,15 +12,20 @@ import (
 )
 
 type StatisticsService struct {
+	instanceID      string
 	gracefulStopped atomic.Bool
 	currentJobCount atomic.Int64 //当前正在执行的job数
 	//当前还没有处理结束的response个数。这里的“还没有处理结束”指的是如果需要回复，那么回复成功（stream发送成功）算结束
 	//如果不需要回复，那么直接结束。
 	unFinishedRequestCount atomic.Int64
 	enableOTel             bool
-	tracer                 trace.Tracer
 
+	//trace
+	tracer trace.Tracer
+
+	//metrics
 	meter                               metric.Meter
+	defaultMetricsOption                metric.MeasurementOption
 	currentJobCountUpDownCounter        metric.Int64UpDownCounter
 	unFinishedRequestCountUpDownCounter metric.Int64UpDownCounter
 	runJobResponseSuccessCounter        metric.Int64Counter
@@ -28,13 +34,20 @@ type StatisticsService struct {
 	overTimeTaskSuccessCounter          metric.Int64Counter
 }
 
-func NewStatisticsService(enableOTel bool) *StatisticsService {
+func NewStatisticsService(enableOTel bool, instanceID string) *StatisticsService {
 	ret := &StatisticsService{
 		enableOTel: enableOTel,
+		instanceID: instanceID,
 	}
 	if enableOTel {
+		//trace
 		ret.tracer = otel.Tracer("StatisticsTracer")
+
+		//metrics
 		ret.meter = otel.Meter("StatisticsMeter")
+		ret.defaultMetricsOption = metric.WithAttributes(
+			attribute.Key("InstanceID").String(instanceID),
+		)
 
 		var err error
 		ret.currentJobCountUpDownCounter, err = ret.meter.Int64UpDownCounter("current_job_count",
@@ -80,16 +93,16 @@ func NewStatisticsService(enableOTel bool) *StatisticsService {
 func (s *StatisticsService) OnSendRunJobResponseSuccess(response *api.RunJobResponse) {
 	s.unFinishedRequestCount.Add(-1)
 	if s.enableOTel {
-		s.runJobResponseSuccessCounter.Add(context.Background(), 1)
-		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), -1)
+		s.runJobResponseSuccessCounter.Add(context.Background(), 1, s.defaultMetricsOption)
+		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), -1, s.defaultMetricsOption)
 	}
 }
 
 func (s *StatisticsService) OnNoNeedSendResponse(request *api.RunJobRequest) {
 	s.unFinishedRequestCount.Add(-1)
 	if s.enableOTel {
-		s.noNeedSendResponseCounter.Add(context.Background(), 1)
-		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), -1)
+		s.noNeedSendResponseCounter.Add(context.Background(), 1, s.defaultMetricsOption)
+		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), -1, s.defaultMetricsOption)
 	}
 }
 
@@ -97,30 +110,30 @@ func (s *StatisticsService) OnReceiveRunJobRequest(request *api.RunJobRequest) {
 	klog.Tracef("receive execute jobRequest, OnFireID:%v", request.OnFireLogID)
 	s.unFinishedRequestCount.Add(1)
 	if s.enableOTel {
-		s.receiveRunJobRequestCounter.Add(context.Background(), 1)
-		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), 1)
+		s.receiveRunJobRequestCounter.Add(context.Background(), 1, s.defaultMetricsOption)
+		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
 }
 
 func (s *StatisticsService) OnOverTimeTaskExecuteSuccess(request *api.RunJobRequest, response *api.RunJobResponse) {
 	s.unFinishedRequestCount.Add(1)
 	if s.enableOTel {
-		s.overTimeTaskSuccessCounter.Add(context.Background(), 1)
-		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), 1)
+		s.overTimeTaskSuccessCounter.Add(context.Background(), 1, s.defaultMetricsOption)
+		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
 }
 
 func (s *StatisticsService) OnStartExecute(jobRequest *api.RunJobRequest) {
 	s.currentJobCount.Add(1)
 	if s.enableOTel {
-		s.currentJobCountUpDownCounter.Add(context.Background(), 1)
+		s.currentJobCountUpDownCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
 }
 
 func (s *StatisticsService) OnFinishExecute(jobRequest *api.RunJobRequest, jobResponse *api.RunJobResponse) {
 	s.currentJobCount.Add(-1)
 	if s.enableOTel {
-		s.currentJobCountUpDownCounter.Add(context.Background(), -1)
+		s.currentJobCountUpDownCounter.Add(context.Background(), -1, s.defaultMetricsOption)
 	}
 }
 

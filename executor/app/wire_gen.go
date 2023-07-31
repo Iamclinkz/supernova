@@ -18,7 +18,7 @@ import (
 
 func genExecutor(instanceID string, enableOTel bool, traceProvider *trace.TracerProvider, meterProvider *metric.MeterProvider, tags []string, processor2 map[string]processor.JobProcessor, serveConf *discovery.ExecutorServiceServeConf, processorCount int, client discovery.ExecutorDiscoveryClient, extraConf map[string]string) (*Executor, error) {
 	duplicateService := service.NewDuplicateService()
-	statisticsService := service.NewStatisticsService(enableOTel)
+	statisticsService := service.NewStatisticsService(enableOTel, instanceID)
 	processorService := service.NewProcessorService()
 	executeService := service.NewExecuteService(statisticsService, processorService, duplicateService, processorCount, enableOTel)
 	executor := newExecutorInner(instanceID, enableOTel, traceProvider, meterProvider, tags, processor2, serveConf, processorCount, extraConf, client, duplicateService, executeService, processorService, statisticsService)

@@ -16,6 +16,7 @@ type StatisticsService struct {
 	tracer     trace.Tracer
 
 	meter                         metric.Meter
+	defaultMetricsOption          metric.MeasurementOption
 	fetchedTriggersCounter        metric.Int64Counter
 	foundTimeoutLogsCounter       metric.Int64Counter
 	holdTimeoutLogsFailureCounter metric.Int64Counter
@@ -32,6 +33,9 @@ func NewStatisticsService(instanceID string, enableOTel bool) *StatisticsService
 	if enableOTel {
 		ret.tracer = otel.Tracer("StatisticTracer")
 		ret.meter = otel.Meter("StatisticMeter")
+		ret.defaultMetricsOption = metric.WithAttributes(
+			attribute.Key("InstanceID").String(instanceID),
+		)
 
 		var err error
 		ret.fetchedTriggersCounter, err = ret.meter.Int64Counter("fetched_triggers_total",
@@ -77,28 +81,28 @@ func NewStatisticsService(instanceID string, enableOTel bool) *StatisticsService
 // OnFetchNeedFireTriggers 获得的需要执行的Trigger的个数
 func (s *StatisticsService) OnFetchNeedFireTriggers(count int) {
 	if s.enableOTel {
-		s.fetchedTriggersCounter.Add(context.Background(), int64(count))
+		s.fetchedTriggersCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
 }
 
 // OnFindTimeoutOnFireLogs 找到的过期的OnFireLogs个数
 func (s *StatisticsService) OnFindTimeoutOnFireLogs(count int) {
 	if s.enableOTel {
-		s.foundTimeoutLogsCounter.Add(context.Background(), int64(count))
+		s.foundTimeoutLogsCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
 }
 
 // OnHoldTimeoutOnFireLogFail 获得失败的过期的OnFireLogs个数
 func (s *StatisticsService) OnHoldTimeoutOnFireLogFail(count int) {
 	if s.enableOTel {
-		s.holdTimeoutLogsFailureCounter.Add(context.Background(), int64(count))
+		s.holdTimeoutLogsFailureCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
 }
 
 // OnHoldTimeoutOnFireLogSuccess 获得的过期的OnFireLogs个数
 func (s *StatisticsService) OnHoldTimeoutOnFireLogSuccess(count int) {
 	if s.enableOTel {
-		s.holdTimeoutLogsSuccessCounter.Add(context.Background(), int64(count))
+		s.holdTimeoutLogsSuccessCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
 }
 
@@ -113,13 +117,14 @@ const (
 
 func (s *StatisticsService) OnFireFail(reason FireFailReason) {
 	if s.enableOTel {
-		s.fireFailureCounter.Add(context.Background(), 1, metric.WithAttributes(attribute.String("reason", string(reason))))
+		s.fireFailureCounter.Add(context.Background(), 1,
+			metric.WithAttributes(attribute.String("reason", string(reason))), s.defaultMetricsOption)
 	}
 }
 
 func (s *StatisticsService) OnFireSuccess() {
 	if s.enableOTel {
-		s.fireSuccessCounter.Add(context.Background(), 1)
+		s.fireSuccessCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
 }
 
