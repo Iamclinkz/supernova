@@ -2,15 +2,16 @@ package dao
 
 import (
 	"encoding/json"
-	"gorm.io/gorm"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
+	"time"
 )
 
 type GlueSourceType map[string]string
 
 type Job struct {
-	gorm.Model            `json:"-"`
+	ID                    uint                                `gorm:"column:id;primarykey"`
+	UpdatedAt             time.Time                           `gorm:"column:updated_at"`
 	Name                  string                              `gorm:"column:name;type:varchar(64)"` //todo 为了测试，允许name为null了，后期删掉
 	ExecutorRouteStrategy constance.ExecutorRouteStrategyType `gorm:"column:executor_route_strategy;type:tinyint(4);not null"`
 	GlueType              string                              `gorm:"column:glue_type;not null"`
@@ -34,10 +35,8 @@ func FromModelJob(mJob *model.Job) (*Job, error) {
 	}
 
 	return &Job{
-		Model: gorm.Model{
-			ID:        mJob.ID,
-			UpdatedAt: mJob.UpdatedAt,
-		},
+		ID:                    mJob.ID,
+		UpdatedAt:             mJob.UpdatedAt,
 		Name:                  mJob.Name,
 		ExecutorRouteStrategy: mJob.ExecutorRouteStrategy,
 		GlueType:              mJob.GlueType,

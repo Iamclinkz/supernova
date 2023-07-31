@@ -3,9 +3,10 @@ package trace
 import (
 	"context"
 	"fmt"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"supernova/pkg/conf"
 	"time"
+
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -49,7 +50,8 @@ func InitProvider(serviceName string, instrumentConf *conf.OTelConf) (*sdktrace.
 
 	bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
 	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		//todo 改一下
+		sdktrace.WithSampler(sdktrace.NeverSample()),
 		sdktrace.WithResource(res),
 		sdktrace.WithSpanProcessor(bsp),
 	)

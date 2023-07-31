@@ -2,11 +2,12 @@ package model
 
 import (
 	"fmt"
-	"github.com/google/btree"
 	"strings"
 	"supernova/pkg/api"
 	"supernova/scheduler/constance"
 	"time"
+
+	"github.com/google/btree"
 )
 
 // OnFireLog 表示一次trigger的执行
@@ -14,23 +15,21 @@ type OnFireLog struct {
 	//任务执行阶段取
 	ID                uint
 	UpdatedAt         time.Time
-	TriggerID         uint                   `gorm:"column:trigger_id;not null;"`
-	JobID             uint                   `gorm:"column:job_id;not null;"`
-	Status            constance.OnFireStatus `gorm:"column:status;type:tinyint(4);not null"`
-	TryCount          int                    `gorm:"column:try_count;not null"`     //（失败）可执行次数
-	LeftTryCount      int                    `gorm:"column:left_try_count"`         //剩余的重试次数
-	ExecutorInstance  string                 `gorm:"column:executor_instance"`      //上一个执行的Executor的InstanceID
-	RedoAt            time.Time              `gorm:"column:redo_at;not null;index"` //超时时间
-	Param             map[string]string      `gorm:"-"`
-	FailRetryInterval time.Duration          `gorm:"column:fail_retry_interval"` //失败重试间隔，为0则立刻重试
-	AtLeastOnce       bool                   `gorm:"column:at_least_once"`       //语义，至少一次。如果为false，则为至多一次
-	TraceContext      string                 `gorm:"trace_context"`              //trace相关
+	TriggerID         uint
+	JobID             uint
+	Status            constance.OnFireStatus
+	TryCount          int       //（失败）可执行次数
+	LeftTryCount      int       //剩余的重试次数
+	ExecutorInstance  string    //上一个执行的Executor的InstanceID
+	RedoAt            time.Time //超时时间
+	Param             map[string]string
+	FailRetryInterval time.Duration //失败重试间隔，为0则立刻重试
+	AtLeastOnce       bool          //语义，至少一次。如果为false，则为至多一次
+	TraceContext      string        //trace相关
 
-	//任务结束阶段使用
-	Success bool   `gorm:"success"`
-	Result  string `gorm:"result;type:varchar(256)"` //error or result
+	Success bool
+	Result  string //error or result
 
-	//内部使用，不落库
 	ShouldFireAt   time.Time
 	ExecuteTimeout time.Duration
 }

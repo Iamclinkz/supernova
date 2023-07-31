@@ -2,14 +2,15 @@ package app
 
 import (
 	"errors"
-	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"strconv"
 	"supernova/executor/processor"
 	"supernova/pkg/conf"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 	tconf "supernova/pkg/session/trace"
+
+	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 type ExecutorBuilder struct {

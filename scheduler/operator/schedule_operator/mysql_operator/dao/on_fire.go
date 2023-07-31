@@ -5,12 +5,11 @@ import (
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
 	"time"
-
-	"gorm.io/gorm"
 )
 
 type OnFireLog struct {
-	gorm.Model
+	ID                uint                   `gorm:"column:id;primarykey"`
+	UpdatedAt         time.Time              `gorm:"column:updated_at"`
 	TriggerID         uint                   `gorm:"column:trigger_id;not null;"`
 	JobID             uint                   `gorm:"column:job_id;not null;"`
 	Status            constance.OnFireStatus `gorm:"column:status;type:tinyint(4);not null"`
@@ -41,10 +40,8 @@ func FromModelOnFireLog(mOnFireLog *model.OnFireLog) (*OnFireLog, error) {
 	}
 
 	return &OnFireLog{
-		Model: gorm.Model{
-			ID:        mOnFireLog.ID,
-			UpdatedAt: mOnFireLog.UpdatedAt,
-		},
+		ID:                mOnFireLog.ID,
+		UpdatedAt:         mOnFireLog.UpdatedAt,
 		TriggerID:         mOnFireLog.TriggerID,
 		JobID:             mOnFireLog.JobID,
 		Status:            mOnFireLog.Status,
