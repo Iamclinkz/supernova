@@ -128,6 +128,7 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 	}
 
 	klog.Tracef("fetchUpdateMarkTrigger fetched triggers, len:%v", len(onFireLogs))
+	s.statisticsService.OnFetchNeedFireTriggers(len(onFireLogs))
 	return onFireLogs, nil
 
 badEnd:
@@ -274,12 +275,25 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog,
 
 	wg.Wait()
 
-	if len(ret) != 0 {
+	var (
+		foundCount = len(onFireLogs)
+		gotCount   = len(ret)
+		missCount  = foundCount - gotCount
+	)
+
+	s.statisticsService.OnFindTimeoutOnFireLogs(foundCount)
+	s.statisticsService.OnHoldTimeoutOnFireLogFail(missCount)
+	s.statisticsService.OnHoldTimeoutOnFireLogSuccess(gotCount)
+	if gotCount >= 0 {
+		//获取成功一部分
 		klog.Infof("fetchTimeoutAndRefreshOnFireLogs fetched timeout logs, len:%v", len(ret))
 	} else {
-		if len(onFireLogs) != 0 {
+		//如果本轮没有获得任何一个OnFireLog
+		if foundCount > 0 {
+			//查找到一些个过期的OnFireLog，但是自己一个都没获得到
 			klog.Errorf("fetchTimeoutAndRefreshOnFireLogs find %v logs, but fetch nothing", len(onFireLogs))
 		} else {
+			//没有查找到过期的OnFireLog
 			klog.Trace("fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs")
 		}
 	}

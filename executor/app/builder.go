@@ -135,7 +135,7 @@ func (b *ExecutorBuilder) WithProcessorCount(count int) *ExecutorBuilder {
 
 func (b *ExecutorBuilder) WithOTelCollector(instrumentConf *conf.OTelConf) *ExecutorBuilder {
 	var err error
-	b.traceProvider, b.metricsProvider, err = tconf.InitProvider(constance.SchedulerServiceName, instrumentConf)
+	b.traceProvider, b.metricsProvider, err = tconf.InitProvider(constance.ExecutorServiceName, instrumentConf)
 	if err != nil && b.err != nil {
 		b.err = err
 	}

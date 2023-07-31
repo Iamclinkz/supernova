@@ -117,6 +117,7 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 			//这种情况下，尝试更新一下这条OnFireLog，标记成执行结束了。不让其他进程再取了
 			//更新不成功可能是已经成功了或者其他原因，不需要处理
 			_ = s.onFireService.UpdateOnFireLogStop(context.TODO(), onFireLog.ID, "user cancel")
+			s.statisticsService.OnFireFail(FireFailReasonFindJobError)
 			return nil
 		} else {
 			//其他情况，可能是网络不通？先不操作了
@@ -126,12 +127,14 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 
 	if job.Status == constance.JobStatusDeleted && !retry {
 		//如果job已经删除了，那么只有重试才能执行。否则不执行
+		s.statisticsService.OnFireFail(FireFailReasonFindJobError)
 		return nil
 	}
 
 	executorWrapper, err := s.executorSelectService.ChooseJobExecutor(job, onFireLog, retry)
 	if err != nil || executorWrapper == nil {
 		_ = s.onFireService.UpdateOnFireLogFail(context.TODO(), onFireLog.ID, "No matched executors")
+		s.statisticsService.OnFireFail(FireFailReasonNoExecutor)
 		return err
 	}
 
@@ -160,10 +163,13 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 	onFireLog.Status = constance.OnFireStatusExecuting
 
 	if err = s.onFireService.UpdateOnFireLogExecutorStatus(context.TODO(), onFireLog); err != nil {
+		//任务更新失败，可能说明此OnFireLog当前已经过期，被其他Scheduler（或者自己）取走了或者任务执行成功不需要再执行了。
+		//总之不需要我们本次执行了
 		if s.enableOTel {
 			span.RecordError(fmt.Errorf("fail to update on fire log executor status:%v", err))
 			span.End()
 		}
+		s.statisticsService.OnFireFail(FireFailReasonUpdateOnFireLogError)
 		return errors.New("update on fire log status fail:" + err.Error())
 	}
 
@@ -171,8 +177,11 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 		//如果执行出错，说明是流错误。不扣除RetryCount。等下次再执行
 		span.RecordError(fmt.Errorf("fail to run job:%v", err))
 		span.End()
+		s.statisticsService.OnFireFail(FireFailReasonExecutorConnectError)
 		return errors.New("run job fail:" + err.Error())
 	}
+
+	s.statisticsService.OnFireSuccess()
 	return nil
 }
 
