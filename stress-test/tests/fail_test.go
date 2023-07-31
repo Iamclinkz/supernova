@@ -15,8 +15,8 @@ import (
 // TestFail 执行单次大量任务，任务有80%的概率第一次失败，模拟极端情况下，大量任务同时失败、超时需要重试的情况
 // 目标：只要Scheduler和Executor都不宕机，那么任务一定能精准执行（成功）一次，即使失败多次。
 func TestFail(t *testing.T) {
-	var triggerCount = 10
-	supernovaTest := util.StartTest(1, 1, klog.LevelDebug)
+	var triggerCount = 10000
+	supernovaTest := util.StartTest(2, 2, klog.LevelDebug)
 	defer supernovaTest.EndTest()
 
 	httpServer := simple_http_server.NewSimpleHttpServer(

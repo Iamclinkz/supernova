@@ -15,7 +15,7 @@ func StartSchedulers(count int) []*app.Scheduler {
 		builder := app.NewSchedulerBuilder()
 		scheduler, err := builder.WithMysqlStore(DevMysqlConfig).
 			WithConsulDiscovery(DevConsulHost, DevConsulPort).
-			//WithOTelCollector(DevTraceConfig).
+			WithOTelCollector(DevTraceConfig).
 			WithInstanceID("Test-Scheduler-" + strconv.Itoa(i)).
 			Build()
 
