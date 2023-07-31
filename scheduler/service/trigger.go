@@ -43,10 +43,11 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 
 	//1.开启事务，保证同时只能有一个实例拿到任务，且如果失败，则回滚
 	if txCtx, err = s.scheduleOperator.OnTxStart(context.TODO()); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("OnTxStart error:%v", err)
 	}
 
 	if err = s.scheduleOperator.Lock(txCtx, constance.FetchUpdateMarkTriggerLockName); err != nil {
+		err = fmt.Errorf("lock error:%v", err)
 		goto badEnd
 	}
 
@@ -54,6 +55,7 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 	fetchedTriggers, err = s.scheduleOperator.FetchRecentTriggers(txCtx,
 		s.statisticsService.GetHandleTriggerMaxCount(), endTriggerHandleTime, beginTriggerHandleTime)
 	if err != nil {
+		err = fmt.Errorf("fetchRecentTriggers error:%v", err)
 		goto badEnd
 	}
 
@@ -111,6 +113,7 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 
 	//不管怎么样都需要更新一下triggers，即使某个trigger发生了错误，也需要更新trigger的status为Error
 	if err = s.scheduleOperator.UpdateTriggers(txCtx, fetchedTriggers); err != nil {
+		err = fmt.Errorf("updateTriggers error:%v", err)
 		goto badEnd
 	}
 
@@ -120,11 +123,12 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 	}
 
 	if err = s.scheduleOperator.InsertOnFires(txCtx, onFireLogs); err != nil {
+		err = fmt.Errorf("insertOnFires error:%v", err)
 		goto badEnd
 	}
 
 	if err = s.scheduleOperator.OnTxFinish(txCtx); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("onTxFinish error:%v", err)
 	}
 
 	klog.Tracef("fetchUpdateMarkTrigger fetched triggers, len:%v", len(onFireLogs))

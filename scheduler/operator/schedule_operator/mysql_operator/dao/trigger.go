@@ -60,9 +60,11 @@ func FromModelTrigger(mTrigger *model.Trigger) (*Trigger, error) {
 
 func ToModelTrigger(dTrigger *Trigger) (*model.Trigger, error) {
 	var param map[string]string
-	err := json.Unmarshal([]byte(dTrigger.Param), &param)
-	if err != nil {
-		return nil, err
+	if len(dTrigger.Param) != 0 {
+		err := json.Unmarshal([]byte(dTrigger.Param), &param)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &model.Trigger{

@@ -11,7 +11,7 @@ import (
 
 func StartSchedulers(count int) []*app.Scheduler {
 	ret := make([]*app.Scheduler, 0, count)
-	for i := 0; i <= count; i++ {
+	for i := 0; i < count; i++ {
 		builder := app.NewSchedulerBuilder()
 		scheduler, err := builder.WithMysqlStore(DevMysqlConfig).
 			WithConsulDiscovery(DevConsulHost, DevConsulPort).

@@ -119,7 +119,7 @@ func (s *ExecutorManageService) updateExecutor() {
 	for _, newExecutor := range newExecutors {
 		go func(e *Executor, retIdx int) {
 			defer wg.Done()
-			status, err := e.Operator.CheckStatus(s.statisticsService.GetHeartBeatTimeout())
+			status, err := e.Operator.CheckStatus(s.statisticsService.GetCheckExecutorHeartBeatTimeout())
 			rets[retIdx] = &ret{
 				instanceID: e.ServiceData.InstanceId,
 				status:     status,

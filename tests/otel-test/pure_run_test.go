@@ -18,12 +18,12 @@ func TestPureRun(t *testing.T) {
 		LogLevel = klog.LevelWarn
 	)
 
-	supernovaTest := util.StartTest(2, 2, LogLevel, util.StartIdleExecutors,
+	supernovaTest := util.StartTest(3, 3, LogLevel, util.StartIdleExecutors,
 		&processor_plugin_idle.IdleProcessorConfig{
 			DoLog:    false,
 			DoSleep:  true,
-			SleepMin: 1 * time.Second,
-			SleepMax: 5 * time.Second,
+			SleepMin: 50 * time.Millisecond,
+			SleepMax: 100 * time.Millisecond,
 			DoFail:   false,
 			FailRate: 0,
 		})
@@ -31,7 +31,7 @@ func TestPureRun(t *testing.T) {
 	start := time.Now()
 
 	//5000个Trigger，每个Trigger每隔5执行一次，相当于是每秒执行1000个trigger
-	var triggerCount = 5000
+	var triggerCount = 10000
 
 	//加一个任务
 	if err := util.RegisterJob(util.SchedulerAddress, &model.Job{
@@ -54,7 +54,7 @@ func TestPureRun(t *testing.T) {
 			ScheduleType:      constance.ScheduleTypeCron, //使用cron循环执行
 			ScheduleConf:      "*/5 * * * * *",            //每5s执行一次
 			FailRetryCount:    5,                          //最大失败重试五次。
-			ExecuteTimeout:    3 * time.Second,            //执行超过3s算超时。
+			ExecuteTimeout:    2 * time.Second,            //执行超过3s算超时。
 			TriggerNextTime:   time.Now(),
 			MisfireStrategy:   constance.MisfireStrategyTypeDoNothing,
 			FailRetryInterval: 3 * time.Second, //重试间隔为1s

@@ -2,12 +2,13 @@ package service
 
 import (
 	"context"
+	"supernova/pkg/util"
+	"time"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"supernova/pkg/util"
-	"time"
 )
 
 type StatisticsService struct {
@@ -138,7 +139,7 @@ func (s *StatisticsService) GetHandleTriggerForwardDuration() time.Duration {
 }
 
 func (s *StatisticsService) GetHandleTriggerMaxCount() int {
-	return 3000
+	return 6000
 }
 
 func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
@@ -157,6 +158,6 @@ func (s *StatisticsService) GetExecutorHeartbeatInterval() time.Duration {
 	return time.Second * 5
 }
 
-func (s *StatisticsService) GetHeartBeatTimeout() time.Duration {
+func (s *StatisticsService) GetCheckExecutorHeartBeatTimeout() time.Duration {
 	return time.Second * 2
 }

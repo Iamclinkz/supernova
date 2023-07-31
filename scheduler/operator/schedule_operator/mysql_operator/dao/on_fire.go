@@ -60,9 +60,11 @@ func FromModelOnFireLog(mOnFireLog *model.OnFireLog) (*OnFireLog, error) {
 
 func ToModelOnFireLog(dOnFireLog *OnFireLog) (*model.OnFireLog, error) {
 	var param map[string]string
-	err := json.Unmarshal([]byte(dOnFireLog.Param), &param)
-	if err != nil {
-		return nil, err
+	if len(dOnFireLog.Param) != 0 {
+		err := json.Unmarshal([]byte(dOnFireLog.Param), &param)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &model.OnFireLog{

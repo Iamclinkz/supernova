@@ -285,7 +285,7 @@ func (m *MysqlOperator) FindTriggerByName(ctx context.Context, triggerName strin
 
 	trigger, err := dao.ToModelTrigger(dTrigger)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	return trigger, nil
@@ -362,7 +362,8 @@ func (m *MysqlOperator) FetchRecentTriggers(ctx context.Context, maxCount int, n
 	for i, dTrigger := range dTriggers {
 		trigger, err := dao.ToModelTrigger(dTrigger)
 		if err != nil {
-			return nil, err
+			//todo 删掉
+			panic(err)
 		}
 		triggers[i] = trigger
 	}
@@ -385,9 +386,17 @@ func (m *MysqlOperator) UpdateTriggers(ctx context.Context, triggers []*model.Tr
 		dTriggers[i] = dTrigger
 	}
 
-	err := db.Save(dTriggers).Error
-	if err != nil {
-		return fmt.Errorf("failed to update triggers: %w", err)
+	batchSize := 1500
+	for i := 0; i < len(dTriggers); i += batchSize {
+		end := i + batchSize
+		if end > len(dTriggers) {
+			end = len(dTriggers)
+		}
+
+		err := db.Save(dTriggers[i:end]).Error
+		if err != nil {
+			return fmt.Errorf("failed to update triggers: %w", err)
+		}
 	}
 
 	return nil
@@ -576,7 +585,7 @@ func (m *MysqlOperator) FetchTriggerFromID(ctx context.Context, triggerID uint) 
 
 	trigger, err := dao.ToModelTrigger(dTrigger)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	return trigger, nil

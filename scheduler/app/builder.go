@@ -3,8 +3,6 @@ package app
 import (
 	"errors"
 	"fmt"
-	"go.opentelemetry.io/otel/sdk/metric"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"supernova/pkg/conf"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
@@ -13,6 +11,9 @@ import (
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/operator/schedule_operator/memory_operator"
 	"supernova/scheduler/operator/schedule_operator/mysql_operator"
+
+	"go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/google/uuid"
 )
@@ -117,7 +118,7 @@ func (b *SchedulerBuilder) Build() (*Scheduler, error) {
 		return nil, errors.New("no select discovery")
 	}
 	if b.schedulerWorkerCount == 0 {
-		b.schedulerWorkerCount = 512
+		b.schedulerWorkerCount = 32
 	}
 	if b.instanceID == "" {
 		b.instanceID = fmt.Sprintf("Scheduler-%v", uuid.New())
