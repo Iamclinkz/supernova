@@ -31,12 +31,11 @@ type StatisticsService struct {
 	currentJobCountUpDownCounter        metric.Int64UpDownCounter //当前正在（并发）执行的任务的数量
 	unFinishedRequestCountUpDownCounter metric.Int64UpDownCounter //当前未处理的请求的数量
 	runJobResponseSuccessCounter        metric.Int64Counter       //发送执行任务结果成功数量
-	noNeedSendResponseCounter           metric.Int64Counter       //不需要（排队成功/之前成功，直接返回，可以视作异常）执行的任务数量
+	duplicateExecuteRequestCounter      metric.Int64Counter       //重复执行（正在执行 or 已执行成功）请求数量 todo
 	receiveRunJobRequestCounter         metric.Int64Counter       //接收的RunJobRequest消息的数量
-	overTimeTaskSuccessCounter          metric.Int64Counter       //超时，但执行成功的任务的数量
 	overTimeTaskCounter                 metric.Int64Counter       //超时的任务的数量
-	runJobCount                         metric.Int64Counter       //执行任务的数量
-	executeHistogram                    metric.Int64Histogram     //纯执行时间
+	executeJobCount                     metric.Int64Counter       //执行任务的数量
+	executeTimeHistogram                metric.Int64Histogram     //纯执行时间
 }
 
 func NewStatisticsService(enableOTel bool, instanceID string) *StatisticsService {
@@ -73,7 +72,8 @@ func NewStatisticsService(enableOTel bool, instanceID string) *StatisticsService
 			panic(err)
 		}
 
-		ret.noNeedSendResponseCounter, err = ret.meter.Int64Counter("no_need_send_response_total",
+		//todo 待更新
+		ret.duplicateExecuteRequestCounter, err = ret.meter.Int64Counter("duplicate_execute_request_total",
 			metric.WithDescription("Total number of requests with no need to send a response"))
 		if err != nil {
 			panic(err)
@@ -85,18 +85,14 @@ func NewStatisticsService(enableOTel bool, instanceID string) *StatisticsService
 			panic(err)
 		}
 
-		ret.overTimeTaskSuccessCounter, err = ret.meter.Int64Counter("over_time_task_success_total",
-			metric.WithDescription("Total number of successful over time task executions"))
-		if err != nil {
-			panic(err)
-		}
-		ret.runJobCount, err = ret.meter.Int64Counter("run_job_total",
+		//todo 待更新
+		ret.executeJobCount, err = ret.meter.Int64Counter("execute_job_total",
 			metric.WithDescription("Total number of job execution"))
 		if err != nil {
 			panic(err)
 		}
 
-		ret.executeHistogram, err = ret.meter.Int64Histogram("execute_time",
+		ret.executeTimeHistogram, err = ret.meter.Int64Histogram("execute_time",
 			metric.WithDescription("Execute time by executors"),
 			metric.WithUnit("ms"),
 		)
@@ -119,7 +115,7 @@ func (s *StatisticsService) OnSendRunJobResponseSuccess(response *api.RunJobResp
 func (s *StatisticsService) OnNoNeedSendResponse(request *api.RunJobRequest) {
 	s.unFinishedRequestCount.Add(-1)
 	if s.enableOTel {
-		s.noNeedSendResponseCounter.Add(context.Background(), 1, s.defaultMetricsOption)
+		s.duplicateExecuteRequestCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), -1, s.defaultMetricsOption)
 	}
 }
@@ -136,7 +132,6 @@ func (s *StatisticsService) OnReceiveRunJobRequest(request *api.RunJobRequest) {
 func (s *StatisticsService) OnOverTimeTaskExecuteSuccess(request *api.RunJobRequest, response *api.RunJobResponse) {
 	s.unFinishedRequestCount.Add(1)
 	if s.enableOTel {
-		s.overTimeTaskSuccessCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
 }
@@ -145,7 +140,7 @@ func (s *StatisticsService) OnStartExecute(jobRequest *api.RunJobRequest) {
 	s.currentJobCount.Add(1)
 	if s.enableOTel {
 		s.currentJobCountUpDownCounter.Add(context.Background(), 1, s.defaultMetricsOption)
-		s.runJobCount.Add(context.Background(), 1, s.defaultMetricsOption)
+		s.executeJobCount.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
 }
 
@@ -186,6 +181,6 @@ func (s *StatisticsService) RecordExecuteTime(delay time.Duration) {
 		return
 	}
 
-	delayMs := float64(delay) / float64(time.Millisecond)
-	s.executeHistogram.Record(context.Background(), int64(delayMs), s.defaultMetricsOption)
+	klog.Errorf("timeout:%v", delay)
+	s.executeTimeHistogram.Record(context.Background(), delay.Milliseconds(), s.defaultMetricsOption)
 }

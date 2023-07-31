@@ -160,8 +160,7 @@ func (s *StatisticsService) RecordScheduleDelay(delay time.Duration) {
 		return
 	}
 
-	delayMs := float64(delay) / float64(time.Millisecond)
-	s.scheduleDelayHistogram.Record(context.Background(), int64(delayMs), s.defaultMetricsOption)
+	s.scheduleDelayHistogram.Record(context.Background(), delay.Milliseconds(), s.defaultMetricsOption)
 }
 
 // GetHandleTriggerMaxCount 获取本次最多获取多少条待触发的Trigger
