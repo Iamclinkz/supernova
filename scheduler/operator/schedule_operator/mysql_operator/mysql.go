@@ -408,14 +408,22 @@ func (m *MysqlOperator) InsertOnFires(ctx context.Context, onFires []*model.OnFi
 		dOnFires[i] = dOnFire
 	}
 
-	err := db.Create(dOnFires).Error
-	if err != nil {
-		return fmt.Errorf("failed to insert on_fire record: %w", err)
-	}
+	batchSize := 1500
+	for i := 0; i < len(dOnFires); i += batchSize {
+		end := i + batchSize
+		if end > len(dOnFires) {
+			end = len(dOnFires)
+		}
 
-	for i, dOnFire := range dOnFires {
-		onFires[i].ID = dOnFire.ID
-		onFires[i].UpdatedAt = dOnFire.UpdatedAt
+		err := db.Create(dOnFires[i:end]).Error
+		if err != nil {
+			return fmt.Errorf("failed to insert on_fire record: %v", err)
+		}
+
+		for j, dOnFire := range dOnFires[i:end] {
+			onFires[i+j].ID = dOnFire.ID
+			onFires[i+j].UpdatedAt = dOnFire.UpdatedAt
+		}
 	}
 
 	return nil

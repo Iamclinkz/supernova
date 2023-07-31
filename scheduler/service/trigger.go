@@ -236,7 +236,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog,
 	onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(),
 		s.statisticsService.GetHandleTimeoutOnFireLogMaxCount(), now, beginHandleTime)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch timeout triggers error:%v", err)
 	}
 
 	ret := make([]*model.OnFireLog, 0, len(onFireLogs))
