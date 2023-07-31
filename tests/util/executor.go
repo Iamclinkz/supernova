@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"supernova/executor/app"
 	processor_plugin_http "supernova/processor-plugin/processor-plugin-http"
+	"supernova/processor-plugin/processor-plugin-idle"
 
 	"github.com/google/uuid"
 )
@@ -40,7 +41,9 @@ func GenExecutorInstanceConf(id int) *ExecutorInstanceConf {
 	}
 }
 
-func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf) []*app.Executor {
+type ExecutorStartFunc func(instanceConfigs []*ExecutorInstanceConf, executorConfig any) []*app.Executor
+
+func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf, extraConfig any) []*app.Executor {
 	ret := make([]*app.Executor, 0, len(instanceConfigs))
 	for _, instanceConf := range instanceConfigs {
 		httpExecutor := new(processor_plugin_http.HTTP)
@@ -48,6 +51,30 @@ func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf) []*app.Executor
 		executor, err := builder.WithInstanceID(GenUnderCloudExecutorID()).WithConsulDiscovery(
 			DevConsulHost, DevConsulPort, instanceConf.HealthCheckPort).
 			WithProcessor(httpExecutor).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).
+			WithOTelCollector(DevTraceConfig).
+			Build()
+
+		if err != nil {
+			panic(err)
+		}
+
+		ret = append(ret, executor)
+		go executor.Start()
+	}
+
+	return ret
+}
+
+func StartIdleExecutors(instanceConfigs []*ExecutorInstanceConf,
+	extraConfig any) []*app.Executor {
+	idleConf := extraConfig.(*processor_plugin_idle.IdleProcessorConfig)
+	ret := make([]*app.Executor, 0, len(instanceConfigs))
+	for _, instanceConf := range instanceConfigs {
+		idleExecutor := processor_plugin_idle.NewIdle(idleConf)
+		builder := app.NewExecutorBuilder()
+		executor, err := builder.WithInstanceID(GenUnderCloudExecutorID()).WithConsulDiscovery(
+			DevConsulHost, DevConsulPort, instanceConf.HealthCheckPort).
+			WithProcessor(idleExecutor).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).
 			WithOTelCollector(DevTraceConfig).
 			Build()
 

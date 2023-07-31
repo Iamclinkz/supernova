@@ -1,14 +1,16 @@
-package tests
+package functional_test
 
 import (
 	"log"
 	"strconv"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
-	simple_http_server "supernova/stress-test/simple-http-server"
-	"supernova/stress-test/util"
+	simple_http_server "supernova/tests/simple-http-server"
+	"supernova/tests/util"
 	"testing"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 // TestWithoutFail 执行单次海量任务，任务默认成功，只有少数会失败（因为simple-http-server一瞬间建立太多连接，
@@ -17,7 +19,11 @@ import (
 func TestWithoutFail(t *testing.T) {
 	start := time.Now()
 
-	var triggerCount = 500
+	var triggerCount = 100000
+
+	supernovaTest := util.StartTest(3, 3, klog.LevelWarn, util.StartHttpExecutors, nil)
+	defer supernovaTest.EndTest()
+
 	httpServer := simple_http_server.NewSimpleHttpServer(
 		&simple_http_server.SimpleHttpServerInitConf{
 			FailRate:             0,
@@ -41,7 +47,7 @@ func TestWithoutFail(t *testing.T) {
 		GlueType:              "Http",
 		GlueSource: map[string]string{
 			"method":     "POST",
-			"url":        "http://9.134.5.191:" + strconv.Itoa(util.SimpleWebServerPort) + "/test",
+			"url":        "http://localhost:" + strconv.Itoa(util.SimpleWebServerPort) + "/test",
 			"timeout":    "30",
 			"expectCode": "200",
 			"expectBody": "OK",
@@ -73,5 +79,5 @@ func TestWithoutFail(t *testing.T) {
 	util.RegisterTriggers(util.SchedulerAddress, triggers)
 
 	log.Printf("register triggers successed, cost:%v\n", time.Since(start))
-	httpServer.WaitResult(10*time.Second, true)
+	httpServer.WaitResult(20*time.Second, true)
 }

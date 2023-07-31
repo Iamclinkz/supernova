@@ -1,4 +1,4 @@
-package tests
+package functional_test
 
 import (
 	"bytes"
@@ -7,47 +7,37 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
-	"supernova/pkg/conf"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
-	simple_http_server "supernova/stress-test/simple-http-server"
-	"supernova/stress-test/util"
+	simple_http_server "supernova/tests/simple-http-server"
+	"supernova/tests/util"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
 
-func TestExecutorGracefulStop(t *testing.T) {
-	//测试使用
+// TestForceKillScheduler 测试Scheduler宕机的情况。
+// 目标：只要有其他可用的Scheduler实例，那么即使某个Scheduler死掉，任务可以正常执行，不会多触发、少触发
+// 过程：使用SDK开启两个Scheduler，使用进程开启一个Scheduler，开启三个Executor。然后把Scheduler进程杀死，查看任务执行情况
+func TestForceKillScheduler(t *testing.T) {
 	const (
-		BinPath                 = "../../executor-example/http-executor/build/bin/http-executor"
-		LogLevel                = klog.LevelInfo
-		TriggerCount            = 50000
-		MaxWaitGracefulStopTime = time.Second*5 + conf.SchedulerMaxCheckHealthDuration
-	)
-
-	//启动单独的，准备被干掉的Executor使用
-	const (
-		ExecutorGrpcHost        = "9.134.5.191"
-		ExecutorGrpcPort        = 20001
-		ExecutorLogLevel        = klog.LevelInfo
-		ExecutorHealthCheckPort = 11111
-		ExecutorConsulHost      = "9.134.5.191"
-		ExecutorConsulPort      = 8500
+		BinPath                      = "../../scheduler/build/bin/scheduler"
+		KilledSchedulerHttpServePort = 7070
+		LogLevel                     = klog.LevelError
+		TriggerCount                 = 50000
 	)
 
 	var (
-		LogName = fmt.Sprintf("graceful-stop-executor-error-%v.log", time.Now().Format("15:04:05"))
+		LogName = fmt.Sprintf("kill-scheduler-error-log-%v.log", time.Now().Format("15:04:05"))
 		err     error
 		pid     atomic.Int32
 	)
 
 	//开2个Scheduler和3个Executor
-	supernovaTest := util.StartTest(2, 2, LogLevel)
+	supernovaTest := util.StartTest(2, 3, LogLevel, util.StartHttpExecutors, nil)
 	defer supernovaTest.EndTest()
 
 	httpServer := simple_http_server.NewSimpleHttpServer(&simple_http_server.SimpleHttpServerInitConf{
@@ -57,25 +47,20 @@ func TestExecutorGracefulStop(t *testing.T) {
 		AllowDuplicateCalled:  false,
 		SuccessAfterFirstFail: true, //但是失败之后，重试一定成功
 	}, &simple_http_server.SimpleHttpServerCheckConf{
-		AllSuccess:                    false,
-		FailTriggerRateNotGreaterThan: 0.05, //最大容忍5%的失败
-		NoUncalledTriggers:            true,
+		AllSuccess:         true,
+		NoUncalledTriggers: true,
 	})
 	go httpServer.Start()
 
-	//是否是手动触发退出
-	manualQuit := atomic.Bool{}
+	//是否是手动删除
+	manualKill := atomic.Bool{}
 
-	executorStopWg := sync.WaitGroup{}
-	executorStopWg.Add(1)
-
+	schedulerStopWg := sync.WaitGroup{}
+	schedulerStopWg.Add(1)
 	var buf bytes.Buffer
 	go func() {
-		//使用bin启动一个Executor，把日志输出到graceful-stop-executor.log中
 		cmd := exec.Command(BinPath,
-			fmt.Sprintf("-grpcHost=%v", ExecutorGrpcHost), fmt.Sprintf("-grpcPort=%v", ExecutorGrpcPort),
-			fmt.Sprintf("-logLevel=%v", ExecutorLogLevel), fmt.Sprintf("-healthCheckPort=%v", ExecutorHealthCheckPort),
-			fmt.Sprintf("-consulHost=%v", ExecutorConsulHost), fmt.Sprintf("-consulPort=%v", ExecutorConsulPort))
+			fmt.Sprintf("-httpPort=%d", KilledSchedulerHttpServePort), fmt.Sprintf("-logLevel=%d", klog.LevelTrace))
 		cmd.Stdout = &buf
 		cmd.Stderr = &buf
 		err = cmd.Start()
@@ -88,15 +73,15 @@ func TestExecutorGracefulStop(t *testing.T) {
 		// 等待进程结束，并且判断是否是外围手动kill的。
 		// Scheduler本身不会自动结束，所以如果外围没有手动kill且结束，只能说明启动出错，应该panic
 		err = cmd.Wait()
-		if !manualQuit.Load() {
+		if !manualKill.Load() {
 			panic("start error!")
 		}
 
-		klog.Infof("executor stopped, reason:%v", err)
-		executorStopWg.Done()
+		klog.Errorf("scheduler was killed, reason:%v", err)
+		schedulerStopWg.Done()
 	}()
 
-	//等待ExecutorBin启动
+	//等待SchedulerBin启动
 	time.Sleep(1 * time.Second)
 
 	if err = util.RegisterJob(util.SchedulerAddress, &model.Job{
@@ -130,27 +115,26 @@ func TestExecutorGracefulStop(t *testing.T) {
 				simple_http_server.TriggerIDFieldName: strconv.Itoa(i),
 			},
 			FailRetryInterval: 0,
-			AtLeastOnce:       false, //最多执行一次
 		}
 	}
 
 	go func() {
 		time.Sleep(5 * time.Second)
 
-		//发送信号。这里先检查一手，别把init进程杀了。。。。。
-		executorPid := pid.Load()
-		if executorPid == 0 {
+		//杀死进程。这里先检查一手，别把init进程杀了。。。。。
+		schedulerPid := pid.Load()
+		if schedulerPid == 0 {
 			panic("")
 		}
-		manualQuit.Store(true)
-		err = util.SendSignalByPid(int(executorPid), syscall.SIGTERM)
+		manualKill.Store(true)
+		err = util.KillProcessByPID(int(schedulerPid))
 		if err != nil {
 			panic(err)
 		}
 	}()
 
 	util.RegisterTriggers(util.SchedulerAddress, triggers)
-	ok := httpServer.WaitResult(MaxWaitGracefulStopTime, false)
+	ok := httpServer.WaitResult(15*time.Second, false)
 	if !ok {
 		logFile, err := os.OpenFile(LogName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if err != nil {

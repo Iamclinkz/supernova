@@ -1,42 +1,36 @@
-package tests
+package functional_test
 
 import (
-	"log"
 	"strconv"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
-	simple_http_server "supernova/stress-test/simple-http-server"
-	"supernova/stress-test/util"
+	simple_http_server "supernova/tests/simple-http-server"
+	"supernova/tests/util"
 	"testing"
 	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
 
-// TestWithoutFail 执行单次海量任务，任务默认成功，只有少数会失败（因为simple-http-server一瞬间建立太多连接，
-// 可能会响应超时，从而http-executor因为超时，返回任务执行失败。
-// 目标：可以看做是模拟正常情况下的高并发测试
-func TestWithoutFail(t *testing.T) {
-	start := time.Now()
-
-	var triggerCount = 100000
-
-	supernovaTest := util.StartTest(3, 3, klog.LevelWarn)
+// TestFail 执行单次大量任务，任务有80%的概率第一次失败，模拟极端情况下，大量任务同时失败、超时需要重试的情况
+// 目标：只要Scheduler和Executor都不宕机，那么任务一定能精准执行（成功）一次，即使失败多次。
+func TestFail(t *testing.T) {
+	var triggerCount = 10000
+	supernovaTest := util.StartTest(2, 2, klog.LevelDebug, util.StartHttpExecutors, nil)
 	defer supernovaTest.EndTest()
 
 	httpServer := simple_http_server.NewSimpleHttpServer(
 		&simple_http_server.SimpleHttpServerInitConf{
-			FailRate:             0,
-			ListeningPort:        util.SimpleWebServerPort,
-			TriggerCount:         triggerCount,
-			AllowDuplicateCalled: false,
-		},
-		&simple_http_server.SimpleHttpServerCheckConf{
-			AllSuccess:                    true,
+			FailRate:              0.80, //80%的概率失败
+			ListeningPort:         util.SimpleWebServerPort,
+			TriggerCount:          triggerCount,
+			AllowDuplicateCalled:  false,
+			SuccessAfterFirstFail: true, //但是失败之后，重试一定成功
+		}, &simple_http_server.SimpleHttpServerCheckConf{
+			AllSuccess:                    false,
 			NoUncalledTriggers:            true,
-			FailTriggerRateNotGreaterThan: 1,
+			FailTriggerRateNotGreaterThan: 0.01,
 		})
-
 	go httpServer.Start()
 
 	time.Sleep(1 * time.Second)
@@ -58,14 +52,13 @@ func TestWithoutFail(t *testing.T) {
 	}
 
 	triggers := make([]*model.Trigger, triggerCount)
-
 	for i := 0; i < triggerCount; i++ {
 		triggers[i] = &model.Trigger{
 			Name:            "test-trigger-" + strconv.Itoa(i),
 			JobID:           1,
 			ScheduleType:    2,          //执行一次
-			FailRetryCount:  5,          //失败重试五次。因为simple_http_service每次都需要开go程执行请求，瞬间很多个请求打过去可能造成失败的情况。。
-			ExecuteTimeout:  3000000000, //3s
+			FailRetryCount:  100,        //失败几乎可以一直重试
+			ExecuteTimeout:  2000000000, //2s
 			TriggerNextTime: time.Now(),
 			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,
 			Param: map[string]string{
@@ -78,6 +71,5 @@ func TestWithoutFail(t *testing.T) {
 
 	util.RegisterTriggers(util.SchedulerAddress, triggers)
 
-	log.Printf("register triggers successed, cost:%v\n", time.Since(start))
 	httpServer.WaitResult(20*time.Second, true)
 }

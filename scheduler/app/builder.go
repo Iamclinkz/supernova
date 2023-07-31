@@ -11,6 +11,7 @@ import (
 	"supernova/pkg/session/trace"
 	"supernova/scheduler/dal"
 	"supernova/scheduler/operator/schedule_operator"
+	"supernova/scheduler/operator/schedule_operator/memory_operator"
 	"supernova/scheduler/operator/schedule_operator/mysql_operator"
 
 	"github.com/google/uuid"
@@ -71,7 +72,7 @@ func (b *SchedulerBuilder) WithMysqlStore(config *conf.MysqlConf) *SchedulerBuil
 }
 
 func (b *SchedulerBuilder) WithMemoryStore() *SchedulerBuilder {
-	b.scheduleOperator = schedule_operator.NewMemoryScheduleOperator()
+	b.scheduleOperator = memory_operator.NewMemoryScheduleOperator()
 	return b
 }
 

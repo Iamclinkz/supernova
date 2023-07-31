@@ -13,11 +13,12 @@ type SupernovaTest struct {
 	schedulers []*sapp.Scheduler
 }
 
-func StartTest(schedulerCount, executorCount int, level klog.Level) *SupernovaTest {
+func StartTest(schedulerCount, executorCount int, level klog.Level, startFunc ExecutorStartFunc,
+	extraConf any) *SupernovaTest {
 	ret := new(SupernovaTest)
 
 	klog.SetLevel(level)
-	ret.executors = StartHttpExecutors(GenExecutorInstanceConfWithCount(executorCount))
+	ret.executors = startFunc(GenExecutorInstanceConfWithCount(executorCount), extraConf)
 	time.Sleep(2 * time.Second)
 	ret.schedulers = StartSchedulers(schedulerCount)
 	return ret

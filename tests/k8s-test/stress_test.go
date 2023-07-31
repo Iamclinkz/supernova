@@ -1,47 +1,23 @@
-package tests
+package k8s_test
 
 import (
-	"github.com/cloudwego/kitex/pkg/klog"
+	"log"
 	"strconv"
-	"supernova/scheduler/app"
 	"supernova/scheduler/constance"
-	"supernova/scheduler/handler/http"
 	"supernova/scheduler/model"
-	simple_http_server "supernova/stress-test/simple-http-server"
-	"supernova/stress-test/util"
+	simple_http_server "supernova/tests/simple-http-server"
+	"supernova/tests/util"
 	"testing"
 	"time"
 )
 
-// todo 待测
-func TestMemoryStore(t *testing.T) {
-	const (
-		MemoryStoreSchedulerPort = "8180"
-	)
-
+// TestWithoutFail 执行单次海量任务，任务默认成功，只有少数会失败（因为simple-http-server一瞬间建立太多连接，
+// 可能会响应超时，从而http-executor因为超时，返回任务执行失败。
+// 目标：可以看做是模拟正常情况下的高并发测试
+func TestWithoutFail(t *testing.T) {
 	start := time.Now()
 
-	var triggerCount = 100000
-
-	supernovaTest := util.StartTest(0, 3, klog.LevelWarn)
-	defer supernovaTest.EndTest()
-
-	builder := app.NewSchedulerBuilder()
-	memoryStoreScheduler, err := builder.WithMemoryStore().WithConsulDiscovery(util.DevConsulHost, util.DevConsulPort).Build()
-	if err != nil {
-		panic(err)
-	}
-	memoryStoreScheduler.Start()
-	router := http.InitHttpHandler(memoryStoreScheduler)
-	klog.Infof("Start the server at %v", MemoryStoreSchedulerPort)
-
-	go func() {
-		if err = router.Run(":" + MemoryStoreSchedulerPort); err != nil {
-			panic(err)
-		}
-	}()
-	time.Sleep(1 * time.Second)
-
+	var triggerCount = 500
 	httpServer := simple_http_server.NewSimpleHttpServer(
 		&simple_http_server.SimpleHttpServerInitConf{
 			FailRate:             0,
@@ -50,8 +26,9 @@ func TestMemoryStore(t *testing.T) {
 			AllowDuplicateCalled: false,
 		},
 		&simple_http_server.SimpleHttpServerCheckConf{
-			AllSuccess:         true,
-			NoUncalledTriggers: true,
+			AllSuccess:                    true,
+			NoUncalledTriggers:            true,
+			FailTriggerRateNotGreaterThan: 1,
 		})
 
 	go httpServer.Start()
@@ -64,7 +41,7 @@ func TestMemoryStore(t *testing.T) {
 		GlueType:              "Http",
 		GlueSource: map[string]string{
 			"method":     "POST",
-			"url":        "http://localhost:" + strconv.Itoa(util.SimpleWebServerPort) + "/test",
+			"url":        "http://9.134.5.191:" + strconv.Itoa(util.SimpleWebServerPort) + "/test",
 			"timeout":    "30",
 			"expectCode": "200",
 			"expectBody": "OK",
@@ -93,8 +70,8 @@ func TestMemoryStore(t *testing.T) {
 		}
 	}
 
-	util.RegisterTriggers(MemoryStoreSchedulerPort, triggers)
+	util.RegisterTriggers(util.SchedulerAddress, triggers)
 
-	klog.Infof("register triggers success, cost:%v\n", time.Since(start))
-	httpServer.WaitResult(20*time.Second, true)
+	log.Printf("register triggers successed, cost:%v\n", time.Since(start))
+	httpServer.WaitResult(10*time.Second, true)
 }

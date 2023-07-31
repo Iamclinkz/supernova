@@ -1,4 +1,4 @@
-package schedule_operator
+package memory_operator
 
 import (
 	"context"
@@ -6,11 +6,14 @@ import (
 	"supernova/pkg/util"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
+	"supernova/scheduler/operator/schedule_operator"
 	"sync"
 	"time"
 
 	"github.com/google/btree"
 )
+
+var _ schedule_operator.Operator = (*MemoryOperator)(nil)
 
 type MemoryOperator struct {
 	//trigger
@@ -57,7 +60,7 @@ func (m *MemoryOperator) FetchJobFromID(ctx context.Context, jobID uint) (*model
 
 	job, ok := m.jobs[jobID]
 	if !ok {
-		return nil, ErrNotFound
+		return nil, schedule_operator.ErrNotFound
 	}
 
 	newJob := &model.Job{}
@@ -118,7 +121,7 @@ func (m *MemoryOperator) UpdateOnFireLogExecutorStatus(ctx context.Context, onFi
 
 	dbOnFireLog, ok := m.onFireLogs[onFireLog.ID]
 	if !ok {
-		return ErrNotFound
+		return schedule_operator.ErrNotFound
 	}
 
 	if dbOnFireLog.Status == constance.OnFireStatusFinished || !dbOnFireLog.UpdatedAt.Equal(onFireLog.UpdatedAt) {
@@ -139,7 +142,7 @@ func (m *MemoryOperator) UpdateOnFireLogRedoAt(ctx context.Context, onFireLog *m
 
 	fire, ok := m.onFireLogs[onFireLog.ID]
 	if !ok {
-		return ErrNotFound
+		return schedule_operator.ErrNotFound
 	}
 
 	if fire.Status == constance.OnFireStatusFinished || !fire.UpdatedAt.Equal(onFireLog.UpdatedAt) {
@@ -158,7 +161,7 @@ func (m *MemoryOperator) UpdateOnFireLogFail(ctx context.Context, onFireLogID ui
 
 	fire, ok := m.onFireLogs[onFireLogID]
 	if !ok {
-		return ErrNotFound
+		return schedule_operator.ErrNotFound
 	}
 
 	if fire.Status == constance.OnFireStatusFinished {
@@ -177,7 +180,7 @@ func (m *MemoryOperator) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID
 
 	fire, ok := m.onFireLogs[onFireLogID]
 	if !ok {
-		return ErrNotFound
+		return schedule_operator.ErrNotFound
 	}
 
 	if fire.Status == constance.OnFireStatusFinished {
@@ -198,7 +201,7 @@ func (m *MemoryOperator) UpdateOnFireLogStop(ctx context.Context, onFireLogID ui
 
 	fire, ok := m.onFireLogs[onFireLogID]
 	if !ok {
-		return ErrNotFound
+		return schedule_operator.ErrNotFound
 	}
 
 	if fire.Status == constance.OnFireStatusFinished {
@@ -284,7 +287,7 @@ func (m *MemoryOperator) FetchTriggerFromID(ctx context.Context, triggerID uint)
 
 	trigger, ok := m.triggers[triggerID]
 	if !ok {
-		return nil, ErrNotFound
+		return nil, schedule_operator.ErrNotFound
 	}
 
 	newTrigger := &model.Trigger{}
@@ -303,7 +306,7 @@ func (m *MemoryOperator) FindTriggerByName(ctx context.Context, triggerName stri
 			return newTrigger, nil
 		}
 	}
-	return nil, ErrNotFound
+	return nil, schedule_operator.ErrNotFound
 }
 
 func (m *MemoryOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time) ([]*model.OnFireLog, error) {
@@ -324,4 +327,4 @@ func (m *MemoryOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int
 	return result, nil
 }
 
-var _ Operator = (*MemoryOperator)(nil)
+var _ schedule_operator.Operator = (*MemoryOperator)(nil)

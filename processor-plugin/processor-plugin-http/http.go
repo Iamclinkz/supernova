@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"supernova/executor/processor"
 	"supernova/pkg/api"
 	"time"
 
@@ -30,12 +31,14 @@ const (
 	maxBufSize = 256000
 )
 
+var _ processor.JobProcessor = (*HTTP)(nil)
+
 // HTTP process http request
 type HTTP struct {
 }
 
 // Process Process method of the plugin
-// "glueType": "http",
+// "glueType": "Http",
 //
 //	"glueSource": {
 //	    "method": "GET",             // Request method in uppercase

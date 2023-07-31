@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"supernova/executor/processor"
 	"supernova/pkg/api"
 	"time"
 
@@ -39,6 +40,8 @@ type reportingWriter struct {
 func (p reportingWriter) Write(data []byte) (n int, err error) {
 	return p.buffer.Write(data)
 }
+
+var _ processor.JobProcessor = (*Shell)(nil)
 
 // Shell plugin runs shell commands when Execute method is called.
 type Shell struct{}
