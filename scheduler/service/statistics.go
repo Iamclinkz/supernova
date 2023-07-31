@@ -24,6 +24,7 @@ type StatisticsService struct {
 	holdTimeoutLogsSuccessCounter metric.Int64Counter
 	fireFailureCounter            metric.Int64Counter
 	fireSuccessCounter            metric.Int64Counter
+	scheduleDelayHistogram        metric.Int64Histogram
 }
 
 func NewStatisticsService(instanceID string, enableOTel bool) *StatisticsService {
@@ -71,6 +72,15 @@ func NewStatisticsService(instanceID string, enableOTel bool) *StatisticsService
 
 		ret.fireSuccessCounter, err = ret.meter.Int64Counter("fire_success_total",
 			metric.WithDescription("Total number of fire successes"))
+		if err != nil {
+			panic(err)
+		}
+
+		// 创建Histogram指标，并设置桶的边界
+		ret.scheduleDelayHistogram, err = ret.meter.Int64Histogram("scheduler.schedule_delay",
+			metric.WithDescription("The difference between the scheduled execution time and the actual allocation time"),
+			metric.WithUnit("ms"),
+		)
 		if err != nil {
 			panic(err)
 		}
@@ -160,4 +170,16 @@ func (s *StatisticsService) GetExecutorHeartbeatInterval() time.Duration {
 
 func (s *StatisticsService) GetCheckExecutorHeartBeatTimeout() time.Duration {
 	return time.Second * 2
+}
+
+func (s *StatisticsService) RecordScheduleDelay(delay time.Duration) {
+	if !s.enableOTel {
+		return
+	}
+
+	// 将时间差值转换为毫秒
+	delayMs := float64(delay) / float64(time.Millisecond)
+
+	// 更新Histogram指标
+	s.scheduleDelayHistogram.Record(context.Background(), int64(delayMs), s.defaultMetricsOption)
 }

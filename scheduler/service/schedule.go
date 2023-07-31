@@ -181,7 +181,9 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 		return errors.New("run job fail:" + err.Error())
 	}
 
+	//成功，更新状态
 	s.statisticsService.OnFireSuccess()
+	s.statisticsService.RecordScheduleDelay(time.Now().Sub(onFireLog.ShouldFireAt))
 	return nil
 }
 
