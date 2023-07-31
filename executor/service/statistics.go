@@ -2,13 +2,14 @@ package service
 
 import (
 	"context"
+	"supernova/pkg/api"
+	"sync/atomic"
+
 	"github.com/cloudwego/kitex/pkg/klog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"supernova/pkg/api"
-	"sync/atomic"
 )
 
 type StatisticsService struct {
@@ -26,12 +27,13 @@ type StatisticsService struct {
 	//metrics
 	meter                               metric.Meter
 	defaultMetricsOption                metric.MeasurementOption
-	currentJobCountUpDownCounter        metric.Int64UpDownCounter
-	unFinishedRequestCountUpDownCounter metric.Int64UpDownCounter
-	runJobResponseSuccessCounter        metric.Int64Counter
-	noNeedSendResponseCounter           metric.Int64Counter
-	receiveRunJobRequestCounter         metric.Int64Counter
-	overTimeTaskSuccessCounter          metric.Int64Counter
+	currentJobCountUpDownCounter        metric.Int64UpDownCounter //当前同时执行数量
+	unFinishedRequestCountUpDownCounter metric.Int64UpDownCounter //当前未处理的任务数
+	runJobResponseSuccessCounter        metric.Int64Counter       //执行成功的任务数量
+	noNeedSendResponseCounter           metric.Int64Counter       //不需要（排队成功/之前成功，直接返回）执行的任务数量
+	receiveRunJobRequestCounter         metric.Int64Counter       //接收的RunJobRequest消息的数量
+	overTimeTaskSuccessCounter          metric.Int64Counter       //超时，但执行成功的任务
+	overTimeTaskCounter                 metric.Int64Counter       //超时的任务
 }
 
 func NewStatisticsService(enableOTel bool, instanceID string) *StatisticsService {
