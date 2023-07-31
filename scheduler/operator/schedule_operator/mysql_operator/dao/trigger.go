@@ -30,9 +30,13 @@ func (t *Trigger) TableName() string {
 }
 
 func FromModelTrigger(mTrigger *model.Trigger) (*Trigger, error) {
-	param, err := json.Marshal(mTrigger.Param)
-	if err != nil {
-		return nil, err
+	var triggerStr string
+	if mTrigger.Param != nil && len(mTrigger.Param) != 0 {
+		param, err := json.Marshal(mTrigger.Param)
+		if err != nil {
+			return nil, err
+		}
+		triggerStr = string(param)
 	}
 
 	return &Trigger{
@@ -49,7 +53,7 @@ func FromModelTrigger(mTrigger *model.Trigger) (*Trigger, error) {
 		TriggerLastTime:   mTrigger.TriggerLastTime,
 		TriggerNextTime:   mTrigger.TriggerNextTime,
 		Status:            mTrigger.Status,
-		Param:             string(param),
+		Param:             triggerStr,
 		AtLeastOnce:       mTrigger.AtLeastOnce,
 	}, nil
 }
