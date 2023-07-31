@@ -118,7 +118,7 @@ func (b *SchedulerBuilder) Build() (*Scheduler, error) {
 		return nil, errors.New("no select discovery")
 	}
 	if b.schedulerWorkerCount == 0 {
-		b.schedulerWorkerCount = 32
+		b.schedulerWorkerCount = 128
 	}
 	if b.instanceID == "" {
 		b.instanceID = fmt.Sprintf("Scheduler-%v", uuid.New())

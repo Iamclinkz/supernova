@@ -32,8 +32,8 @@ func (s *TriggerService) DeleteTriggerFromID(triggerID uint) error {
 
 func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 	var (
-		now                    = time.Now()
-		beginTriggerHandleTime = now.Add(-s.statisticsService.GetHandleTriggerForwardDuration())
+		begin                  = time.Now()
+		beginTriggerHandleTime = begin.Add(-s.statisticsService.GetHandleTriggerForwardDuration())
 		endTriggerHandleTime   = time.Now().Add(s.statisticsService.GetHandleTriggerDuration())
 		err                    error
 		txCtx                  = context.TODO()
@@ -70,11 +70,11 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		//这里需要注意，如果一个trigger的触发时间很短，例如1s一次，而我们的HandleTriggerDuration较长，例如5s一次，
 		//那么需要直接OnFire这个trigger 5次，并且更新trigger的nextFireTime到6s以后
 		for {
-			if trigger.TriggerNextTime.Before(now) {
+			if trigger.TriggerNextTime.Before(begin) {
 				//todo 这里需要处理misfire逻辑
 				//这里赋值成fireTime，时间轮有容错。
 				//todo:这里再想一下，暂时测试方便，改一下TriggerLastTime了
-				trigger.TriggerNextTime = now
+				trigger.TriggerNextTime = begin
 			}
 			fireTime := trigger.TriggerNextTime
 
@@ -131,7 +131,7 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		return nil, fmt.Errorf("onTxFinish error:%v", err)
 	}
 
-	klog.Tracef("fetchUpdateMarkTrigger fetched triggers, len:%v", len(onFireLogs))
+	klog.Errorf("fetchUpdateMarkTrigger fetched triggers, len:%v,use time:%v", len(onFireLogs), time.Since(begin))
 	s.statisticsService.OnFetchNeedFireTriggers(len(onFireLogs))
 	return onFireLogs, nil
 
@@ -257,7 +257,9 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog,
 			onFireLog := onFireLogs[i]
 			onFireLog.RedoAt = onFireLog.GetNextRedoAt()
 			if err = s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog); err == nil {
+				//我们抢占这个待执行的过期OnFireLog成功
 				mu.Lock()
+				onFireLog.ShouldFireAt = time.Now()
 				ret = append(ret, onFireLog)
 				mu.Unlock()
 			} else {

@@ -85,10 +85,10 @@ func (s *ScheduleService) Schedule() {
 			if err != nil {
 				klog.Errorf("Schedule Error:%v", err)
 			} else {
-				now := time.Now()
+				//now := time.Now()
 				for _, onFireLog := range onFireLogs {
 					currentLog := onFireLog
-					s.timeWheel.Add(currentLog.ShouldFireAt.Sub(now), func() {
+					s.timeWheel.Add(time.Until(currentLog.ShouldFireAt), func() {
 						s.timeWheelTaskCh <- currentLog
 					}, false)
 				}
@@ -183,7 +183,7 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 
 	//成功，更新状态
 	s.statisticsService.OnFireSuccess()
-	s.statisticsService.RecordScheduleDelay(time.Now().Sub(onFireLog.ShouldFireAt))
+	s.statisticsService.RecordScheduleDelay(time.Since(onFireLog.ShouldFireAt))
 	return nil
 }
 

@@ -139,7 +139,7 @@ func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
 }
 
 func (s *StatisticsService) GetScheduleInterval() time.Duration {
-	return time.Second * 3
+	return time.Second * 2
 }
 
 func (s *StatisticsService) GetCheckTimeoutOnFireLogsInterval() time.Duration {
@@ -160,12 +160,13 @@ func (s *StatisticsService) RecordScheduleDelay(delay time.Duration) {
 		return
 	}
 
+	//klog.Errorf("[%v]:%v", s.instanceID, delay)
 	s.scheduleDelayHistogram.Record(context.Background(), delay.Milliseconds(), s.defaultMetricsOption)
 }
 
 // GetHandleTriggerMaxCount 获取本次最多获取多少条待触发的Trigger
 func (s *StatisticsService) GetHandleTriggerMaxCount() int {
-	return 6000
+	return 15000
 }
 
 // OnFireFail 任务扔给Executor执行失败

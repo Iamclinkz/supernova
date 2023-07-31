@@ -118,6 +118,9 @@ func (e *ExecuteService) work() {
 
 			//防止重复执行已经成功的任务
 			resp, myWaitCh := e.duplicateService.CheckDuplicateExecuteSuccessJobAndConcurrentExecute(uint(jobRequest.OnFireLogID))
+			if resp != nil || myWaitCh != nil {
+				e.statisticsService.OnDuplicateRequest(jobRequest)
+			}
 			if resp != nil {
 				if !resp.Result.Ok {
 					//todo 删掉
@@ -154,6 +157,7 @@ func (e *ExecuteService) work() {
 			//给时间轮加一个定时事件，如果超时，那么返回一个失败的response
 			task := e.timeWheel.Add(time.Microsecond*time.Duration(jobRequest.Job.ExecutorExecuteTimeoutMs), func() {
 				klog.Debugf("on job overtime:%v", jobRequest.OnFireLogID)
+				e.statisticsService.OnTaskOvertime(jobRequest)
 				e.jobResponseCh <- &api.RunJobResponse{
 					OnFireLogID:  jobRequest.OnFireLogID,
 					TraceContext: jobRequest.TraceContext,
@@ -187,7 +191,7 @@ func (e *ExecuteService) work() {
 				//如果有Processor，那么用户自定义的Processor执行
 				jobResponse.Result = processor.Process(jobRequest.Job)
 				//更新任务执行时间
-				e.statisticsService.RecordExecuteTime(time.Now().Sub(begin))
+				e.statisticsService.RecordExecuteTime(time.Since(begin))
 			}
 			e.notifyOnFinishExecute(jobRequest, jobResponse)
 

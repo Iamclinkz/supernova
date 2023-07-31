@@ -31,9 +31,9 @@ type StatisticsService struct {
 	currentJobCountUpDownCounter        metric.Int64UpDownCounter //当前正在（并发）执行的任务的数量
 	unFinishedRequestCountUpDownCounter metric.Int64UpDownCounter //当前未处理的请求的数量
 	runJobResponseSuccessCounter        metric.Int64Counter       //发送执行任务结果成功数量
-	duplicateExecuteRequestCounter      metric.Int64Counter       //重复执行（正在执行 or 已执行成功）请求数量 todo
+	duplicateExecuteRequestCounter      metric.Int64Counter       //重复执行（正在执行 or 已执行成功）请求数量
 	receiveRunJobRequestCounter         metric.Int64Counter       //接收的RunJobRequest消息的数量
-	overTimeTaskCounter                 metric.Int64Counter       //超时的任务的数量
+	overtimeTaskCounter                 metric.Int64Counter       //超时的任务的数量
 	executeJobCount                     metric.Int64Counter       //执行任务的数量
 	executeTimeHistogram                metric.Int64Histogram     //纯执行时间
 }
@@ -72,7 +72,6 @@ func NewStatisticsService(enableOTel bool, instanceID string) *StatisticsService
 			panic(err)
 		}
 
-		//todo 待更新
 		ret.duplicateExecuteRequestCounter, err = ret.meter.Int64Counter("duplicate_execute_request_total",
 			metric.WithDescription("Total number of requests with no need to send a response"))
 		if err != nil {
@@ -85,7 +84,12 @@ func NewStatisticsService(enableOTel bool, instanceID string) *StatisticsService
 			panic(err)
 		}
 
-		//todo 待更新
+		ret.overtimeTaskCounter, err = ret.meter.Int64Counter("over_time_task_total",
+			metric.WithDescription("Total number of task overtime"))
+		if err != nil {
+			panic(err)
+		}
+
 		ret.executeJobCount, err = ret.meter.Int64Counter("execute_job_total",
 			metric.WithDescription("Total number of job execution"))
 		if err != nil {
@@ -115,8 +119,13 @@ func (s *StatisticsService) OnSendRunJobResponseSuccess(response *api.RunJobResp
 func (s *StatisticsService) OnNoNeedSendResponse(request *api.RunJobRequest) {
 	s.unFinishedRequestCount.Add(-1)
 	if s.enableOTel {
-		s.duplicateExecuteRequestCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), -1, s.defaultMetricsOption)
+	}
+}
+
+func (s *StatisticsService) OnDuplicateRequest(request *api.RunJobRequest) {
+	if s.enableOTel {
+		s.duplicateExecuteRequestCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
 }
 
@@ -151,6 +160,12 @@ func (s *StatisticsService) OnFinishExecute(jobRequest *api.RunJobRequest, jobRe
 	}
 }
 
+func (s *StatisticsService) OnTaskOvertime(jobRequest *api.RunJobRequest) {
+	if s.enableOTel {
+		s.overtimeTaskCounter.Add(context.Background(), 1, s.defaultMetricsOption)
+	}
+}
+
 func (s *StatisticsService) GetStatus() *api.HealthStatus {
 	if s.gracefulStopped.Load() {
 		return &api.HealthStatus{
@@ -181,6 +196,6 @@ func (s *StatisticsService) RecordExecuteTime(delay time.Duration) {
 		return
 	}
 
-	klog.Errorf("timeout:%v", delay)
+	//	klog.Errorf("timeout:%v", delay)
 	s.executeTimeHistogram.Record(context.Background(), delay.Milliseconds(), s.defaultMetricsOption)
 }
