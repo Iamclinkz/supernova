@@ -2,12 +2,13 @@ package app
 
 import (
 	"context"
-	"go.opentelemetry.io/otel/sdk/metric"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/service"
+
+	"go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
@@ -88,7 +89,7 @@ func (s *Scheduler) Start() {
 		InstanceId:  s.instanceID,
 		ServiceServeConf: discovery.ServiceServeConf{
 			Protoc: "Http",
-			Host:   "localhost",
+			Host:   "", //暂时没啥用
 			Port:   8080,
 		},
 		ExtraConfig: "",
@@ -113,7 +114,7 @@ func (s *Scheduler) Stop() {
 			klog.Errorf("stop meterProvider error:%v", err)
 		}
 	}
-	klog.Info("Scheduler stopped")
+	klog.Infof("%v stopped", s.instanceID)
 }
 
 func (s *Scheduler) GetJobOperator() schedule_operator.Operator {

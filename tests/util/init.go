@@ -3,6 +3,7 @@ package util
 import (
 	eapp "supernova/executor/app"
 	sapp "supernova/scheduler/app"
+	"sync"
 	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
@@ -25,13 +26,26 @@ func StartTest(schedulerCount, executorCount int, level klog.Level, startFunc Ex
 }
 
 func (t *SupernovaTest) EndTest() {
+	klog.Infof("start test end")
+
+	wg := sync.WaitGroup{}
+	wg.Add(len(t.executors))
+	wg.Add(len(t.schedulers))
+
 	for _, executor := range t.executors {
-		executor.Stop()
+		go func(e *eapp.Executor) {
+			e.Stop()
+			wg.Done()
+		}(executor)
 	}
 
 	for _, scheduler := range t.schedulers {
-		scheduler.Stop()
+		go func(s *sapp.Scheduler) {
+			s.Stop()
+			wg.Done()
+		}(scheduler)
 	}
 
+	wg.Wait()
 	klog.Infof("SupernovaTest End")
 }

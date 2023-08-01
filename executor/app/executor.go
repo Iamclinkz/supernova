@@ -137,6 +137,7 @@ func (e *Executor) Stop() {
 			klog.Warnf("meterProvider stop error:%v", err)
 		}
 	}
+	klog.Infof("%v stopped", e.instanceID)
 }
 
 func (e *Executor) GracefulStop() {
@@ -144,10 +145,10 @@ func (e *Executor) GracefulStop() {
 	//1.从服务发现处注销自己。如果是consul之类的中间件，那么调用其取消注册api，新的scheduler下一次就不会发现自己了。
 	//而如果是k8s，这里不需要取消注册，k8s滚动更新，如果决定干掉本pod，就不会导入流量给本pod了。所以不需要处理（from 常哥的指导）
 	//这样做的好处是Executor和Scheduler之间的连接不需要断开。而如果Scheduler检测到来自Executor的连接断开，直接返回即可。
-	err := e.discoveryClient.DeRegister(e.instanceID)
-	if err != nil {
-		klog.Errorf("fail to DeRegister executor service:%v", err)
-	}
+	// err := e.discoveryClient.DeRegister(e.instanceID)
+	// if err != nil {
+	// 	klog.Errorf("fail to DeRegister executor service:%v", err)
+	// }
 
 	//2.http/grpc不接受新连接
 	switch e.serveConf.Protoc {

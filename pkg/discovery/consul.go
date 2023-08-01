@@ -40,6 +40,7 @@ type ConsulDiscoveryClient struct {
 	httpServer       *http.Server
 	middlewareConfig MiddlewareConfig
 	registerConfig   RegisterConfig
+	pushStopCh       chan struct{}
 }
 
 func NewConsulMiddlewareConfig(consulHost, consulPort string) MiddlewareConfig {
@@ -79,6 +80,7 @@ func newConsulDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig 
 		config:           consulConfig,
 		middlewareConfig: middlewareConfig,
 		registerConfig:   registerConfig,
+		pushStopCh:       make(chan struct{}),
 	}, err
 }
 
@@ -88,8 +90,8 @@ func (c *ConsulDiscoveryClient) Register(instance *ServiceInstance) error {
 		healthCheckPortStr  = c.registerConfig[ConsulRegisterConfigHealthcheckPortFieldName]
 		serviceRegistration *api.AgentServiceRegistration
 	)
-	if push && healthCheckPortStr == "" {
-		//如果指定使用push，但是没给健康检查端口，panic
+	if !push && healthCheckPortStr == "" {
+		//如果指定使用pull，但是没给健康检查端口，panic
 		panic("")
 	}
 
@@ -119,11 +121,17 @@ func (c *ConsulDiscoveryClient) Register(instance *ServiceInstance) error {
 			}
 
 			ticker := time.NewTicker(3 * time.Second)
-			for range ticker.C {
-				if err = consulClient.Agent().UpdateTTL("service:"+instance.InstanceId, "healthy", "passing"); err != nil {
-					klog.Errorf("Failed to update TTL: %v\n", err)
-				} else {
-					klog.Tracef("consul TTL updated successfully")
+			for {
+				select {
+				case <-ticker.C:
+					if err = consulClient.Agent().UpdateTTL("service:"+instance.InstanceId, "healthy", "passing"); err != nil {
+						klog.Errorf("Failed to update TTL: %v\n", err)
+					} else {
+						klog.Tracef("consul TTL updated successfully")
+					}
+				case <-c.pushStopCh:
+					klog.Infof("consul TTL updated stopped")
+					return
 				}
 			}
 		}()
@@ -162,8 +170,14 @@ func (c *ConsulDiscoveryClient) Register(instance *ServiceInstance) error {
 }
 
 func (c *ConsulDiscoveryClient) DeRegister(instanceId string) error {
-	if c.httpServer != nil {
-		if err := c.httpServer.Shutdown(context.Background()); err != nil {
+	push := c.registerConfig[ConsulRegisterConfigPushFieldName] != ""
+
+	if push {
+		close(c.pushStopCh)
+	} else if c.httpServer != nil {
+		ctx, cancel := context.WithTimeout(context.TODO(), 2*time.Second)
+		defer cancel()
+		if err := c.httpServer.Shutdown(ctx); err != nil {
 			klog.Errorf("Error stopping HTTP server for health check: %v", err)
 		}
 	}

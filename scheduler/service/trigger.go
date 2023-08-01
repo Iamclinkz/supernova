@@ -131,7 +131,7 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		return nil, fmt.Errorf("onTxFinish error:%v", err)
 	}
 
-	klog.Errorf("fetchUpdateMarkTrigger fetched triggers, len:%v,use time:%v", len(onFireLogs), time.Since(begin))
+	//	klog.Errorf("fetchUpdateMarkTrigger fetched triggers, len:%v,use time:%v", len(onFireLogs), time.Since(begin))
 	s.statisticsService.OnFetchNeedFireTriggers(len(onFireLogs))
 	return onFireLogs, nil
 

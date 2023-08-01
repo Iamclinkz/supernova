@@ -28,7 +28,7 @@ type MiddlewareType string
 
 const (
 	TypeConsul MiddlewareType = "Grpc"
-	TypeK8s                   = "K8s"
+	TypeK8s    MiddlewareType = "K8s"
 )
 
 type MiddlewareConfig map[string]string

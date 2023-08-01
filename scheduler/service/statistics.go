@@ -2,11 +2,12 @@ package service
 
 import (
 	"context"
-	"github.com/cloudwego/kitex/pkg/klog"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 	"supernova/pkg/util"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -40,6 +41,7 @@ func NewStatisticsService(instanceID string, enableOTel bool, discoveryClient di
 		enableOTel:            enableOTel,
 		currentSchedulerCount: 1,
 		discoveryClient:       discoveryClient,
+		shutdownCh:            make(chan struct{}),
 	}
 	if enableOTel {
 		ret.tracer = otel.Tracer("StatisticTracer")
@@ -107,14 +109,14 @@ func (s *StatisticsService) WatchScheduler() {
 			return
 		case <-watchSchedulerTicker.C:
 			s.currentSchedulerCount = len(s.discoveryClient.DiscoverServices(constance.ExecutorServiceName))
-			klog.Infof("current scheduler count:%v", s.currentSchedulerCount)
+			klog.Errorf("current scheduler count:%v", s.currentSchedulerCount)
 			watchSchedulerTicker.Reset(time.Second * 2)
 		}
 	}
 }
 
 func (s *StatisticsService) Stop() {
-	s.shutdownCh <- struct{}{}
+	close(s.shutdownCh)
 }
 
 // OnFetchNeedFireTriggers 获得的需要执行的Trigger的个数

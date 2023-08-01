@@ -48,6 +48,7 @@ func (e *GrpcExporter) StartServe() {
 
 func (e *GrpcExporter) Stop() {
 	_ = e.grpcServer.Stop()
+	klog.Infof("GrpcExporter stopped")
 }
 
 func (e *GrpcExporter) GracefulStop() {
