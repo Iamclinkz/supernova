@@ -4,6 +4,8 @@ import (
 	"context"
 	"go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"supernova/pkg/constance"
+	"supernova/pkg/discovery"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/service"
 
@@ -21,6 +23,8 @@ type Scheduler struct {
 
 	//operator
 	jobOperator schedule_operator.Operator
+
+	discoveryClient discovery.DiscoverClient
 
 	//service
 	scheduleService   *service.ScheduleService
@@ -43,6 +47,9 @@ func newSchedulerInner(
 
 	//operator
 	jobOperator schedule_operator.Operator,
+
+	discoveryClient discovery.DiscoverClient,
+
 	//service
 	scheduleService *service.ScheduleService,
 	statisticsService *service.StatisticsService,
@@ -62,6 +69,8 @@ func newSchedulerInner(
 		//operator
 		jobOperator: jobOperator,
 
+		discoveryClient: discoveryClient,
+
 		//service
 		scheduleService:   scheduleService,
 		statisticsService: statisticsService,
@@ -74,14 +83,28 @@ func newSchedulerInner(
 }
 
 func (s *Scheduler) Start() {
+	if err := s.discoveryClient.Register(&discovery.ServiceInstance{
+		ServiceName: constance.SchedulerServiceName,
+		InstanceId:  s.instanceID,
+		ServiceServeConf: discovery.ServiceServeConf{
+			Protoc: "Http",
+			Host:   "localhost",
+			Port:   8080,
+		},
+		ExtraConfig: "",
+	}); err != nil {
+		panic(err)
+	}
 	go s.scheduleService.Schedule()
 	go s.manageService.HeartBeat()
+	go s.statisticsService.WatchScheduler()
 	klog.Info("Scheduler started")
 }
 
 func (s *Scheduler) Stop() {
 	s.scheduleService.Stop()
 	s.manageService.Stop()
+	s.statisticsService.Stop()
 	if s.enableOTel {
 		if err := s.tracerProvider.Shutdown(context.TODO()); err != nil {
 			klog.Errorf("stop tracerProvider error:%v", err)

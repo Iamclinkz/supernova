@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"github.com/cloudwego/kitex/pkg/klog"
+	"supernova/pkg/constance"
+	"supernova/pkg/discovery"
 	"supernova/pkg/util"
 	"time"
 
@@ -16,6 +19,10 @@ type StatisticsService struct {
 	enableOTel bool
 	tracer     trace.Tracer
 
+	discoveryClient       discovery.DiscoverClient
+	currentSchedulerCount int
+	shutdownCh            chan struct{}
+
 	meter                         metric.Meter
 	defaultMetricsOption          metric.MeasurementOption
 	fetchedTriggersCounter        metric.Int64Counter   //获取待执行Trigger的个数
@@ -27,10 +34,12 @@ type StatisticsService struct {
 	scheduleDelayHistogram        metric.Int64Histogram //调度时间（任务应该被安排执行时间 - 任务实际被安排执行时间）
 }
 
-func NewStatisticsService(instanceID string, enableOTel bool) *StatisticsService {
+func NewStatisticsService(instanceID string, enableOTel bool, discoveryClient discovery.DiscoverClient) *StatisticsService {
 	ret := &StatisticsService{
-		instanceID: instanceID,
-		enableOTel: enableOTel,
+		instanceID:            instanceID,
+		enableOTel:            enableOTel,
+		currentSchedulerCount: 1,
+		discoveryClient:       discoveryClient,
 	}
 	if enableOTel {
 		ret.tracer = otel.Tracer("StatisticTracer")
@@ -86,6 +95,26 @@ func NewStatisticsService(instanceID string, enableOTel bool) *StatisticsService
 	}
 
 	return ret
+}
+
+func (s *StatisticsService) WatchScheduler() {
+	watchSchedulerTicker := time.NewTicker(1 * time.Millisecond)
+
+	for {
+		select {
+		case <-s.shutdownCh:
+			watchSchedulerTicker.Stop()
+			return
+		case <-watchSchedulerTicker.C:
+			s.currentSchedulerCount = len(s.discoveryClient.DiscoverServices(constance.ExecutorServiceName))
+			klog.Infof("current scheduler count:%v", s.currentSchedulerCount)
+			watchSchedulerTicker.Reset(time.Second * 2)
+		}
+	}
+}
+
+func (s *StatisticsService) Stop() {
+	s.shutdownCh <- struct{}{}
 }
 
 // OnFetchNeedFireTriggers 获得的需要执行的Trigger的个数

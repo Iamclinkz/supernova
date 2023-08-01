@@ -82,7 +82,7 @@ func (b *ExecutorBuilder) WithConsulDiscovery(consulHost, consulPort string,
 	discoveryClient, err := discovery.NewDiscoveryClient(
 		discovery.TypeConsul,
 		discovery.NewConsulMiddlewareConfig(consulHost, consulPort),
-		discovery.NewConsulRegisterConfig(strconv.Itoa(healthCheckPort)),
+		discovery.NewConsulRegisterConfig(strconv.Itoa(healthCheckPort), false),
 	)
 	if err != nil && b.err == nil {
 		b.err = err

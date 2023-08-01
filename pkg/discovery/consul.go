@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"supernova/pkg/conf"
 	"sync"
+	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 	"github.com/go-kit/kit/sd/consul"
@@ -20,6 +21,7 @@ const (
 
 	//ConsulRegisterConfigHealthcheckPortFieldName 指定consul心跳检查自己健康的Port
 	ConsulRegisterConfigHealthcheckPortFieldName = "HealthCheckPort"
+	ConsulRegisterConfigPushFieldName            = "Push"
 )
 
 // consul自用
@@ -47,10 +49,15 @@ func NewConsulMiddlewareConfig(consulHost, consulPort string) MiddlewareConfig {
 	}
 }
 
-func NewConsulRegisterConfig(healthCheckPort string) RegisterConfig {
-	return RegisterConfig{
+func NewConsulRegisterConfig(healthCheckPort string, push bool) RegisterConfig {
+	ret := RegisterConfig{
 		ConsulRegisterConfigHealthcheckPortFieldName: healthCheckPort,
 	}
+	if push {
+		ret[ConsulRegisterConfigPushFieldName] = "1"
+	}
+
+	return ret
 }
 
 func newConsulDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig RegisterConfig) (DiscoverClient, error) {
@@ -75,50 +82,88 @@ func newConsulDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig 
 	}, err
 }
 
-func (consulClient *ConsulDiscoveryClient) Register(instance *ServiceInstance) error {
-	if consulClient.registerConfig[ConsulRegisterConfigHealthcheckPortFieldName] == "" {
+func (c *ConsulDiscoveryClient) Register(instance *ServiceInstance) error {
+	var (
+		push                = c.registerConfig[ConsulRegisterConfigPushFieldName] != ""
+		healthCheckPortStr  = c.registerConfig[ConsulRegisterConfigHealthcheckPortFieldName]
+		serviceRegistration *api.AgentServiceRegistration
+	)
+	if push && healthCheckPortStr == "" {
+		//如果指定使用push，但是没给健康检查端口，panic
 		panic("")
 	}
 
-	healthCheckPort := consulClient.registerConfig[ConsulRegisterConfigHealthcheckPortFieldName]
 	consulMeta := make(map[string]string, 2)
 	//编码protoc和tag到consul的meta data中，方便对端解出
 	consulMeta[consulMetaDataServiceProtocFieldName] = string(instance.Protoc)
 	consulMeta[consulMetaDataServiceExtraConfigFieldName] = instance.ExtraConfig
 
-	serviceRegistration := &api.AgentServiceRegistration{
-		ID:      instance.InstanceId,
-		Name:    instance.ServiceName,
-		Address: instance.Host,
-		Port:    instance.Port,
-		Meta:    consulMeta,
-		Check: &api.AgentServiceCheck{
-			DeregisterCriticalServiceAfter: "30s",
-			HTTP:                           "http://" + instance.Host + ":" + healthCheckPort + "/health",
-			Interval:                       fmt.Sprintf("%vs", conf.DiscoveryMiddlewareCheckHeartBeatDuration.Seconds()),
-		},
-	}
-
-	consulClient.httpServer = &http.Server{
-		Addr: fmt.Sprintf(":" + healthCheckPort),
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("OK"))
-		}),
-	}
-
-	go func() {
-		if err := consulClient.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			klog.Errorf("Error starting HTTP server for health check: %v", err)
+	if push {
+		//如果主动汇报
+		serviceRegistration = &api.AgentServiceRegistration{
+			ID:      instance.InstanceId,
+			Name:    instance.ServiceName,
+			Address: instance.Host,
+			Port:    instance.Port,
+			Meta:    consulMeta,
+			Check: &api.AgentServiceCheck{
+				TTL: fmt.Sprintf("%vs", conf.DiscoveryMiddlewareCheckHeartBeatDuration.Seconds()),
+			},
 		}
-	}()
 
-	return consulClient.client.Register(serviceRegistration)
+		go func() {
+			consulConfig := api.DefaultConfig()
+			consulClient, err := api.NewClient(consulConfig)
+			if err != nil {
+				panic(err)
+			}
+
+			ticker := time.NewTicker(3 * time.Second)
+			for range ticker.C {
+				if err = consulClient.Agent().UpdateTTL("service:"+instance.InstanceId, "healthy", "passing"); err != nil {
+					klog.Errorf("Failed to update TTL: %v\n", err)
+				} else {
+					klog.Tracef("consul TTL updated successfully")
+				}
+			}
+		}()
+	} else {
+		//如果让consul拉健康状态，则暴露端口
+		serviceRegistration = &api.AgentServiceRegistration{
+			ID:      instance.InstanceId,
+			Name:    instance.ServiceName,
+			Address: instance.Host,
+			Port:    instance.Port,
+			Meta:    consulMeta,
+			Check: &api.AgentServiceCheck{
+				//严重错误多长时间后删除
+				DeregisterCriticalServiceAfter: "10s",
+				HTTP:                           "http://" + instance.Host + ":" + healthCheckPortStr + "/health",
+				Interval:                       fmt.Sprintf("%vs", conf.DiscoveryMiddlewareCheckHeartBeatDuration.Seconds()),
+			},
+		}
+
+		c.httpServer = &http.Server{
+			Addr: fmt.Sprintf(":" + healthCheckPortStr),
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("OK"))
+			}),
+		}
+
+		go func() {
+			if err := c.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				klog.Errorf("Error starting HTTP server for health check: %v", err)
+			}
+		}()
+	}
+
+	return c.client.Register(serviceRegistration)
 }
 
-func (consulClient *ConsulDiscoveryClient) DeRegister(instanceId string) error {
-	if consulClient.httpServer != nil {
-		if err := consulClient.httpServer.Shutdown(context.Background()); err != nil {
+func (c *ConsulDiscoveryClient) DeRegister(instanceId string) error {
+	if c.httpServer != nil {
+		if err := c.httpServer.Shutdown(context.Background()); err != nil {
 			klog.Errorf("Error stopping HTTP server for health check: %v", err)
 		}
 	}
@@ -126,17 +171,17 @@ func (consulClient *ConsulDiscoveryClient) DeRegister(instanceId string) error {
 	serviceRegistration := &api.AgentServiceRegistration{
 		ID: instanceId,
 	}
-	return consulClient.client.Deregister(serviceRegistration)
+	return c.client.Deregister(serviceRegistration)
 }
 
-func (consulClient *ConsulDiscoveryClient) DiscoverServices(serviceName string) []*ServiceInstance {
-	instanceList, ok := consulClient.instancesMap.Load(serviceName)
+func (c *ConsulDiscoveryClient) DiscoverServices(serviceName string) []*ServiceInstance {
+	instanceList, ok := c.instancesMap.Load(serviceName)
 	if ok {
 		return instanceList.([]*ServiceInstance)
 	}
-	consulClient.mutex.Lock()
-	defer consulClient.mutex.Unlock()
-	instanceList, ok = consulClient.instancesMap.Load(serviceName)
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	instanceList, ok = c.instancesMap.Load(serviceName)
 	if ok {
 		return instanceList.([]*ServiceInstance)
 	} else {
@@ -160,10 +205,10 @@ func (consulClient *ConsulDiscoveryClient) DiscoverServices(serviceName string) 
 						instances = append(instances, instance)
 					}
 				}
-				consulClient.instancesMap.Store(serviceName, instances)
+				c.instancesMap.Store(serviceName, instances)
 			}
 			defer plan.Stop()
-			err := plan.Run(consulClient.config.Address)
+			err := plan.Run(c.config.Address)
 			if err != nil {
 				klog.Errorf("DiscoverServices plan err:%v", err)
 				return
@@ -171,9 +216,9 @@ func (consulClient *ConsulDiscoveryClient) DiscoverServices(serviceName string) 
 		}()
 	}
 
-	entries, _, err := consulClient.client.Service(serviceName, "", false, nil)
+	entries, _, err := c.client.Service(serviceName, "", false, nil)
 	if err != nil {
-		consulClient.instancesMap.Store(serviceName, []*ServiceInstance{})
+		c.instancesMap.Store(serviceName, []*ServiceInstance{})
 		klog.Error("Discover ServiceInstance Error!")
 		return nil
 	}
@@ -186,7 +231,7 @@ func (consulClient *ConsulDiscoveryClient) DiscoverServices(serviceName string) 
 			}
 		}
 	}
-	consulClient.instancesMap.Store(serviceName, instances)
+	c.instancesMap.Store(serviceName, instances)
 	return instances
 }
 

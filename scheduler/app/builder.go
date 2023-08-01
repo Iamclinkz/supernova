@@ -36,7 +36,7 @@ func (b *SchedulerBuilder) WithConsulDiscovery(consulHost, consulPort string) *S
 	discoveryClient, err := discovery.NewDiscoveryClient(
 		discovery.TypeConsul,
 		discovery.NewConsulMiddlewareConfig(consulHost, consulPort),
-		nil)
+		discovery.NewConsulRegisterConfig("", true))
 	if err != nil && b.err == nil {
 		b.err = err
 	} else {
@@ -124,6 +124,7 @@ func (b *SchedulerBuilder) Build() (*Scheduler, error) {
 		b.instanceID = fmt.Sprintf("Scheduler-%v", uuid.New())
 	}
 
-	return genScheduler(b.instanceID, b.tracerProvider != nil && b.meterProvider != nil,
-		b.tracerProvider, b.meterProvider, b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)
+	//return genScheduler(b.instanceID, b.tracerProvider != nil && b.meterProvider != nil,
+	//	b.tracerProvider, b.meterProvider, b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)
+	return nil, nil
 }
