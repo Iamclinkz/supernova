@@ -182,7 +182,7 @@ func (k *K8sDiscoveryClient) DiscoverServices(serviceName string) []*ServiceInst
 					continue
 				}
 
-				instances := k.getInstancesFromEndpoints(endpoints, svc.Labels)
+				instances := k.getInstancesFromEndpoints(labelName, endpoints, svc.Labels)
 				k.k8sLabel2K8sService2ServiceInstance[labelName][svc.Name] = instances
 				k.refreshServiceInstance2SyncMap(labelName)
 				klog.Infof("discovery refreshServiceInstance2SyncMap:%v", k.k8sLabel2K8sService2ServiceInstance)
@@ -216,7 +216,7 @@ func (k *K8sDiscoveryClient) getAndStoreInstancesFromServicesByLabel(labelName s
 			continue
 		}
 
-		instanceFromEndpoint := k.getInstancesFromEndpoints(endpoints, svc.Labels)
+		instanceFromEndpoint := k.getInstancesFromEndpoints(labelName, endpoints, svc.Labels)
 		ret = append(ret, instanceFromEndpoint...)
 		k.k8sLabel2K8sService2ServiceInstance[labelName] = make(map[string][]*ServiceInstance)
 		k.k8sLabel2K8sService2ServiceInstance[labelName][svc.Name] = instanceFromEndpoint
@@ -227,7 +227,8 @@ func (k *K8sDiscoveryClient) getAndStoreInstancesFromServicesByLabel(labelName s
 }
 
 // getInstancesFromEndpoints 从EndPoints信息中，解析出ServiceInstance信息
-func (k *K8sDiscoveryClient) getInstancesFromEndpoints(endpoints *corev1.Endpoints, labels map[string]string) []*ServiceInstance {
+func (k *K8sDiscoveryClient) getInstancesFromEndpoints(labelName string, endpoints *corev1.Endpoints,
+	labels map[string]string) []*ServiceInstance {
 	extraConfig, protoc, err := extractExtraConfigAndProtoc(labels)
 	if err != nil {
 		//todo 删掉
@@ -244,7 +245,8 @@ func (k *K8sDiscoveryClient) getInstancesFromEndpoints(endpoints *corev1.Endpoin
 			}
 
 			instance := &ServiceInstance{
-				InstanceId: podName, //k8s作为服务发现，使用podName作为其instanceID
+				ServiceName: labelName,
+				InstanceId:  podName, //k8s作为服务发现，使用podName作为其instanceID
 				ServiceServeConf: ServiceServeConf{
 					Protoc: protoc,
 					Host:   address.IP,

@@ -9,7 +9,7 @@ var (
 	SimpleWebServerPort     = 9000
 	SchedulerServePortStart = 8080
 	SchedulerPort           = SchedulerServePortStart
-	SchedulerAddress        = "http://localhost:" + strconv.Itoa(SchedulerPort)
+	SchedulerAddress        = "http://9.134.5.191:" + strconv.Itoa(SchedulerPort)
 )
 
 var (

@@ -1,6 +1,8 @@
 package service
 
 import (
+	"fmt"
+	"strings"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 	"supernova/pkg/util"
@@ -46,6 +48,26 @@ type Executor struct {
 	Operator    executor_operator.Operator
 	Status      *model.ExecutorStatus
 	Tags        []string
+}
+
+func (e *Executor) String() string {
+	return fmt.Sprintf("Executor{ServiceName: %s, InstanceId: %s,  Status: %s, Tags: %v}",
+		e.ServiceData.ServiceName, e.ServiceData.InstanceId, e.Status, e.Tags)
+}
+
+func ExecutorMapToString(m map[string]*Executor) string {
+	var sb strings.Builder
+	sb.WriteString("{")
+	i := 0
+	for k, v := range m {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(fmt.Sprintf("%s: %s", k, v.String()))
+		i++
+	}
+	sb.WriteString("}")
+	return sb.String()
 }
 
 func (s *ExecutorManageService) HeartBeat() {
@@ -146,6 +168,8 @@ func (s *ExecutorManageService) updateExecutor() {
 	}
 
 	s.executors = newExecutors
+
+	klog.Infof("new executors:%v", ExecutorMapToString(newExecutors))
 
 	s.NotifyExecutorListener()
 	s.checkSequenceNum++

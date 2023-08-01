@@ -19,4 +19,4 @@ test: all
 	@echo "test finished"
 
 k8s-test: k8s
-	cd stress-test/k8s-tests && go test stress_test.go
+	cd tests/k8s-test && go test stress_test.go

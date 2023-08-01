@@ -198,7 +198,8 @@ func convertConsulAgentServiceToServiceInstance(agentService *api.AgentService) 
 	}
 
 	return &ServiceInstance{
-		InstanceId: agentService.ID,
+		ServiceName: agentService.Service,
+		InstanceId:  agentService.ID,
 		ServiceServeConf: ServiceServeConf{
 			Protoc: ProtocType(agentService.Meta[consulMetaDataServiceProtocFieldName]),
 			Host:   agentService.Address,
