@@ -32,7 +32,7 @@ func TestPureRun(t *testing.T) {
 	start := time.Now()
 
 	//5000个Trigger，每个Trigger每隔5执行一次，相当于是每秒执行1000个trigger
-	var triggerCount = 2000
+	var triggerCount = 5000
 
 	//加一个任务
 	if err := util.RegisterJob(util.SchedulerAddress, &model.Job{
@@ -55,10 +55,10 @@ func TestPureRun(t *testing.T) {
 			ScheduleType:      constance.ScheduleTypeCron, //使用cron循环执行
 			ScheduleConf:      "*/5 * * * * *",            //每5s执行一次
 			FailRetryCount:    5,                          //最大失败重试五次。
-			ExecuteTimeout:    2 * time.Second,            //执行超过3s算超时。
+			ExecuteTimeout:    2 * time.Second,            //执行超过2s算超时。
 			TriggerNextTime:   time.Now().Add(time.Duration(rand.Intn(10000)) * time.Millisecond),
 			MisfireStrategy:   constance.MisfireStrategyTypeDoNothing,
-			FailRetryInterval: 3 * time.Second, //重试间隔为1s
+			FailRetryInterval: 3 * time.Second, //重试间隔为3s
 		}
 	}
 

@@ -155,8 +155,8 @@ func (e *ExecuteService) work() {
 			}
 
 			//给时间轮加一个定时事件，如果超时，那么返回一个失败的response
-			task := e.timeWheel.Add(time.Microsecond*time.Duration(jobRequest.Job.ExecutorExecuteTimeoutMs), func() {
-				klog.Debugf("on job overtime:%v", jobRequest.OnFireLogID)
+			task := e.timeWheel.Add(time.Millisecond*time.Duration(jobRequest.Job.ExecutorExecuteTimeoutMs), func() {
+				klog.Warnf("on job overtime:%v", jobRequest.OnFireLogID)
 				e.statisticsService.OnTaskOvertime(jobRequest)
 				e.jobResponseCh <- &api.RunJobResponse{
 					OnFireLogID:  jobRequest.OnFireLogID,
@@ -215,6 +215,7 @@ func (e *ExecuteService) work() {
 				}
 				if jobResponse.Result.Ok {
 					e.statisticsService.OnOverTimeTaskExecuteSuccess(jobRequest, jobResponse)
+					klog.Warnf("OnOverTimeTaskExecuteSuccess:[%v]", jobRequest.OnFireLogID)
 					if doTrace {
 						_, pushResponseChanSpan = e.tracer.Start(workCtx, "pushResponseChan")
 						e.jobResponseCh <- jobResponse

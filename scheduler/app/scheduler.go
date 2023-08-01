@@ -114,6 +114,7 @@ func (s *Scheduler) Stop() {
 			klog.Errorf("stop meterProvider error:%v", err)
 		}
 	}
+	s.discoveryClient.DeRegister(s.instanceID)
 	klog.Infof("%v stopped", s.instanceID)
 }
 

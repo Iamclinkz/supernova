@@ -16,6 +16,7 @@ type GrpcExporter struct {
 	grpcHandler *handler.GrpcHandler
 	grpcServer  server.Server
 	serviceConf *discovery.ServiceServeConf
+	stopCh      chan error
 }
 
 func NewGrpcExporter(executeService *service.ExecuteService,
@@ -24,8 +25,13 @@ func NewGrpcExporter(executeService *service.ExecuteService,
 	enableOTel bool) *GrpcExporter {
 	e := new(GrpcExporter)
 	e.grpcHandler = handler.NewGrpcHandler(executeService, statisticsService, enableOTel)
+	e.stopCh = make(chan error)
 	e.serviceConf = serviceConf
 	return e
+}
+
+func (e *GrpcExporter) grpcExitChan() <-chan error {
+	return e.stopCh
 }
 
 func (e *GrpcExporter) StartServe() {
@@ -37,6 +43,8 @@ func (e *GrpcExporter) StartServe() {
 		server.WithServiceAddr(addr),
 		//server.WithSuite(tracing.NewServerSuite()),
 		//server.WithMiddleware(middleware.PrintKitexRequestResponse),
+		// GrpcExitChan 麻了。。调Executor优雅退出的时候，发现grpc先断了。。调了好久才发现这里还要传个这个。。
+		server.WithExitSignal(e.grpcExitChan),
 	)
 	klog.Infof("executor try start serve, protoc:grpc, port:%v", e.serviceConf.Port)
 	if err := e.grpcServer.Run(); err != nil {

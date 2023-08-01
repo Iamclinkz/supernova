@@ -169,8 +169,7 @@ func (tw *TimeWheel) Stop() {
 }
 
 func (tw *TimeWheel) collectTask(task *Task) bool {
-	index := tw.bucketIndexes[task.id]
-	_, ok := tw.bucketIndexes[task.id]
+	index, ok := tw.bucketIndexes[task.id]
 	if !ok {
 		return false
 	}

@@ -61,7 +61,7 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 		for !stop.Load() {
 			req, connError = stream.Recv()
 			if connError != nil {
-				klog.Errorf("run job error:%v", connError)
+				klog.Errorf("receive job request error:%v", connError)
 				stop.Store(true)
 				wg.Done()
 				return
@@ -107,6 +107,7 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 					streamSendSpan.RecordError(connError)
 					streamSendSpan.End()
 				}
+				klog.Warnf("send responase back failed with error:%v", err)
 				//再把这个JobResult扔回去，让别的Scheduler发送
 				e.executeService.PushJobResponse(resp)
 				stop.Store(true)

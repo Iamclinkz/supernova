@@ -8,6 +8,8 @@ import (
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
 	"sync"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 type ExecutorRouteService struct {
@@ -155,6 +157,9 @@ func (r ExecutorInstanceIDRouter) Route(instances []*Executor, job *model.Job, o
 	for _, instance := range instances {
 		//精确匹配的情况下，忽略Executor优雅退出
 		if instance.ServiceData.InstanceId == onFireLog.ExecutorInstance {
+			if instance.Status.GracefulStopped {
+				klog.Infof("send [onFireLog-%v] to a graceful stopped executor:%v", onFireLog.ID, instance.ServiceData.InstanceId)
+			}
 			return instance
 		}
 	}

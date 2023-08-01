@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"supernova/pkg/util"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
@@ -97,8 +99,8 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 				//初始的下次重试时间 = 触发时间 + 用户指定执行最大时间 + 重试间隔 * 1
 				RedoAt:            fireTime.Add(trigger.ExecuteTimeout).Add(trigger.FailRetryInterval),
 				ShouldFireAt:      fireTime,
-				ExecuteTimeout:    trigger.ExecuteTimeout,
 				LeftTryCount:      trigger.FailRetryCount,
+				ExecuteTimeout:    trigger.ExecuteTimeout,
 				Param:             trigger.Param,
 				FailRetryInterval: trigger.FailRetryInterval,
 				AtLeastOnce:       trigger.AtLeastOnce,
@@ -249,7 +251,16 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog,
 	//所以这里用了乐观锁，取到过期的OnFireLog之后，尝试更新RedoAt字段。如果更新成功，则自己执行。更新失败则说明要不任务已经
 	//成功了，要不让另一个进程抢先了，总之不是自己执行。
 	const batchSize = 100
-	var wg sync.WaitGroup
+	var (
+		wg        sync.WaitGroup
+		failCount atomic.Int32
+		fetchTotal = len(onFireLogs)
+		batchCounter
+	)
+
+	sort.Slice(onFireLogs, func(i, j int) bool {
+		return onFireLogs[i].RedoAt.Before(onFireLogs[j].RedoAt)
+	})
 
 	processBatch := func(startIndex, endIndex int) {
 		defer wg.Done()
@@ -263,17 +274,18 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog,
 				ret = append(ret, onFireLog)
 				mu.Unlock()
 			} else {
+				failCount.Add(1)
 				klog.Debugf("fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", onFireLog.ID, err)
+				return
 			}
 		}
 	}
 
-	n := len(onFireLogs)
-	for i := 0; i < n; i += batchSize {
-		startIndex := i
-		endIndex := i + batchSize
-		if endIndex > n {
-			endIndex = n
+	for batchCounter = 0; batchCounter < fetchTotal; batchCounter += batchSize {
+		startIndex := batchCounter
+		endIndex := batchCounter + batchSize
+		if endIndex > fetchTotal {
+			endIndex = fetchTotal
 		}
 		wg.Add(1)
 		go processBatch(startIndex, endIndex)
@@ -282,20 +294,21 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog,
 	wg.Wait()
 
 	var (
-		foundCount = len(onFireLogs)
 		gotCount   = len(ret)
-		missCount  = foundCount - gotCount
+		missCount  = fetchTotal - gotCount
 	)
 
-	s.statisticsService.OnFindTimeoutOnFireLogs(foundCount)
+	s.statisticsService.OnFindTimeoutOnFireLogs(fetchTotal)
 	s.statisticsService.OnHoldTimeoutOnFireLogFail(missCount)
 	s.statisticsService.OnHoldTimeoutOnFireLogSuccess(gotCount)
+	s.statisticsService.UpdateLastTimeFetchTimeoutOnFireLogFailRate(float32(failCount.Load()) / float32(batchCounter + 1))
+
 	if gotCount >= 0 {
 		//获取成功一部分
 		klog.Infof("fetchTimeoutAndRefreshOnFireLogs fetched timeout logs, len:%v", len(ret))
 	} else {
 		//如果本轮没有获得任何一个OnFireLog
-		if foundCount > 0 {
+		if fetchTotal > 0 {
 			//查找到一些个过期的OnFireLog，但是自己一个都没获得到
 			klog.Errorf("fetchTimeoutAndRefreshOnFireLogs find %v logs, but fetch nothing", len(onFireLogs))
 		} else {

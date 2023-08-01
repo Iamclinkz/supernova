@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"math/rand"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 	"supernova/pkg/util"
@@ -24,6 +25,10 @@ type StatisticsService struct {
 	currentSchedulerCount int
 	shutdownCh            chan struct{}
 
+	//动态调整本次拿取过期OnFireLog
+	lastTimeFetchOnFireLogFailRate float32
+	lastTimeFetchOnFireLogInterval time.Duration
+
 	meter                         metric.Meter
 	defaultMetricsOption          metric.MeasurementOption
 	fetchedTriggersCounter        metric.Int64Counter   //获取待执行Trigger的个数
@@ -37,11 +42,12 @@ type StatisticsService struct {
 
 func NewStatisticsService(instanceID string, enableOTel bool, discoveryClient discovery.DiscoverClient) *StatisticsService {
 	ret := &StatisticsService{
-		instanceID:            instanceID,
-		enableOTel:            enableOTel,
-		currentSchedulerCount: 1,
-		discoveryClient:       discoveryClient,
-		shutdownCh:            make(chan struct{}),
+		instanceID:                     instanceID,
+		enableOTel:                     enableOTel,
+		currentSchedulerCount:          1,
+		discoveryClient:                discoveryClient,
+		shutdownCh:                     make(chan struct{}),
+		lastTimeFetchOnFireLogInterval: 4 * time.Second,
 	}
 	if enableOTel {
 		ret.tracer = otel.Tracer("StatisticTracer")
@@ -126,35 +132,34 @@ func (s *StatisticsService) OnFetchNeedFireTriggers(count int) {
 	}
 }
 
-// OnFindTimeoutOnFireLogs 更新本次找到的过期的OnFireLogs个数
+// OnFindTimeoutOnFireLogs 找到的过期的OnFireLogs个数
 func (s *StatisticsService) OnFindTimeoutOnFireLogs(count int) {
 	if s.enableOTel {
 		s.foundTimeoutLogsCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
 }
 
-// OnHoldTimeoutOnFireLogFail 更新本次抢占失败的过期的OnFireLogs的个数
+// OnHoldTimeoutOnFireLogFail 获得失败的过期的OnFireLogs个数
 func (s *StatisticsService) OnHoldTimeoutOnFireLogFail(count int) {
 	if s.enableOTel {
 		s.holdTimeoutLogsFailureCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
 }
 
-// OnHoldTimeoutOnFireLogSuccess 更新本次抢占成功的过期的OnFireLogs的个数
+// OnHoldTimeoutOnFireLogSuccess 获得的过期的OnFireLogs个数
 func (s *StatisticsService) OnHoldTimeoutOnFireLogSuccess(count int) {
 	if s.enableOTel {
 		s.holdTimeoutLogsSuccessCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
 }
 
-// GetCheckTimeoutOnFireLogsInterval 获取从数据库中拿过期OnFireLogs的间隔
-func (s *StatisticsService) GetCheckTimeoutOnFireLogsInterval() time.Duration {
-	return time.Second * 5
-}
+// UpdateLastTimeFetchTimeoutOnFireLogFailRate 更新上次失败率
+func (s *StatisticsService) UpdateLastTimeFetchTimeoutOnFireLogFailRate(rate float32) {
+	if rate > 1 || rate < 0 {
+		panic("")
+	}
 
-// GetHandleTimeoutOnFireLogMaxCount 获取拿过期的OnFireLog的个数
-func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
-	return 3000
+	s.lastTimeFetchOnFireLogFailRate = rate
 }
 
 type FireFailReason string
@@ -175,9 +180,48 @@ func (s *StatisticsService) GetHandleTriggerForwardDuration() time.Duration {
 	return time.Since(util.VeryEarlyTime())
 }
 
-// GetScheduleInterval 获取从数据库中拿Trigger的间隔
+func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
+	return 5000
+}
+
 func (s *StatisticsService) GetScheduleInterval() time.Duration {
 	return time.Second * 2
+}
+
+func (s *StatisticsService) GetCheckTimeoutOnFireLogsInterval() time.Duration {
+	var (
+		//CheckTimeoutOnFireLogsMaxInterval 每多一个Scheduler实例，多加2s的最大上限
+		CheckTimeoutOnFireLogsMaxInterval = 4*time.Second + 2*time.Duration(s.currentSchedulerCount)
+		CheckTimeoutOnFireLogsMinInterval = 2 * time.Second
+	)
+
+	// 根据冲突率调整间隔
+	var adjustedInterval time.Duration
+	if s.lastTimeFetchOnFireLogFailRate <= 0.4 || s.currentSchedulerCount <= 1 {
+		//如果冲突率在0.4以下，或者没有别的scheduler，适当缩短间隔
+		adjustedInterval = time.Duration(float64(s.lastTimeFetchOnFireLogInterval) * 0.8)
+	} else if s.lastTimeFetchOnFireLogFailRate > 0.4 && s.lastTimeFetchOnFireLogFailRate < 0.7 {
+		//如果冲突率在0.4到0.7之间，增加50%的间隔
+		adjustedInterval = time.Duration(float64(s.lastTimeFetchOnFireLogInterval) * 1.5)
+	} else {
+		//如果冲突率在0.7以上，增加100%的间隔
+		adjustedInterval = s.lastTimeFetchOnFireLogInterval * 2
+	}
+
+	//确保间隔在最小和最大值之间
+	if adjustedInterval < CheckTimeoutOnFireLogsMinInterval {
+		adjustedInterval = CheckTimeoutOnFireLogsMinInterval
+	} else if adjustedInterval > CheckTimeoutOnFireLogsMaxInterval {
+		adjustedInterval = CheckTimeoutOnFireLogsMaxInterval
+	}
+
+	//在计算出的间隔基础上加入一个随机抖动，范围为[-25%, +25%]，以降低冲突概率
+	jitterFactor := 0.25
+	jitter := time.Duration(rand.Float64()*float64(adjustedInterval)*jitterFactor*2 - float64(adjustedInterval)*jitterFactor)
+	adjustedInterval += jitter
+
+	s.lastTimeFetchOnFireLogInterval = adjustedInterval
+	return adjustedInterval
 }
 
 func (s *StatisticsService) GetExecutorHeartbeatInterval() time.Duration {

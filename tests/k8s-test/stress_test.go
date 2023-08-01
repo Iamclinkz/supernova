@@ -17,7 +17,7 @@ import (
 func TestWithoutFail(t *testing.T) {
 	start := time.Now()
 
-	var triggerCount = 500
+	var triggerCount = 100000
 	httpServer := simple_http_server.NewSimpleHttpServer(
 		&simple_http_server.SimpleHttpServerInitConf{
 			FailRate:             0,
