@@ -126,25 +126,35 @@ func (s *StatisticsService) OnFetchNeedFireTriggers(count int) {
 	}
 }
 
-// OnFindTimeoutOnFireLogs 找到的过期的OnFireLogs个数
+// OnFindTimeoutOnFireLogs 更新本次找到的过期的OnFireLogs个数
 func (s *StatisticsService) OnFindTimeoutOnFireLogs(count int) {
 	if s.enableOTel {
 		s.foundTimeoutLogsCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
 }
 
-// OnHoldTimeoutOnFireLogFail 获得失败的过期的OnFireLogs个数
+// OnHoldTimeoutOnFireLogFail 更新本次抢占失败的过期的OnFireLogs的个数
 func (s *StatisticsService) OnHoldTimeoutOnFireLogFail(count int) {
 	if s.enableOTel {
 		s.holdTimeoutLogsFailureCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
 }
 
-// OnHoldTimeoutOnFireLogSuccess 获得的过期的OnFireLogs个数
+// OnHoldTimeoutOnFireLogSuccess 更新本次抢占成功的过期的OnFireLogs的个数
 func (s *StatisticsService) OnHoldTimeoutOnFireLogSuccess(count int) {
 	if s.enableOTel {
 		s.holdTimeoutLogsSuccessCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
+}
+
+// GetCheckTimeoutOnFireLogsInterval 获取从数据库中拿过期OnFireLogs的间隔
+func (s *StatisticsService) GetCheckTimeoutOnFireLogsInterval() time.Duration {
+	return time.Second * 5
+}
+
+// GetHandleTimeoutOnFireLogMaxCount 获取拿过期的OnFireLog的个数
+func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
+	return 3000
 }
 
 type FireFailReason string
@@ -165,16 +175,9 @@ func (s *StatisticsService) GetHandleTriggerForwardDuration() time.Duration {
 	return time.Since(util.VeryEarlyTime())
 }
 
-func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
-	return 3000
-}
-
+// GetScheduleInterval 获取从数据库中拿Trigger的间隔
 func (s *StatisticsService) GetScheduleInterval() time.Duration {
 	return time.Second * 2
-}
-
-func (s *StatisticsService) GetCheckTimeoutOnFireLogsInterval() time.Duration {
-	return time.Second * 5
 }
 
 func (s *StatisticsService) GetExecutorHeartbeatInterval() time.Duration {
