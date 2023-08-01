@@ -166,7 +166,7 @@ func (s *StatisticsService) GetHandleTriggerForwardDuration() time.Duration {
 }
 
 func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
-	return 3000
+	return 5000
 }
 
 func (s *StatisticsService) GetScheduleInterval() time.Duration {

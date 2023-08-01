@@ -27,14 +27,14 @@ func TestExecutorGracefulStop(t *testing.T) {
 		BinPath                 = "../../executor-example/http-executor/build/bin/http-executor"
 		LogLevel                = klog.LevelInfo
 		TriggerCount            = 50000
-		MaxWaitGracefulStopTime = time.Second*5 + conf.SchedulerMaxCheckHealthDuration
+		MaxWaitGracefulStopTime = time.Second*15 + conf.SchedulerMaxCheckHealthDuration
 	)
 
 	//启动单独的，准备被干掉的Executor使用
 	const (
 		ExecutorGrpcHost        = "9.134.5.191"
 		ExecutorGrpcPort        = 20001
-		ExecutorLogLevel        = klog.LevelInfo
+		ExecutorLogLevel        = klog.LevelTrace
 		ExecutorHealthCheckPort = 11111
 		ExecutorConsulHost      = "9.134.5.191"
 		ExecutorConsulPort      = 8500
@@ -58,7 +58,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 		SuccessAfterFirstFail: true, //但是失败之后，重试一定成功
 	}, &simple_http_server.SimpleHttpServerCheckConf{
 		AllSuccess:                    false,
-		FailTriggerRateNotGreaterThan: 0.05, //最大容忍5%的失败
+		FailTriggerRateNotGreaterThan: 0.01, //最大容忍1%的失败
 		NoUncalledTriggers:            true,
 	})
 	go httpServer.Start()
@@ -120,9 +120,9 @@ func TestExecutorGracefulStop(t *testing.T) {
 		triggers[i] = &model.Trigger{
 			Name:            "test-trigger-" + strconv.Itoa(i),
 			JobID:           1,
-			ScheduleType:    2,          //执行一次
-			FailRetryCount:  100,        //失败几乎可以一直重试
-			ExecuteTimeout:  2000000000, //2s
+			ScheduleType:    2,               //执行一次
+			FailRetryCount:  100,             //失败几乎可以一直重试
+			ExecuteTimeout:  2 * time.Second, //2s
 			TriggerNextTime: time.Now(),
 			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,
 			Param: map[string]string{

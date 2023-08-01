@@ -97,8 +97,8 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 				//初始的下次重试时间 = 触发时间 + 用户指定执行最大时间 + 重试间隔 * 1
 				RedoAt:            fireTime.Add(trigger.ExecuteTimeout).Add(trigger.FailRetryInterval),
 				ShouldFireAt:      fireTime,
-				ExecuteTimeout:    trigger.ExecuteTimeout,
 				LeftTryCount:      trigger.FailRetryCount,
+				ExecuteTimeout:    trigger.ExecuteTimeout,
 				Param:             trigger.Param,
 				FailRetryInterval: trigger.FailRetryInterval,
 				AtLeastOnce:       trigger.AtLeastOnce,

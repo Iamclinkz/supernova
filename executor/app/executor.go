@@ -126,14 +126,17 @@ func (e *Executor) Start() {
 }
 
 func (e *Executor) Stop() {
-	_ = e.discoveryClient.DeRegister(e.instanceID)
+	err := e.discoveryClient.DeRegister(e.instanceID)
+	if err != nil {
+		klog.Errorf("fail to DeRegister executor service:%v", err)
+	}
 	e.executeService.Stop()
 	e.serviceExporter.Stop()
 	if e.enableOTel {
-		if err := e.tracerProvider.Shutdown(context.TODO()); err != nil {
+		if err = e.tracerProvider.Shutdown(context.TODO()); err != nil {
 			klog.Warnf("tracerProvider stop error:%v", err)
 		}
-		if err := e.meterProvider.Shutdown(context.TODO()); err != nil {
+		if err = e.meterProvider.Shutdown(context.TODO()); err != nil {
 			klog.Warnf("meterProvider stop error:%v", err)
 		}
 	}
