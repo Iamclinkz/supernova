@@ -12,10 +12,10 @@ k8s:
 	zsh -c "kubectl port-forward -n supernova svc/scheduler-service 8080:8080 &"
 
 test: all
-	cd stress-test/tests && go test stress_test.go
-	cd stress-test/tests && go test fail_test.go
-	cd stress-test/tests && go test kill_scheduler_test.go
-	cd stress-test/tests && go test executor_graceful_stop_test.go
+	cd tests/functional-test && go test stress_test.go
+	cd tests/functional-test && go test fail_test.go
+	cd tests/functional-test && go test kill_scheduler_test.go
+	cd tests/functional-test && go test executor_graceful_stop_test.go
 	@echo "test finished"
 
 k8s-test: k8s

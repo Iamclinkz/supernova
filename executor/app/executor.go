@@ -2,16 +2,19 @@ package app
 
 import (
 	"context"
-	"go.opentelemetry.io/otel/sdk/metric"
 	"os"
 	"os/signal"
 	"supernova/executor/exporter"
 	"supernova/executor/processor"
 	"supernova/executor/service"
 	"supernova/pkg/conf"
+	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
+	"supernova/pkg/util"
 	"syscall"
 	"time"
+
+	"go.opentelemetry.io/otel/sdk/metric"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -89,9 +92,10 @@ func newExecutorInner(
 
 func (e *Executor) register() error {
 	discoveryInstance := &discovery.ServiceInstance{
+		ServiceName:      constance.ExecutorServiceName,
 		InstanceId:       e.instanceID,
 		ServiceServeConf: *e.serveConf,
-		Tags:             e.tags,
+		ExtraConfig:      util.EncodeTag(e.tags),
 	}
 
 	klog.Infof("executor try register service: %+v", discoveryInstance)
