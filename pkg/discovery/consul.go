@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"supernova/pkg/conf"
-	"supernova/pkg/constance"
-	"supernova/pkg/util"
 	"sync"
 
 	"github.com/cloudwego/kitex/pkg/klog"
@@ -26,8 +24,8 @@ const (
 
 // consul自用
 const (
-	consulMetaDataServiceProtocFieldName = "X-Protoc-Type"
-	consulMetaDataServiceTagFieldName    = "X-Tag"
+	consulMetaDataServiceProtocFieldName      = "X-Protoc-Type"
+	consulMetaDataServiceExtraConfigFieldName = "X-Extra-Config"
 )
 
 type ConsulDiscoveryClient struct {
@@ -36,7 +34,7 @@ type ConsulDiscoveryClient struct {
 	client           consul.Client
 	config           *api.Config
 	mutex            sync.Mutex
-	instancesMap     sync.Map
+	instancesMap     sync.Map //map[ServiceName][]*ServiceInstance
 	httpServer       *http.Server
 	middlewareConfig MiddlewareConfig
 	registerConfig   RegisterConfig
@@ -55,7 +53,7 @@ func NewConsulRegisterConfig(healthCheckPort string) RegisterConfig {
 	}
 }
 
-func newConsulDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig RegisterConfig) (ExecutorDiscoveryClient, error) {
+func newConsulDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig RegisterConfig) (DiscoverClient, error) {
 	if middlewareConfig[ConsulMiddlewareConfigConsulHostFieldName] == "" ||
 		middlewareConfig[ConsulMiddlewareConfigConsulPortFieldName] == "" {
 		panic("")
@@ -77,7 +75,7 @@ func newConsulDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig 
 	}, err
 }
 
-func (consulClient *ConsulDiscoveryClient) Register(instance *ExecutorServiceInstance) error {
+func (consulClient *ConsulDiscoveryClient) Register(instance *ServiceInstance) error {
 	if consulClient.registerConfig[ConsulRegisterConfigHealthcheckPortFieldName] == "" {
 		panic("")
 	}
@@ -86,11 +84,11 @@ func (consulClient *ConsulDiscoveryClient) Register(instance *ExecutorServiceIns
 	consulMeta := make(map[string]string, 2)
 	//编码protoc和tag到consul的meta data中，方便对端解出
 	consulMeta[consulMetaDataServiceProtocFieldName] = string(instance.Protoc)
-	consulMeta[consulMetaDataServiceTagFieldName] = util.EncodeTag(instance.Tags)
+	consulMeta[consulMetaDataServiceExtraConfigFieldName] = instance.ExtraConfig
 
 	serviceRegistration := &api.AgentServiceRegistration{
 		ID:      instance.InstanceId,
-		Name:    constance.ExecutorServiceName,
+		Name:    instance.ServiceName,
 		Address: instance.Host,
 		Port:    instance.Port,
 		Meta:    consulMeta,
@@ -131,21 +129,21 @@ func (consulClient *ConsulDiscoveryClient) DeRegister(instanceId string) error {
 	return consulClient.client.Deregister(serviceRegistration)
 }
 
-func (consulClient *ConsulDiscoveryClient) DiscoverServices() []*ExecutorServiceInstance {
-	instanceList, ok := consulClient.instancesMap.Load(constance.ExecutorServiceName)
+func (consulClient *ConsulDiscoveryClient) DiscoverServices(serviceName string) []*ServiceInstance {
+	instanceList, ok := consulClient.instancesMap.Load(serviceName)
 	if ok {
-		return instanceList.([]*ExecutorServiceInstance)
+		return instanceList.([]*ServiceInstance)
 	}
 	consulClient.mutex.Lock()
 	defer consulClient.mutex.Unlock()
-	instanceList, ok = consulClient.instancesMap.Load(constance.ExecutorServiceName)
+	instanceList, ok = consulClient.instancesMap.Load(serviceName)
 	if ok {
-		return instanceList.([]*ExecutorServiceInstance)
+		return instanceList.([]*ServiceInstance)
 	} else {
 		go func() {
 			params := make(map[string]interface{})
 			params["type"] = "service"
-			params["service"] = constance.ExecutorServiceName
+			params["service"] = serviceName
 			plan, _ := watch.Parse(params)
 			plan.Handler = func(u uint64, i interface{}) {
 				if i == nil {
@@ -155,14 +153,14 @@ func (consulClient *ConsulDiscoveryClient) DiscoverServices() []*ExecutorService
 				if !ok {
 					return
 				}
-				var instances []*ExecutorServiceInstance
+				var instances []*ServiceInstance
 				for _, entry := range v {
 					instance := convertConsulAgentServiceToServiceInstance(entry.Service)
 					if instance != nil {
 						instances = append(instances, instance)
 					}
 				}
-				consulClient.instancesMap.Store(constance.ExecutorServiceName, instances)
+				consulClient.instancesMap.Store(serviceName, instances)
 			}
 			defer plan.Stop()
 			err := plan.Run(consulClient.config.Address)
@@ -173,13 +171,13 @@ func (consulClient *ConsulDiscoveryClient) DiscoverServices() []*ExecutorService
 		}()
 	}
 
-	entries, _, err := consulClient.client.Service(constance.ExecutorServiceName, "", false, nil)
+	entries, _, err := consulClient.client.Service(serviceName, "", false, nil)
 	if err != nil {
-		consulClient.instancesMap.Store(constance.ExecutorServiceName, []*ExecutorServiceInstance{})
-		klog.Error("Discover ExecutorServiceInstance Error!")
+		consulClient.instancesMap.Store(serviceName, []*ServiceInstance{})
+		klog.Error("Discover ServiceInstance Error!")
 		return nil
 	}
-	instances := make([]*ExecutorServiceInstance, 0, len(entries))
+	instances := make([]*ServiceInstance, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Checks.AggregatedStatus() == api.HealthPassing {
 			instance := convertConsulAgentServiceToServiceInstance(entry.Service)
@@ -188,26 +186,26 @@ func (consulClient *ConsulDiscoveryClient) DiscoverServices() []*ExecutorService
 			}
 		}
 	}
-	consulClient.instancesMap.Store(constance.ExecutorServiceName, instances)
+	consulClient.instancesMap.Store(serviceName, instances)
 	return instances
 }
 
-func convertConsulAgentServiceToServiceInstance(agentService *api.AgentService) *ExecutorServiceInstance {
+func convertConsulAgentServiceToServiceInstance(agentService *api.AgentService) *ServiceInstance {
 	if agentService.Meta == nil ||
 		agentService.Meta[consulMetaDataServiceProtocFieldName] == "" ||
-		agentService.Meta[consulMetaDataServiceTagFieldName] == "" {
+		agentService.Meta[consulMetaDataServiceExtraConfigFieldName] == "" {
 		return nil
 	}
 
-	return &ExecutorServiceInstance{
+	return &ServiceInstance{
 		InstanceId: agentService.ID,
-		ExecutorServiceServeConf: ExecutorServiceServeConf{
+		ServiceServeConf: ServiceServeConf{
 			Protoc: ProtocType(agentService.Meta[consulMetaDataServiceProtocFieldName]),
 			Host:   agentService.Address,
 			Port:   agentService.Port,
 		},
-		Tags: util.DecodeTags(agentService.Meta[consulMetaDataServiceTagFieldName]),
+		ExtraConfig: agentService.Meta[consulMetaDataServiceExtraConfigFieldName],
 	}
 }
 
-var _ ExecutorDiscoveryClient = (*ConsulDiscoveryClient)(nil)
+var _ DiscoverClient = (*ConsulDiscoveryClient)(nil)

@@ -85,7 +85,7 @@ func (s *ExecutorRouteService) findMatchingExecutorsForJob(job *model.Job) ([]*E
 func (s *ExecutorRouteService) OnExecutorUpdate(newExecutors map[string]*Executor) {
 	newInvertedIndex := make(map[string][]*Executor, len(newExecutors))
 	for _, newExecutor := range newExecutors {
-		for _, tag := range newExecutor.ServiceData.Tags {
+		for _, tag := range newExecutor.Tags {
 			newInvertedIndex[tag] = append(newInvertedIndex[tag], newExecutor)
 		}
 	}

@@ -19,8 +19,8 @@ func genExecutor(
 	meterProvider *sdkmetrics.MeterProvider,
 	tags []string,
 	processor map[string]processor.JobProcessor,
-	serveConf *discovery.ExecutorServiceServeConf,
-	processorCount int, client discovery.ExecutorDiscoveryClient,
+	serveConf *discovery.ServiceServeConf,
+	processorCount int, client discovery.DiscoverClient,
 	extraConf map[string]string,
 ) (*Executor, error) {
 	wire.Build(

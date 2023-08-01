@@ -17,9 +17,9 @@ type ExecutorBuilder struct {
 	instanceID      string
 	tags            []string
 	processor       map[string]processor.JobProcessor
-	serveConf       *discovery.ExecutorServiceServeConf
+	serveConf       *discovery.ServiceServeConf
 	processorCount  int
-	discoveryClient discovery.ExecutorDiscoveryClient
+	discoveryClient discovery.DiscoverClient
 	extraConf       map[string]string
 	traceProvider   *sdktrace.TracerProvider
 	metricsProvider *sdkmetrics.MeterProvider
@@ -121,7 +121,7 @@ func (b *ExecutorBuilder) WithProcessor(p processor.JobProcessor) *ExecutorBuild
 }
 
 func (b *ExecutorBuilder) WithGrpcServe(host string, port int) *ExecutorBuilder {
-	b.serveConf = new(discovery.ExecutorServiceServeConf)
+	b.serveConf = new(discovery.ServiceServeConf)
 	b.serveConf.Host = host
 	b.serveConf.Port = port
 	b.serveConf.Protoc = discovery.ProtocTypeGrpc

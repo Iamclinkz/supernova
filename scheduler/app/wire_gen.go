@@ -16,7 +16,7 @@ import (
 
 // Injectors from wire.go:
 
-func genScheduler(instanceID string, enableTrace bool, tracerProvider *trace.TracerProvider, meterProvider *metric.MeterProvider, scheduleOperator schedule_operator.Operator, client discovery.ExecutorDiscoveryClient, schedulerWorkerCount int) (*Scheduler, error) {
+func genScheduler(instanceID string, enableTrace bool, tracerProvider *trace.TracerProvider, meterProvider *metric.MeterProvider, scheduleOperator schedule_operator.Operator, client discovery.DiscoverClient, schedulerWorkerCount int) (*Scheduler, error) {
 	statisticsService := service.NewStatisticsService(instanceID, enableTrace)
 	jobService := service.NewJobService(scheduleOperator, statisticsService)
 	triggerService := service.NewTriggerService(scheduleOperator, statisticsService)

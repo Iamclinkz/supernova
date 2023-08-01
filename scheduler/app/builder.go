@@ -21,7 +21,7 @@ import (
 type SchedulerBuilder struct {
 	instanceID           string
 	scheduleOperator     schedule_operator.Operator
-	discoveryClient      discovery.ExecutorDiscoveryClient
+	discoveryClient      discovery.DiscoverClient
 	schedulerWorkerCount int
 	tracerProvider       *sdktrace.TracerProvider
 	meterProvider        *metric.MeterProvider

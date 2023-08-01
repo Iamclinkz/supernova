@@ -22,7 +22,7 @@ type Executor struct {
 	instanceID     string
 	tags           []string
 	processor      map[string]processor.JobProcessor
-	serveConf      *discovery.ExecutorServiceServeConf
+	serveConf      *discovery.ServiceServeConf
 	processorCount int
 	extraConf      map[string]string
 
@@ -32,7 +32,7 @@ type Executor struct {
 	meterProvider  *metric.MeterProvider
 
 	//discovery
-	discoveryClient discovery.ExecutorDiscoveryClient
+	discoveryClient discovery.DiscoverClient
 
 	//service
 	duplicateService  *service.DuplicateService
@@ -50,11 +50,11 @@ func newExecutorInner(
 	meterProvider *metric.MeterProvider,
 	tags []string,
 	processor map[string]processor.JobProcessor,
-	serveConf *discovery.ExecutorServiceServeConf,
+	serveConf *discovery.ServiceServeConf,
 	processorCount int,
 	extraConf map[string]string,
 
-	discoveryClient discovery.ExecutorDiscoveryClient,
+	discoveryClient discovery.DiscoverClient,
 	duplicateService *service.DuplicateService,
 	executeService *service.ExecuteService,
 	processorService *service.ProcessorService,
@@ -88,10 +88,10 @@ func newExecutorInner(
 }
 
 func (e *Executor) register() error {
-	discoveryInstance := &discovery.ExecutorServiceInstance{
-		InstanceId:               e.instanceID,
-		ExecutorServiceServeConf: *e.serveConf,
-		Tags:                     e.tags,
+	discoveryInstance := &discovery.ServiceInstance{
+		InstanceId:       e.instanceID,
+		ServiceServeConf: *e.serveConf,
+		Tags:             e.tags,
 	}
 
 	klog.Infof("executor try register service: %+v", discoveryInstance)

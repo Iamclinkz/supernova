@@ -4,10 +4,10 @@ metadata:
   name: http-executor
   namespace: supernova
   labels:
-    SupernovaExecutor: "1"
     #需要同discovery/k8s.go中对应上
-    ExecutorProtoc: "Grpc"
-    ExecutorTag: "X-Tag-Glue-Http"
+    SupernovaExecutor: "1"
+    SupernovaServiceProtoc: "Grpc"
+    SupernovaServiceExtraConfig: "X-Tag-Glue-Http"  #对于executor，这里是其拥有的tags
 spec:
   ports:
     - protocol: TCP

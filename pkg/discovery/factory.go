@@ -1,16 +1,16 @@
 package discovery
 
-type ExecutorDiscoveryClient interface {
+type DiscoverClient interface {
 	// Register 服务注册
-	Register(instance *ExecutorServiceInstance) error
+	Register(instance *ServiceInstance) error
 	//DeRegister 服务取消注册
 	DeRegister(instanceId string) error
 	//DiscoverServices 服务发现
-	DiscoverServices() []*ExecutorServiceInstance
+	DiscoverServices(serviceName string) []*ServiceInstance
 }
 
 func NewDiscoveryClient(t MiddlewareType, middlewareConfig MiddlewareConfig,
-	registerConfig RegisterConfig) (ExecutorDiscoveryClient, error) {
+	registerConfig RegisterConfig) (DiscoverClient, error) {
 	switch t {
 	case TypeConsul:
 		return newConsulDiscoveryClient(middlewareConfig, registerConfig)

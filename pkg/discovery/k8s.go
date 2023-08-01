@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"supernova/pkg/constance"
-	"supernova/pkg/util"
 	"sync"
 	"time"
 
@@ -25,10 +23,10 @@ const (
 	K8sRegisterConfigHealthcheckPortFieldName = "HealthCheckPort"
 )
 
-// k8s自用，用于约定yaml中，部分label的名称。Scheduler会通过label的名称分析Executor原信息
+// k8s自用，用于约定yaml中，部分label的字段名称。Scheduler会通过label的名称解析对应的原信息
 const (
-	k8sYamlLabelProtocFieldName = "ExecutorProtoc"
-	k8sYamlLabelTagFieldName    = "ExecutorTag"
+	k8sYamlLabelProtocFieldName      = "SupernovaServiceProtoc"
+	k8sYamlLabelExtraConfigFieldName = "SupernovaServiceExtraConfig"
 )
 
 func NewK8sMiddlewareConfig(namespace string) MiddlewareConfig {
@@ -44,17 +42,17 @@ func NewK8sRegisterConfig(healthCheckPort string) RegisterConfig {
 }
 
 type K8sDiscoveryClient struct {
-	clientSet                   *kubernetes.Clientset
-	httpServer                  *http.Server
-	namespace                   string
-	serviceName2ServiceInstance map[string][]*ExecutorServiceInstance
-	executorServiceInstance     []*ExecutorServiceInstance
-	mutex                       sync.Mutex
-	middlewareConfig            MiddlewareConfig
-	registerConfig              RegisterConfig
+	clientSet                           *kubernetes.Clientset
+	httpServer                          *http.Server
+	namespace                           string
+	k8sLabel2K8sService2ServiceInstance map[string]map[string][]*ServiceInstance //k8s的label到k8s的serviceName到ServiceInstance，go程不安全，要加锁CRUD
+	instancesMap                        sync.Map                                 //map[InstanceServiceName][]*ServiceInstance，注意instanceServiceName不等于k8sServiceName！
+	mutex                               sync.Mutex
+	middlewareConfig                    MiddlewareConfig
+	registerConfig                      RegisterConfig
 }
 
-func newK8sDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig RegisterConfig) (ExecutorDiscoveryClient, error) {
+func newK8sDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig RegisterConfig) (DiscoverClient, error) {
 	if middlewareConfig[K8sMiddlewareNamespaceFieldName] == "" {
 		panic("")
 	}
@@ -70,16 +68,16 @@ func newK8sDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig Reg
 	klog.Infof("k8s discovery client init success, namespace:%+v", middlewareConfig[K8sMiddlewareNamespaceFieldName])
 
 	return &K8sDiscoveryClient{
-		clientSet:                   clientSet,
-		namespace:                   middlewareConfig[K8sMiddlewareNamespaceFieldName],
-		middlewareConfig:            middlewareConfig,
-		registerConfig:              registerConfig,
-		serviceName2ServiceInstance: make(map[string][]*ExecutorServiceInstance),
+		clientSet:                           clientSet,
+		namespace:                           middlewareConfig[K8sMiddlewareNamespaceFieldName],
+		middlewareConfig:                    middlewareConfig,
+		registerConfig:                      registerConfig,
+		k8sLabel2K8sService2ServiceInstance: make(map[string]map[string][]*ServiceInstance),
 	}, nil
 }
 
 // Register k8s的register启动service的时候就已经帮忙做了，这里启动一下http探针的handler即可
-func (k *K8sDiscoveryClient) Register(instance *ExecutorServiceInstance) error {
+func (k *K8sDiscoveryClient) Register(instance *ServiceInstance) error {
 	klog.Infof("start register, instance:%+v", instance)
 	if k.registerConfig[K8sRegisterConfigHealthcheckPortFieldName] == "" {
 		panic("")
@@ -126,22 +124,28 @@ func (k *K8sDiscoveryClient) DeRegister(instanceId string) error {
 	return nil
 }
 
-func (k *K8sDiscoveryClient) DiscoverServices() []*ExecutorServiceInstance {
-	klog.Tracef("start to DiscoverServices")
-	if k.executorServiceInstance != nil {
-		return k.executorServiceInstance
+// DiscoverServices k8s版本的服务发现和consul等不同，这里作为参数的serviceName不对应k8s的service的name，
+// 而是对应k8s的service的label名称。因为k8s中，可能有很多个service有同一个label，
+// 所以这里同一个serviceName，可能对应很多个k8s的service。而这个方法会把k8s中，所有带有serviceName名称的label的service找到，
+// 然后把其Endpoint中的所有pod的元信息（包括其提供服务的地址）封装成[]*ServiceInstance返回
+func (k *K8sDiscoveryClient) DiscoverServices(serviceName string) []*ServiceInstance {
+	labelName := serviceName
+	klog.Tracef("start to k8s DiscoverServices")
+	instanceList, ok := k.instancesMap.Load(labelName)
+	if ok {
+		return instanceList.([]*ServiceInstance)
 	}
 	k.mutex.Lock()
 	defer k.mutex.Unlock()
-
-	if k.executorServiceInstance != nil {
-		return k.executorServiceInstance
+	instanceList, ok = k.instancesMap.Load(labelName)
+	if ok {
+		return instanceList.([]*ServiceInstance)
 	}
 
-	k.executorServiceInstance = k.getInstancesFromServices()
+	ret := k.getAndStoreInstancesFromServicesByLabel(labelName)
 	go func() {
 		watcher, err := k.clientSet.CoreV1().Services(k.namespace).Watch(context.TODO(), metav1.ListOptions{
-			LabelSelector: constance.K8sExecutorLabelName,
+			LabelSelector: labelName,
 			Watch:         true,
 		})
 		if err != nil {
@@ -163,7 +167,7 @@ func (k *K8sDiscoveryClient) DiscoverServices() []*ExecutorServiceInstance {
 				var endpoints *corev1.Endpoints
 				var err error
 
-				// 重试获取 Endpoint
+				// 重试获取 Endpoint，测试使用。。
 				for i := 0; i < 3; i++ {
 					endpoints, err = k.clientSet.CoreV1().Endpoints(k.namespace).Get(context.TODO(), svc.Name, metav1.GetOptions{})
 					if err == nil {
@@ -179,32 +183,32 @@ func (k *K8sDiscoveryClient) DiscoverServices() []*ExecutorServiceInstance {
 				}
 
 				instances := k.getInstancesFromEndpoints(endpoints, svc.Labels)
-				k.serviceName2ServiceInstance[svc.Name] = instances
-				k.refreshExecutorServiceInstance()
-				klog.Infof("discovery refreshExecutorServiceInstance:%v", k.serviceName2ServiceInstance)
+				k.k8sLabel2K8sService2ServiceInstance[labelName][svc.Name] = instances
+				k.refreshServiceInstance2SyncMap(labelName)
+				klog.Infof("discovery refreshServiceInstance2SyncMap:%v", k.k8sLabel2K8sService2ServiceInstance)
 			case watch.Deleted:
-				delete(k.serviceName2ServiceInstance, svc.Name)
-				k.refreshExecutorServiceInstance()
-				klog.Infof("discovery refreshExecutorServiceInstance:%v", k.serviceName2ServiceInstance)
+				delete(k.k8sLabel2K8sService2ServiceInstance[labelName], svc.Name)
+				k.refreshServiceInstance2SyncMap(labelName)
+				klog.Infof("discovery refreshServiceInstance2SyncMap:%v", k.k8sLabel2K8sService2ServiceInstance)
 			default:
 				klog.Errorf("miss handle event type:%v", event.Type)
 			}
 		}
 	}()
 
-	return k.executorServiceInstance
+	return ret
 }
 
-func (k *K8sDiscoveryClient) getInstancesFromServices() []*ExecutorServiceInstance {
+func (k *K8sDiscoveryClient) getAndStoreInstancesFromServicesByLabel(labelName string) []*ServiceInstance {
 	services, err := k.clientSet.CoreV1().Services(k.namespace).List(context.TODO(), metav1.ListOptions{
-		LabelSelector: constance.K8sExecutorLabelName,
+		LabelSelector: labelName,
 	})
 	if err != nil {
 		klog.Errorf("Failed to list services: %v", err)
 		return nil
 	}
 
-	var ret []*ExecutorServiceInstance
+	var ret []*ServiceInstance
 	for _, svc := range services.Items {
 		endpoints, err := k.clientSet.CoreV1().Endpoints(k.namespace).Get(context.TODO(), svc.Name, metav1.GetOptions{})
 		if err != nil {
@@ -214,20 +218,23 @@ func (k *K8sDiscoveryClient) getInstancesFromServices() []*ExecutorServiceInstan
 
 		instanceFromEndpoint := k.getInstancesFromEndpoints(endpoints, svc.Labels)
 		ret = append(ret, instanceFromEndpoint...)
-		k.serviceName2ServiceInstance[svc.Name] = instanceFromEndpoint
+		k.k8sLabel2K8sService2ServiceInstance[labelName] = make(map[string][]*ServiceInstance)
+		k.k8sLabel2K8sService2ServiceInstance[labelName][svc.Name] = instanceFromEndpoint
 	}
 
+	k.refreshServiceInstance2SyncMap(labelName)
 	return ret
 }
 
-func (k *K8sDiscoveryClient) getInstancesFromEndpoints(endpoints *corev1.Endpoints, labels map[string]string) []*ExecutorServiceInstance {
-	tags, protoc, err := extractTagsAndProtoc(labels)
+// getInstancesFromEndpoints 从EndPoints信息中，解析出ServiceInstance信息
+func (k *K8sDiscoveryClient) getInstancesFromEndpoints(endpoints *corev1.Endpoints, labels map[string]string) []*ServiceInstance {
+	extraConfig, protoc, err := extractExtraConfigAndProtoc(labels)
 	if err != nil {
 		//todo 删掉
 		panic(err)
 	}
 
-	var instances []*ExecutorServiceInstance
+	var instances []*ServiceInstance
 	for _, subset := range endpoints.Subsets {
 		for _, address := range subset.Addresses {
 			podName := address.TargetRef.Name
@@ -236,14 +243,14 @@ func (k *K8sDiscoveryClient) getInstancesFromEndpoints(endpoints *corev1.Endpoin
 				continue
 			}
 
-			instance := &ExecutorServiceInstance{
-				InstanceId: podName,
-				ExecutorServiceServeConf: ExecutorServiceServeConf{
+			instance := &ServiceInstance{
+				InstanceId: podName, //k8s作为服务发现，使用podName作为其instanceID
+				ServiceServeConf: ServiceServeConf{
 					Protoc: protoc,
 					Host:   address.IP,
-					Port:   int(subset.Ports[0].Port),
+					Port:   int(subset.Ports[0].Port), //这里直接用endpoint的第一个端口了，以后有需求再拓展
 				},
-				Tags: tags,
+				ExtraConfig: extraConfig,
 			}
 			instances = append(instances, instance)
 		}
@@ -252,15 +259,16 @@ func (k *K8sDiscoveryClient) getInstancesFromEndpoints(endpoints *corev1.Endpoin
 	return instances
 }
 
-func extractTagsAndProtoc(labels map[string]string) ([]string, ProtocType, error) {
+// extractExtraConfigAndProtoc 从某个service对应的Endpoint中，解析出这个service的extraConfig和protoc这两个信息
+func extractExtraConfigAndProtoc(labels map[string]string) (string, ProtocType, error) {
 	var (
-		tags   []string
 		protoc ProtocType
 	)
 
+	//如果labels中没有protoc字段，报错
 	protocStr, ok := labels[k8sYamlLabelProtocFieldName]
 	if !ok {
-		return nil, "", fmt.Errorf("can not find proto in labels:%v", labels)
+		return "", "", fmt.Errorf("can not find proto in labels:%v", labels)
 	} else {
 		switch ProtocType(protocStr) {
 		case ProtocTypeGrpc:
@@ -268,27 +276,22 @@ func extractTagsAndProtoc(labels map[string]string) ([]string, ProtocType, error
 		case ProtocTypeHttp:
 			protoc = ProtocTypeHttp
 		default:
-			return nil, "", fmt.Errorf("can not decode proto type:%v", protocStr)
+			return "", "", fmt.Errorf("can not decode proto type:%v", protocStr)
 		}
 	}
 
-	tagStr, ok := labels[k8sYamlLabelTagFieldName]
-	if !ok || tagStr == "" {
-		return nil, "", fmt.Errorf("can not find tags in labels:%v", labels)
-	}
-	tags = util.DecodeTags(tagStr)
-
-	return tags, protoc, nil
+	extraConfig := labels[k8sYamlLabelExtraConfigFieldName]
+	return extraConfig, protoc, nil
 }
 
-func (k *K8sDiscoveryClient) refreshExecutorServiceInstance() {
-	tmp := make([]*ExecutorServiceInstance, 0, len(k.serviceName2ServiceInstance))
+func (k *K8sDiscoveryClient) refreshServiceInstance2SyncMap(labelName string) {
+	tmp := make([]*ServiceInstance, 0, len(k.k8sLabel2K8sService2ServiceInstance[labelName]))
 
-	for _, instance := range k.serviceName2ServiceInstance {
+	for _, instance := range k.k8sLabel2K8sService2ServiceInstance[labelName] {
 		tmp = append(tmp, instance...)
 	}
 
-	k.executorServiceInstance = tmp
+	k.instancesMap.Store(labelName, tmp)
 }
 
-var _ ExecutorDiscoveryClient = (*K8sDiscoveryClient)(nil)
+var _ DiscoverClient = (*K8sDiscoveryClient)(nil)

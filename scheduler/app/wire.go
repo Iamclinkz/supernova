@@ -13,7 +13,7 @@ import (
 )
 
 func genScheduler(instanceID string, enableTrace bool,
-	tracerProvider *sdktrace.TracerProvider, meterProvider *sdkmetrics.MeterProvider, scheduleOperator schedule_operator.Operator, client discovery.ExecutorDiscoveryClient, schedulerWorkerCount int) (*Scheduler, error) {
+	tracerProvider *sdktrace.TracerProvider, meterProvider *sdkmetrics.MeterProvider, scheduleOperator schedule_operator.Operator, client discovery.DiscoverClient, schedulerWorkerCount int) (*Scheduler, error) {
 	wire.Build(
 		newSchedulerInner,
 

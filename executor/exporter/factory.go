@@ -13,7 +13,7 @@ type Exporter interface {
 
 func NewExporter(executeService *service.ExecuteService,
 	statisticsService *service.StatisticsService,
-	serviceConf *discovery.ExecutorServiceServeConf,
+	serviceConf *discovery.ServiceServeConf,
 	enableOTel bool) Exporter {
 	switch serviceConf.Protoc {
 	case discovery.ProtocTypeGrpc:

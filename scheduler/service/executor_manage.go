@@ -1,7 +1,9 @@
 package service
 
 import (
+	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
+	"supernova/pkg/util"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/executor_operator"
 	"sync"
@@ -18,13 +20,13 @@ type ExecutorManageService struct {
 	executors        map[string]*Executor //key为executor的instanceID
 
 	statisticsService *StatisticsService
-	discoveryClient   discovery.ExecutorDiscoveryClient
+	discoveryClient   discovery.DiscoverClient
 
 	updateExecutorListeners     []UpdateExecutorListener
 	onJobResponseNotifyFuncFunc executor_operator.OnJobResponseNotifyFunc
 }
 
-func NewExecutorManageService(statisticsService *StatisticsService, discoveryClient discovery.ExecutorDiscoveryClient) *ExecutorManageService {
+func NewExecutorManageService(statisticsService *StatisticsService, discoveryClient discovery.DiscoverClient) *ExecutorManageService {
 	return &ExecutorManageService{
 		shutdownCh:              make(chan struct{}),
 		executors:               make(map[string]*Executor),
@@ -40,9 +42,10 @@ type UpdateExecutorListener interface {
 }
 
 type Executor struct {
-	ServiceData *discovery.ExecutorServiceInstance
+	ServiceData *discovery.ServiceInstance
 	Operator    executor_operator.Operator
 	Status      *model.ExecutorStatus
+	Tags        []string
 }
 
 func (s *ExecutorManageService) HeartBeat() {
@@ -70,7 +73,7 @@ func (s *ExecutorManageService) updateExecutor() {
 	s.executorLock.Lock()
 	defer s.executorLock.Unlock()
 
-	newServiceInstances := s.discoveryClient.DiscoverServices()
+	newServiceInstances := s.discoveryClient.DiscoverServices(constance.ExecutorServiceName)
 	newExecutors := make(map[string]*Executor, len(newServiceInstances))
 
 	// 这里注意，因为优雅退出，所以假设老的ExecutorA的连接仍然可用，但是新从服务发现接口中拿到的实例中没有ExecutorA，
@@ -102,9 +105,11 @@ func (s *ExecutorManageService) updateExecutor() {
 		newExecutors[newInstanceServiceData.InstanceId] = &Executor{
 			ServiceData: newInstanceServiceData,
 			Operator:    operator,
+			Tags:        util.DecodeTags(newInstanceServiceData.ExtraConfig),
 		}
 	}
 
+	//检查一手健康
 	var wg sync.WaitGroup
 	wg.Add(len(newExecutors))
 
@@ -162,7 +167,6 @@ func (s *ExecutorManageService) updateExecutor() {
 // 		delete(s.executors, instanceID)
 // 	}
 // 	s.executorLock.Unlock()
-
 // 	//代码执行到这里，其他地方反应狗带了，但是还是Alive的，那么需要检查
 // 	go func() {
 // 		_, err := unhealthyExecutor.Operator.CheckStatus(s.statisticsService.GetHeartBeatTimeout())

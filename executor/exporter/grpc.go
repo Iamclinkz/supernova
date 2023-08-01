@@ -15,12 +15,12 @@ import (
 type GrpcExporter struct {
 	grpcHandler *handler.GrpcHandler
 	grpcServer  server.Server
-	serviceConf *discovery.ExecutorServiceServeConf
+	serviceConf *discovery.ServiceServeConf
 }
 
 func NewGrpcExporter(executeService *service.ExecuteService,
 	statisticsService *service.StatisticsService,
-	serviceConf *discovery.ExecutorServiceServeConf,
+	serviceConf *discovery.ServiceServeConf,
 	enableOTel bool) *GrpcExporter {
 	e := new(GrpcExporter)
 	e.grpcHandler = handler.NewGrpcHandler(executeService, statisticsService, enableOTel)
