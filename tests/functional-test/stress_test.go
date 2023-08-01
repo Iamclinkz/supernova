@@ -19,7 +19,7 @@ import (
 func TestWithoutFail(t *testing.T) {
 	start := time.Now()
 
-	var triggerCount = 100000
+	var triggerCount = 1000000
 
 	supernovaTest := util.StartTest(3, 3, klog.LevelInfo, util.StartHttpExecutors, nil)
 	defer supernovaTest.EndTest()
