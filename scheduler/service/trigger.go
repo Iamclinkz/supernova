@@ -233,95 +233,199 @@ func (s *TriggerService) FindTriggerByName(name string) (*model.Trigger, error) 
 	return s.scheduleOperator.FindTriggerByName(context.TODO(), name)
 }
 
-func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog, error) {
-	var (
-		now             = time.Now()
-		beginHandleTime = now.Add(-s.statisticsService.GetHandleTriggerForwardDuration()) //最多到之前的多长时间
-		maxGetCount     = s.statisticsService.GetHandleTimeoutOnFireLogMaxCount()
-		batchCount      = 200 //	一次最多拿200个
-		ret             = make([]*model.OnFireLog, 0, maxGetCount/2)
+func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{}, onFireLogCh chan *model.OnFireLog) {
+	const (
+		batchSize            = 50
+		concurrentGoroutines = 4
 	)
 
-	onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(), batchCount, now, beginHandleTime)
-	if err != nil {
-		return nil, fmt.Errorf("fetch timeout triggers error:%v", err)
-	}
+	for {
+		select {
+		case <-closeCh:
+			return
+		default:
+			var (
+				wg         sync.WaitGroup
+				mu         sync.Mutex
+				ret        []*model.OnFireLog
+				failCount  atomic.Int32
+				foundCount atomic.Int32
+			)
 
-	mu := sync.Mutex{}
-	//因为不考虑极端的情况下，失败的应该不多？且各个Scheduler动态调整捞取过期OnFireLog时间+捞取间隔较长，
-	//所以这里用了乐观锁，取到过期的OnFireLog之后，尝试更新RedoAt字段。如果更新成功，则自己执行。更新失败则说明要不任务已经
-	//成功了，要不让另一个进程抢先了，总之不是自己执行。
-	const batchSize = 100
-	var (
-		wg           sync.WaitGroup
-		failCount    atomic.Int32
-		fetchTotal   = len(onFireLogs)
-		batchCounter int
-	)
+			processTask := func(offset int) {
+				defer wg.Done()
 
-	sort.Slice(onFireLogs, func(i, j int) bool {
-		return onFireLogs[i].RedoAt.Before(onFireLogs[j].RedoAt)
-	})
+				now := time.Now()
+				beginHandleTime := now.Add(-s.statisticsService.GetHandleTriggerForwardDuration())
+				maxGetCount := s.statisticsService.GetHandleTimeoutOnFireLogMaxCount()
 
-	processBatch := func(startIndex, endIndex int) {
-		defer wg.Done()
-		for i := startIndex; i < endIndex; i++ {
-			onFireLog := onFireLogs[i]
-			onFireLog.RedoAt = onFireLog.GetNextRedoAt()
-			if err = s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog); err == nil {
-				//我们抢占这个待执行的过期OnFireLog成功
-				onFireLog.ShouldFireAt = time.Now()
-				mu.Lock()
-				ret = append(ret, onFireLog)
-				mu.Unlock()
-			} else {
-				failCount.Add(1)
-				klog.Debugf("fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", onFireLog.ID, err)
-				return
+				onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(), maxGetCount, now, beginHandleTime, offset)
+				if err != nil {
+					klog.Errorf("fetchTimeoutAndRefreshOnFireLogs error: %v", err)
+					return
+				}
+
+				foundCount.Add(int32(len(onFireLogs)))
+
+				//根据 RedoAt 字段排序
+				sort.Slice(onFireLogs, func(i, j int) bool {
+					return onFireLogs[i].RedoAt.Before(onFireLogs[j].RedoAt)
+				})
+
+				for _, onFireLog := range onFireLogs {
+					//打散任务触发时间
+					onFireLog.ShouldFireAt = now.Add(util.TimeRandBetween(0, 800*time.Millisecond))
+					onFireLog.RedoAt = onFireLog.GetNextRedoAt()
+					if err := s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog); err == nil {
+						mu.Lock()
+						ret = append(ret, onFireLog)
+						mu.Unlock()
+					} else {
+						failCount.Add(1)
+						klog.Debugf("fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", onFireLog.ID, err)
+					}
+				}
 			}
+
+			for i := 0; i < concurrentGoroutines; i++ {
+				wg.Add(1)
+				go processTask(i * batchSize)
+			}
+
+			wg.Wait()
+
+			var (
+				found    = int(foundCount.Load())
+				fail     = int(failCount.Load())
+				got      = len(ret)
+				failRate = float32(failCount.Load()) / float32(foundCount.Load())
+			)
+			s.statisticsService.OnFindTimeoutOnFireLogs(found)
+			s.statisticsService.OnHoldTimeoutOnFireLogFail(fail)
+			s.statisticsService.OnHoldTimeoutOnFireLogSuccess(len(ret))
+			s.statisticsService.UpdateLastTimeFetchTimeoutOnFireLogFailRate(failRate)
+
+			//根据冲突概率调整下次拉取间隔
+			sleepDuration := s.statisticsService.GetCheckTimeoutOnFireLogsInterval()
+
+			for _, onFireLog := range ret {
+				onFireLogCh <- onFireLog
+			}
+
+			//如果拉取的任务数量达到最大值且冲突概率低，则立即继续拉取
+			if len(ret) == batchSize*concurrentGoroutines && failRate < 0.2 {
+				continue
+			}
+
+			if got >= 0 {
+				//获取成功一部分
+				klog.Infof("fetchTimeoutAndRefreshOnFireLogs fetched timeout logs, len:%v", len(ret))
+			} else {
+				//如果本轮没有获得任何一个OnFireLog
+				if found > 0 {
+					//查找到一些个过期的OnFireLog，但是自己一个都没获得到
+					klog.Errorf("fetchTimeoutAndRefreshOnFireLogs find %v logs, but fetch nothing", found)
+				} else {
+					//没有查找到过期的OnFireLog
+					klog.Trace("fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs")
+				}
+			}
+
+			//根据冲突概率调整的间隔休眠
+			time.Sleep(sleepDuration)
 		}
 	}
-
-	for i := 0; i < fetchTotal; i += batchSize {
-		startIndex := i
-		endIndex := i + batchSize
-		if endIndex > fetchTotal {
-			endIndex = fetchTotal
-		}
-		wg.Add(1)
-		batchCounter++
-		go processBatch(startIndex, endIndex)
-	}
-	if batchCounter == 0 {
-		batchCounter = 1
-	}
-
-	wg.Wait()
-
-	var (
-		totalRequestCount = len(ret) + int(failCount.Load())
-		gotCount          = len(ret)
-		missCount         = int(failCount.Load())
-	)
-
-	s.statisticsService.OnFindTimeoutOnFireLogs(totalRequestCount)
-	s.statisticsService.OnHoldTimeoutOnFireLogFail(missCount)
-	s.statisticsService.OnHoldTimeoutOnFireLogSuccess(gotCount)
-	s.statisticsService.UpdateLastTimeFetchTimeoutOnFireLogFailRate(float32(failCount.Load()) / float32(batchCounter))
-
-	if gotCount >= 0 {
-		//获取成功一部分
-		klog.Infof("fetchTimeoutAndRefreshOnFireLogs fetched timeout logs, len:%v", len(ret))
-	} else {
-		//如果本轮没有获得任何一个OnFireLog
-		if fetchTotal > 0 {
-			//查找到一些个过期的OnFireLog，但是自己一个都没获得到
-			klog.Errorf("fetchTimeoutAndRefreshOnFireLogs find %v logs, but fetch nothing", len(onFireLogs))
-		} else {
-			//没有查找到过期的OnFireLog
-			klog.Trace("fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs")
-		}
-	}
-
-	return ret, nil
 }
+
+//func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{}, onFireLogCh chan *model.OnFireLog) {
+//	var (
+//		now             = time.Now()
+//		beginHandleTime = now.Add(-s.statisticsService.GetHandleTriggerForwardDuration()) //最多到之前的多长时间
+//		maxGetCount     = s.statisticsService.GetHandleTimeoutOnFireLogMaxCount()
+//		batchCount      = 200 //	一次最多拿200个
+//		ret             = make([]*model.OnFireLog, 0, maxGetCount/2)
+//	)
+//
+//	onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(), batchCount, now, beginHandleTime, 0)
+//	if err != nil {
+//		return nil, fmt.Errorf("fetch timeout triggers error:%v", err)
+//	}
+//
+//	mu := sync.Mutex{}
+//	//因为不考虑极端的情况下，失败的应该不多？且各个Scheduler动态调整捞取过期OnFireLog时间+捞取间隔较长，
+//	//所以这里用了乐观锁，取到过期的OnFireLog之后，尝试更新RedoAt字段。如果更新成功，则自己执行。更新失败则说明要不任务已经
+//	//成功了，要不让另一个进程抢先了，总之不是自己执行。
+//	const batchSize = 100
+//	var (
+//		wg           sync.WaitGroup
+//		failCount    atomic.Int32
+//		fetchTotal   = len(onFireLogs)
+//		batchCounter int
+//	)
+//
+//	sort.Slice(onFireLogs, func(i, j int) bool {
+//		return onFireLogs[i].RedoAt.Before(onFireLogs[j].RedoAt)
+//	})
+//
+//	processBatch := func(startIndex, endIndex int) {
+//		defer wg.Done()
+//		for i := startIndex; i < endIndex; i++ {
+//			onFireLog := onFireLogs[i]
+//			onFireLog.RedoAt = onFireLog.GetNextRedoAt()
+//			if err = s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog); err == nil {
+//				//我们抢占这个待执行的过期OnFireLog成功
+//				onFireLog.ShouldFireAt = time.Now()
+//				mu.Lock()
+//				ret = append(ret, onFireLog)
+//				mu.Unlock()
+//			} else {
+//				failCount.Add(1)
+//				klog.Debugf("fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", onFireLog.ID, err)
+//				return
+//			}
+//		}
+//	}
+//
+//	for i := 0; i < fetchTotal; i += batchSize {
+//		startIndex := i
+//		endIndex := i + batchSize
+//		if endIndex > fetchTotal {
+//			endIndex = fetchTotal
+//		}
+//		wg.Add(1)
+//		batchCounter++
+//		go processBatch(startIndex, endIndex)
+//	}
+//	if batchCounter == 0 {
+//		batchCounter = 1
+//	}
+//
+//	wg.Wait()
+//
+//	var (
+//		totalRequestCount = len(ret) + int(failCount.Load())
+//		gotCount          = len(ret)
+//		missCount         = int(failCount.Load())
+//	)
+//
+//	s.statisticsService.OnFindTimeoutOnFireLogs(totalRequestCount)
+//	s.statisticsService.OnHoldTimeoutOnFireLogFail(missCount)
+//	s.statisticsService.OnHoldTimeoutOnFireLogSuccess(gotCount)
+//	s.statisticsService.UpdateLastTimeFetchTimeoutOnFireLogFailRate(float32(failCount.Load()) / float32(batchCounter))
+//
+//	if gotCount >= 0 {
+//		//获取成功一部分
+//		klog.Infof("fetchTimeoutAndRefreshOnFireLogs fetched timeout logs, len:%v", len(ret))
+//	} else {
+//		//如果本轮没有获得任何一个OnFireLog
+//		if fetchTotal > 0 {
+//			//查找到一些个过期的OnFireLog，但是自己一个都没获得到
+//			klog.Errorf("fetchTimeoutAndRefreshOnFireLogs find %v logs, but fetch nothing", len(onFireLogs))
+//		} else {
+//			//没有查找到过期的OnFireLog
+//			klog.Trace("fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs")
+//		}
+//	}
+//
+//	return ret, nil
+//}

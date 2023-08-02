@@ -190,9 +190,9 @@ func (s *StatisticsService) GetScheduleInterval() time.Duration {
 
 func (s *StatisticsService) GetCheckTimeoutOnFireLogsInterval() time.Duration {
 	var (
-		//CheckTimeoutOnFireLogsMaxInterval 每多一个Scheduler实例，多加2s的最大上限
-		CheckTimeoutOnFireLogsMaxInterval = 4*time.Second + 2*time.Duration(s.currentSchedulerCount)
-		CheckTimeoutOnFireLogsMinInterval = 2 * time.Second
+		//CheckTimeoutOnFireLogsMaxInterval 每多一个Scheduler实例，多加0.5的最大上限
+		CheckTimeoutOnFireLogsMaxInterval = 200*time.Millisecond + 500*time.Millisecond*time.Duration(s.currentSchedulerCount)
+		CheckTimeoutOnFireLogsMinInterval = 100 * time.Millisecond
 	)
 
 	// 根据冲突率调整间隔

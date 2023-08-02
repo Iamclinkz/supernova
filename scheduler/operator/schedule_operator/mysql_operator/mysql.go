@@ -96,7 +96,7 @@ func (m *MysqlOperator) UpdateOnFireLogRedoAt(ctx context.Context, onFireLog *mo
 	return nil
 }
 
-func (m *MysqlOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time) ([]*model.OnFireLog, error) {
+func (m *MysqlOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time, offset int) ([]*model.OnFireLog, error) {
 	db, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
 		db = m.db.DB()
@@ -108,6 +108,7 @@ func (m *MysqlOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int,
 		Where("redo_at BETWEEN ? AND ?", noEarlyThan, noLaterThan).
 		Where("status != ?", constance.OnFireStatusFinished).
 		Where("left_try_count > 0").
+		Offset(offset).
 		Limit(maxCount).
 		Find(&dOnFireLogs).Error
 

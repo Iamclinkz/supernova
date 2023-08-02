@@ -260,24 +260,5 @@ func (s *ScheduleService) work() {
 
 // checkTimeoutOnFireLogs 从数据库中捞取超时的OnFireLogs，尝试再次执行
 func (s *ScheduleService) checkTimeoutOnFireLogs() {
-	ticker := time.NewTicker(s.statisticsService.GetCheckTimeoutOnFireLogsInterval())
-
-	for {
-		select {
-		case <-s.stopCh:
-			klog.Infof("checkTimeoutOnFireLogs go routine stopped")
-			ticker.Stop()
-			return
-		case <-ticker.C:
-			onFireLogs, err := s.triggerService.fetchTimeoutAndRefreshOnFireLogs()
-			if err != nil {
-				klog.Errorf("checkTimeoutOnFireLogs Error:%v", err)
-			} else {
-				for _, onFireLog := range onFireLogs {
-					s.overtimeOnFireLogCh <- onFireLog
-				}
-			}
-			ticker.Reset(s.statisticsService.GetCheckTimeoutOnFireLogsInterval())
-		}
-	}
+	s.triggerService.fetchTimeoutAndRefreshOnFireLogs(s.stopCh, s.overtimeOnFireLogCh)
 }

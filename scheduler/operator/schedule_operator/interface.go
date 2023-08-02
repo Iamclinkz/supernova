@@ -35,7 +35,7 @@ type Operator interface {
 	//FindOnFireLogByTriggerID(ctx context.Context, triggerID uint) ([]*model.OnFireLog, error)
 	//查找过期的OnFireLog，要求至少返回id, trigger_id, job_id, executor_instance, param,redo_at,updated_at几个字段
 	//并且筛选条件是过期时间（RedoAt）位于noEarlyThan和noLaterThan之间，并且Status不为Finished，并且left_try_count大于0。最大返回maxCount个。
-	FetchTimeoutOnFireLog(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time) ([]*model.OnFireLog, error)
+	FetchTimeoutOnFireLog(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time, offset int) ([]*model.OnFireLog, error)
 
 	//-------------------------------job
 	//插入不带id的Job结构，插入数据库后从数据库中获取id并填充作为参数的Job的ID字段

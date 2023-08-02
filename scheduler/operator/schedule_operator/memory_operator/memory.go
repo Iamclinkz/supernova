@@ -309,7 +309,7 @@ func (m *MemoryOperator) FindTriggerByName(ctx context.Context, triggerName stri
 	return nil, schedule_operator.ErrNotFound
 }
 
-func (m *MemoryOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time) ([]*model.OnFireLog, error) {
+func (m *MemoryOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time, offset int) ([]*model.OnFireLog, error) {
 	m.onFireLock.RLock()
 	defer m.onFireLock.RUnlock()
 
