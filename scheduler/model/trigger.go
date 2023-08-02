@@ -2,7 +2,6 @@ package model
 
 import (
 	"fmt"
-	"github.com/google/btree"
 	"strings"
 	"supernova/pkg/util"
 	"supernova/scheduler/constance"
@@ -92,8 +91,4 @@ func TriggersToString(triggers []*Trigger) string {
 	}
 
 	return builder.String()
-}
-
-func (t *Trigger) Less(than btree.Item) bool {
-	return t.TriggerNextTime.Before(than.(*Trigger).TriggerNextTime)
 }

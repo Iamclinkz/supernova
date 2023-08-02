@@ -632,3 +632,7 @@ func (m *MysqlOperator) IsJobIDExist(ctx context.Context, jobID uint) (bool, err
 
 	return false, err
 }
+
+func (m *MysqlOperator) UnLock(ctx context.Context, lockName string) error {
+	return nil
+}

@@ -6,8 +6,6 @@ import (
 	"supernova/pkg/api"
 	"supernova/scheduler/constance"
 	"time"
-
-	"github.com/google/btree"
 )
 
 // OnFireLog 表示一次trigger的执行
@@ -79,8 +77,4 @@ func (o *OnFireLog) String() string {
 // 旧超时时间 +  （经过了几次超时+1） * 用户指定的重试间隔 + 用户指定的Task最大执行时间
 func (o *OnFireLog) GetNextRedoAt() time.Time {
 	return o.ShouldFireAt.Add(time.Duration(o.TryCount-o.LeftTryCount+1)*o.FailRetryInterval + o.ExecuteTimeout)
-}
-
-func (o *OnFireLog) Less(than btree.Item) bool {
-	return o.RedoAt.Before(than.(*OnFireLog).RedoAt)
 }

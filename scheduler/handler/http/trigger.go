@@ -24,7 +24,7 @@ func (h *TriggerHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/trigger/:id", h.GetTrigger)
 	router.POST("/trigger", h.AddTrigger)
 	router.DELETE("/trigger/:id", h.DeleteTrigger)
-	router.GET("/trigger", h.GetTriggerByName)
+	//router.GET("/trigger", h.GetTriggerByName)
 	router.POST("/trigger/batch", h.AddTriggers)
 }
 
@@ -89,18 +89,18 @@ func (h *TriggerHandler) AddTriggers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Triggers added successfully"})
 }
 
-func (h *TriggerHandler) GetTriggerByName(c *gin.Context) {
-	name := c.Query("name")
-	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing name parameter"})
-		return
-	}
-
-	trigger, err := h.triggerService.FindTriggerByName(name)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, trigger)
-}
+//func (h *TriggerHandler) GetTriggerByName(c *gin.Context) {
+//	name := c.Query("name")
+//	if name == "" {
+//		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing name parameter"})
+//		return
+//	}
+//
+//	trigger, err := h.triggerService.FindTriggerByName(name)
+//	if err != nil {
+//		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+//		return
+//	}
+//
+//	c.JSON(http.StatusOK, trigger)
+//}

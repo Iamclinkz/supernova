@@ -140,6 +140,7 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 	return onFireLogs, nil
 
 badEnd:
+	s.scheduleOperator.UnLock(txCtx, constance.FetchUpdateMarkTriggerLockName)
 	if txFailErr := s.scheduleOperator.OnTxFail(txCtx); txFailErr != nil {
 		return nil, fmt.Errorf("fetchUpdateMarkTrigger txFailErr:%v, originError:%v", txFailErr, err)
 	}
@@ -231,9 +232,9 @@ func (s *TriggerService) AddTriggers(triggers []*model.Trigger) error {
 	return s.scheduleOperator.InsertTriggers(context.TODO(), triggers)
 }
 
-func (s *TriggerService) FindTriggerByName(name string) (*model.Trigger, error) {
-	return s.scheduleOperator.FindTriggerByName(context.TODO(), name)
-}
+//func (s *TriggerService) FindTriggerByName(name string) (*model.Trigger, error) {
+//	return s.scheduleOperator.FindTriggerByName(context.TODO(), name)
+//}
 
 func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{}, onFireLogCh chan *model.OnFireLog) {
 	const (

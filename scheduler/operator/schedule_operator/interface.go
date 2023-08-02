@@ -59,6 +59,7 @@ type Operator interface {
 	//-------------------------------lock
 	//分布式锁。如果不是单Scheduler，则必须实现。最好结合事务或者锁保护等机制
 	Lock(ctx context.Context, lockName string) error
+	UnLock(ctx context.Context, lockName string) error
 
 	//-------------------------------trigger
 	//插入不带id的Trigger结构，插入数据库后从数据库中获取id并填充作为参数的Trigger的ID字段
@@ -72,5 +73,5 @@ type Operator interface {
 	//查
 	FetchRecentTriggers(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time) ([]*model.Trigger, error)
 	FetchTriggerFromID(ctx context.Context, triggerID uint) (*model.Trigger, error)
-	FindTriggerByName(ctx context.Context, triggerName string) (*model.Trigger, error)
+	//FindTriggerByName(ctx context.Context, triggerName string) (*model.Trigger, error)
 }
