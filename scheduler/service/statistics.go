@@ -114,8 +114,8 @@ func (s *StatisticsService) WatchScheduler() {
 			watchSchedulerTicker.Stop()
 			return
 		case <-watchSchedulerTicker.C:
-			s.currentSchedulerCount = len(s.discoveryClient.DiscoverServices(constance.ExecutorServiceName))
-			klog.Errorf("current scheduler count:%v", s.currentSchedulerCount)
+			s.currentSchedulerCount = len(s.discoveryClient.DiscoverServices(constance.SchedulerServiceName))
+			klog.Tracef("current scheduler count:%v", s.currentSchedulerCount)
 			watchSchedulerTicker.Reset(time.Second * 2)
 		}
 	}
@@ -181,7 +181,7 @@ func (s *StatisticsService) GetHandleTriggerForwardDuration() time.Duration {
 }
 
 func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
-	return 5000
+	return 2000
 }
 
 func (s *StatisticsService) GetScheduleInterval() time.Duration {
@@ -197,14 +197,14 @@ func (s *StatisticsService) GetCheckTimeoutOnFireLogsInterval() time.Duration {
 
 	// 根据冲突率调整间隔
 	var adjustedInterval time.Duration
-	if s.lastTimeFetchOnFireLogFailRate <= 0.4 || s.currentSchedulerCount <= 1 {
-		//如果冲突率在0.4以下，或者没有别的scheduler，适当缩短间隔
+	if s.lastTimeFetchOnFireLogFailRate <= 0.2 || s.currentSchedulerCount <= 1 {
+		//如果冲突率在0.2以下，或者没有别的scheduler，适当缩短间隔
 		adjustedInterval = time.Duration(float64(s.lastTimeFetchOnFireLogInterval) * 0.8)
-	} else if s.lastTimeFetchOnFireLogFailRate > 0.4 && s.lastTimeFetchOnFireLogFailRate < 0.7 {
+	} else if s.lastTimeFetchOnFireLogFailRate > 0.2 && s.lastTimeFetchOnFireLogFailRate < 0.5 {
 		//如果冲突率在0.4到0.7之间，增加50%的间隔
 		adjustedInterval = time.Duration(float64(s.lastTimeFetchOnFireLogInterval) * 1.5)
 	} else {
-		//如果冲突率在0.7以上，增加100%的间隔
+		//如果冲突率在0.5以上，增加100%的间隔
 		adjustedInterval = s.lastTimeFetchOnFireLogInterval * 2
 	}
 
@@ -221,6 +221,7 @@ func (s *StatisticsService) GetCheckTimeoutOnFireLogsInterval() time.Duration {
 	adjustedInterval += jitter
 
 	s.lastTimeFetchOnFireLogInterval = adjustedInterval
+	klog.Errorf("[%v]  %v  -> %v", s.instanceID, s.lastTimeFetchOnFireLogFailRate, adjustedInterval)
 	return adjustedInterval
 }
 

@@ -150,14 +150,24 @@ func (m *MysqlOperator) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID 
 	}
 
 	// 更新满足条件的记录
-	return db.Model(&dao.OnFireLog{}).
-		Where("id = ? AND status != ?", onFireLogID, constance.OnFireStatusFinished).
-		Updates(map[string]interface{}{
-			"success": true,
-			"status":  constance.OnFireStatusFinished,
-			"result":  result,
-			"redo_at": util.VeryLateTime(),
-		}).Error
+	// return db.Model(&dao.OnFireLog{}).
+	// 	Where("id = ? AND status != ?", onFireLogID, constance.OnFireStatusFinished).
+	// 	Updates(map[string]interface{}{
+	// 		"success": true,
+	// 		"status":  constance.OnFireStatusFinished,
+	// 		"result":  result,
+	// 		"redo_at": util.VeryLateTime(),
+	// 	}).Error
+	ret := db.Unscoped().Delete(&dao.OnFireLog{}, onFireLogID)
+	if ret.Error != nil {
+		return fmt.Errorf("failed to delete OnFireLog with ID %d: %w", onFireLogID, ret.Error)
+	}
+
+	if ret.RowsAffected == 0 {
+		return fmt.Errorf("no OnFireLog found with ID %d", onFireLogID)
+	}
+
+	return nil
 }
 
 func (m *MysqlOperator) UpdateOnFireLogFail(ctx context.Context, onFireLogID uint, errorMsg string) error {

@@ -251,8 +251,8 @@ func (c *ConsulDiscoveryClient) DiscoverServices(serviceName string) []*ServiceI
 
 func convertConsulAgentServiceToServiceInstance(agentService *api.AgentService) *ServiceInstance {
 	if agentService.Meta == nil ||
-		agentService.Meta[consulMetaDataServiceProtocFieldName] == "" ||
-		agentService.Meta[consulMetaDataServiceExtraConfigFieldName] == "" {
+		agentService.Meta[consulMetaDataServiceProtocFieldName] == "" {
+		//agentService.Meta[consulMetaDataServiceExtraConfigFieldName] == "" {
 		return nil
 	}
 

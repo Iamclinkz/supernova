@@ -237,25 +237,26 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog,
 	var (
 		now             = time.Now()
 		beginHandleTime = now.Add(-s.statisticsService.GetHandleTriggerForwardDuration()) //最多到之前的多长时间
+		maxGetCount     = s.statisticsService.GetHandleTimeoutOnFireLogMaxCount()
+		batchCount      = 200 //	一次最多拿200个
+		ret             = make([]*model.OnFireLog, 0, maxGetCount/2)
 	)
 
-	onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(),
-		s.statisticsService.GetHandleTimeoutOnFireLogMaxCount(), now, beginHandleTime)
+	onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(), batchCount, now, beginHandleTime)
 	if err != nil {
 		return nil, fmt.Errorf("fetch timeout triggers error:%v", err)
 	}
 
-	ret := make([]*model.OnFireLog, 0, len(onFireLogs))
 	mu := sync.Mutex{}
 	//因为不考虑极端的情况下，失败的应该不多？且各个Scheduler动态调整捞取过期OnFireLog时间+捞取间隔较长，
 	//所以这里用了乐观锁，取到过期的OnFireLog之后，尝试更新RedoAt字段。如果更新成功，则自己执行。更新失败则说明要不任务已经
 	//成功了，要不让另一个进程抢先了，总之不是自己执行。
 	const batchSize = 100
 	var (
-		wg        sync.WaitGroup
-		failCount atomic.Int32
-		fetchTotal = len(onFireLogs)
-		batchCounter
+		wg           sync.WaitGroup
+		failCount    atomic.Int32
+		fetchTotal   = len(onFireLogs)
+		batchCounter int
 	)
 
 	sort.Slice(onFireLogs, func(i, j int) bool {
@@ -269,8 +270,8 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog,
 			onFireLog.RedoAt = onFireLog.GetNextRedoAt()
 			if err = s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog); err == nil {
 				//我们抢占这个待执行的过期OnFireLog成功
-				mu.Lock()
 				onFireLog.ShouldFireAt = time.Now()
+				mu.Lock()
 				ret = append(ret, onFireLog)
 				mu.Unlock()
 			} else {
@@ -281,27 +282,32 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs() ([]*model.OnFireLog,
 		}
 	}
 
-	for batchCounter = 0; batchCounter < fetchTotal; batchCounter += batchSize {
-		startIndex := batchCounter
-		endIndex := batchCounter + batchSize
+	for i := 0; i < fetchTotal; i += batchSize {
+		startIndex := i
+		endIndex := i + batchSize
 		if endIndex > fetchTotal {
 			endIndex = fetchTotal
 		}
 		wg.Add(1)
+		batchCounter++
 		go processBatch(startIndex, endIndex)
+	}
+	if batchCounter == 0 {
+		batchCounter = 1
 	}
 
 	wg.Wait()
 
 	var (
-		gotCount   = len(ret)
-		missCount  = fetchTotal - gotCount
+		totalRequestCount = len(ret) + int(failCount.Load())
+		gotCount          = len(ret)
+		missCount         = int(failCount.Load())
 	)
 
-	s.statisticsService.OnFindTimeoutOnFireLogs(fetchTotal)
+	s.statisticsService.OnFindTimeoutOnFireLogs(totalRequestCount)
 	s.statisticsService.OnHoldTimeoutOnFireLogFail(missCount)
 	s.statisticsService.OnHoldTimeoutOnFireLogSuccess(gotCount)
-	s.statisticsService.UpdateLastTimeFetchTimeoutOnFireLogFailRate(float32(failCount.Load()) / float32(batchCounter + 1))
+	s.statisticsService.UpdateLastTimeFetchTimeoutOnFireLogFailRate(float32(failCount.Load()) / float32(batchCounter))
 
 	if gotCount >= 0 {
 		//获取成功一部分
