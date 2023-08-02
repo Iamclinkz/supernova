@@ -75,8 +75,8 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 			if trigger.TriggerNextTime.Before(begin) {
 				//todo 这里需要处理misfire逻辑
 				//这里赋值成fireTime，时间轮有容错。
-				//todo:这里再想一下，暂时测试方便，改一下TriggerLastTime了
-				trigger.TriggerNextTime = begin
+				//todo:这里再想一下，暂时测试方便，改一下TriggerLastTime了，但是需要打散一下
+				trigger.TriggerNextTime = time.Now().Add(util.TimeRandBetween(200*time.Millisecond, 1*time.Second))
 			}
 			fireTime := trigger.TriggerNextTime
 
@@ -91,13 +91,11 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 			}
 
 			onFireLog := &model.OnFireLog{
-				TriggerID:        trigger.ID,
-				JobID:            trigger.JobID,
-				Status:           constance.OnFireStatusWaiting,
-				TryCount:         trigger.FailRetryCount,
-				ExecutorInstance: "",
-				//初始的下次重试时间 = 触发时间 + 用户指定执行最大时间 + 重试间隔 * 1
-				RedoAt:            fireTime.Add(trigger.ExecuteTimeout).Add(trigger.FailRetryInterval),
+				TriggerID:         trigger.ID,
+				JobID:             trigger.JobID,
+				Status:            constance.OnFireStatusWaiting,
+				TryCount:          trigger.FailRetryCount,
+				ExecutorInstance:  "",
 				ShouldFireAt:      fireTime,
 				LeftTryCount:      trigger.FailRetryCount,
 				ExecuteTimeout:    trigger.ExecuteTimeout,
@@ -105,6 +103,7 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 				FailRetryInterval: trigger.FailRetryInterval,
 				AtLeastOnce:       trigger.AtLeastOnce,
 			}
+			onFireLog.RedoAt = onFireLog.GetNextRedoAt()
 			onFireLogs = append(onFireLogs, onFireLog)
 			klog.Tracef("update on fire trigger:%+v", onFireLog)
 			if trigger.TriggerNextTime.After(endTriggerHandleTime) {
@@ -300,6 +299,12 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{},
 				got      = len(ret)
 				failRate = float32(failCount.Load()) / float32(foundCount.Load())
 			)
+
+			if found == 0 {
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
 			s.statisticsService.OnFindTimeoutOnFireLogs(found)
 			s.statisticsService.OnHoldTimeoutOnFireLogFail(fail)
 			s.statisticsService.OnHoldTimeoutOnFireLogSuccess(len(ret))

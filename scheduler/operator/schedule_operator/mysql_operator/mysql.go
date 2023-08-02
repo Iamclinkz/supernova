@@ -10,6 +10,7 @@ import (
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/operator/schedule_operator/mysql_operator/dao"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -26,7 +27,8 @@ type MysqlOperator struct {
 }
 
 var (
-	reduceRedoAtExpr = gorm.Expr("left_try_count - 1")
+	reduceRedoAtExpr    = gorm.Expr("left_try_count - 1")
+	dropCreateTableOnce sync.Once //todo 测试使用
 )
 
 func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
@@ -37,31 +39,32 @@ func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
 		emptyJob:       &dao.Job{},
 		emptyLock:      &dao.Lock{},
 	}
-	//todo 测试用，记得删掉
-	cli.DB().Migrator().DropTable(ret.emptyTrigger)
-	cli.DB().Migrator().DropTable(ret.emptyOnFireLog)
-	if err := cli.DB().AutoMigrate(ret.emptyTrigger); err != nil {
-		return nil, err
+
+	initTables := func() {
+		//todo 测试用，记得删掉
+		cli.DB().Migrator().DropTable(ret.emptyTrigger)
+		cli.DB().Migrator().DropTable(ret.emptyOnFireLog)
+		if err := cli.DB().AutoMigrate(ret.emptyTrigger); err != nil {
+			panic(err)
+		}
+		if err := cli.DB().AutoMigrate(ret.emptyOnFireLog); err != nil {
+			panic(err)
+		}
+
+		cli.DB().Migrator().DropTable(ret.emptyJob)
+
+		cli.DB().Migrator().DropTable(ret.emptyLock)
+		if err := cli.DB().AutoMigrate(ret.emptyJob); err != nil {
+			panic(err)
+		}
+
+		if err := cli.DB().AutoMigrate(ret.emptyLock); err != nil {
+			panic(err)
+		}
+		//初始化锁结构
+		cli.DB().Create(&dao.Lock{LockName: constance.FetchUpdateMarkTriggerLockName})
 	}
-	if err := cli.DB().AutoMigrate(ret.emptyOnFireLog); err != nil {
-		return nil, err
-	}
-
-	cli.DB().Migrator().DropTable(ret.emptyJob)
-
-	cli.DB().Migrator().DropTable(ret.emptyLock)
-
-	//todo 建表语句，实际上可以放到.sql文件中
-	if err := cli.DB().AutoMigrate(ret.emptyJob); err != nil {
-		return nil, err
-	}
-
-	if err := cli.DB().AutoMigrate(ret.emptyLock); err != nil {
-		return nil, err
-	}
-
-	//初始化锁结构
-	cli.DB().Create(&dao.Lock{LockName: constance.FetchUpdateMarkTriggerLockName})
+	dropCreateTableOnce.Do(initTables)
 	return ret, nil
 }
 
