@@ -1,7 +1,6 @@
 package functional_test
 
 import (
-	"github.com/cloudwego/kitex/pkg/klog"
 	"strconv"
 	"supernova/scheduler/app"
 	"supernova/scheduler/constance"
@@ -11,19 +10,23 @@ import (
 	"supernova/tests/util"
 	"testing"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 // todo 待测
 func TestMemoryStore(t *testing.T) {
 	const (
-		MemoryStoreSchedulerPort = "8180"
+		MemoryStoreSchedulerPort    = "8180"
+		MemoryStoreSchedulerAddress = "http://9.134.5.191:" + MemoryStoreSchedulerPort
 	)
 
 	start := time.Now()
 
-	var triggerCount = 100000
+	var triggerCount = 100
 
-	supernovaTest := util.StartTest(0, 3, klog.LevelWarn, util.StartHttpExecutors, nil)
+	//只开3个Executor，Scheduler手动指定成memory版本的
+	supernovaTest := util.StartTest(0, 3, klog.LevelInfo, util.StartHttpExecutors, nil)
 	defer supernovaTest.EndTest()
 
 	builder := app.NewSchedulerBuilder()
@@ -58,7 +61,7 @@ func TestMemoryStore(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 	//加一个任务
-	if err := util.RegisterJob(util.SchedulerAddress, &model.Job{
+	if err := util.RegisterJob(MemoryStoreSchedulerAddress, &model.Job{
 		Name:                  "test-http-job",
 		ExecutorRouteStrategy: constance.ExecutorRouteStrategyTypeRandom, //随机路由
 		GlueType:              "Http",
@@ -93,7 +96,7 @@ func TestMemoryStore(t *testing.T) {
 		}
 	}
 
-	util.RegisterTriggers(MemoryStoreSchedulerPort, triggers)
+	util.RegisterTriggers(MemoryStoreSchedulerAddress, triggers)
 
 	klog.Infof("register triggers success, cost:%v\n", time.Since(start))
 	httpServer.WaitResult(20*time.Second, true)

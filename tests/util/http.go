@@ -3,9 +3,10 @@ package util
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
 	"supernova/scheduler/model"
-	"sync"
+	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
@@ -14,38 +15,46 @@ func RegisterTrigger(schedulerAddress string, trigger *model.Trigger) error {
 	return SendRequest(schedulerAddress+"/trigger", "POST", trigger)
 }
 
-func RegisterTriggers(schedulerAddress string, triggers []*model.Trigger) {
-	var wg sync.WaitGroup
-	//保证数据库不会被击穿
-	concurrencyLimit := make(chan struct{}, 500)
+func doRegisterTriggers(schedulerAddress string, triggers []*model.Trigger) error {
+	return SendRequest(schedulerAddress+"/trigger/batch", "POST", triggers)
+}
 
-	groupSize := 500
+func RegisterTriggers(schedulerAddress string, triggers []*model.Trigger) {
+	start := time.Now()
+	//var wg sync.WaitGroup
+	//保证数据库不会被击穿
+	//concurrencyLimit := make(chan struct{}, 30)
+
+	groupSize := 40
 	groupCount := (len(triggers) + groupSize - 1) / groupSize
 
 	for i := 0; i < groupCount; i++ {
-		wg.Add(1)
+		//wg.Add(1)
 		to := (i + 1) * groupSize
 		if to > len(triggers) {
 			to = len(triggers)
 		}
-		go func(start, end int) {
-			defer wg.Done()
+		//go func(start, end int) {
+		//defer wg.Done()
 
-			for _, trigger := range triggers[start:end] {
-				concurrencyLimit <- struct{}{}
-				err := RegisterTrigger(schedulerAddress, trigger)
-				if err != nil {
-					panic(err)
-				}
-				<-concurrencyLimit
-			}
-
-		}(i*groupSize, to)
+		//concurrencyLimit <- struct{}{}
+		err := doRegisterTriggers(schedulerAddress, triggers[i*groupSize:to])
+		if err != nil {
+			panic(err)
+		}
+		//time.Sleep(1 * time.Millisecond)
+		//<-concurrencyLimit
+		//}(i*groupSize, to)
 	}
 
-	wg.Wait()
-	close(concurrencyLimit)
-	klog.Infof("triggers inserted success, count:%v", len(triggers))
+	//wg.Wait()
+	//close(concurrencyLimit)
+	costMs := time.Since(start).Milliseconds()
+	if costMs == 0 {
+		costMs = 1
+	}
+	log.Printf("triggers inserted success, count: %vms, cost time:%v, speed: %ventry/ms",
+		len(triggers), costMs, float64(len(triggers))/float64(costMs))
 }
 
 func RegisterJob(schedulerAddress string, job *model.Job) error {

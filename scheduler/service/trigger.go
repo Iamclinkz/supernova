@@ -17,14 +17,17 @@ import (
 )
 
 type TriggerService struct {
+	jobService        *JobService
 	scheduleOperator  schedule_operator.Operator
 	statisticsService *StatisticsService
 }
 
-func NewTriggerService(scheduleOperator schedule_operator.Operator, statisticsService *StatisticsService) *TriggerService {
+func NewTriggerService(scheduleOperator schedule_operator.Operator,
+	statisticsService *StatisticsService, jobService *JobService) *TriggerService {
 	return &TriggerService{
 		scheduleOperator:  scheduleOperator,
 		statisticsService: statisticsService,
+		jobService:        jobService,
 	}
 }
 
@@ -196,13 +199,13 @@ func (s *TriggerService) ValidateTrigger(trigger *model.Trigger) error {
 	}
 
 	//检查对应的job是否存在
-	jobExist, err := s.scheduleOperator.IsJobIDExist(context.TODO(), trigger.JobID)
+	_, err := s.jobService.FetchJobFromID(context.TODO(), trigger.JobID)
 	if err != nil {
-		return err
+		return fmt.Errorf("fetch job error:%+v", err)
 	}
-	if !jobExist {
-		return fmt.Errorf("no jobID:%v", trigger.JobID)
-	}
+	// if !jobExist {
+	// 	return fmt.Errorf("no jobID:%v", trigger.JobID)
+	// }
 
 	return nil
 }
@@ -249,19 +252,23 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{},
 				ret        []*model.OnFireLog
 				failCount  atomic.Int32
 				foundCount atomic.Int32
+				startTime  = time.Now()
 			)
 
 			processTask := func(offset int) {
 				defer wg.Done()
+				//maxGetCount := s.statisticsService.GetHandleTimeoutOnFireLogMaxCount()
 
-				now := time.Now()
-				beginHandleTime := now.Add(-s.statisticsService.GetHandleTriggerForwardDuration())
-				maxGetCount := s.statisticsService.GetHandleTimeoutOnFireLogMaxCount()
+				beginHandleTime := startTime.Add(-s.statisticsService.GetHandleTriggerForwardDuration())
 
-				onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(), maxGetCount, now, beginHandleTime, offset)
+				onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(), offset, startTime, beginHandleTime, offset)
 				if err != nil {
 					klog.Errorf("fetchTimeoutAndRefreshOnFireLogs error: %v", err)
 					return
+				} else {
+					if len(onFireLogs) != 0 {
+						klog.Errorf("fetch len:%v : %s", len(onFireLogs), model.OnFireLogsToString(onFireLogs))
+					}
 				}
 
 				foundCount.Add(int32(len(onFireLogs)))
@@ -271,9 +278,10 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{},
 					return onFireLogs[i].RedoAt.Before(onFireLogs[j].RedoAt)
 				})
 
+				t2 := time.Now()
 				for _, onFireLog := range onFireLogs {
 					//打散任务触发时间
-					onFireLog.ShouldFireAt = now.Add(util.TimeRandBetween(0, 800*time.Millisecond))
+					onFireLog.ShouldFireAt = t2.Add(util.TimeRandBetween(100, 800*time.Millisecond))
 					onFireLog.RedoAt = onFireLog.GetNextRedoAt()
 					if err := s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog); err == nil {
 						mu.Lock()
@@ -281,7 +289,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{},
 						mu.Unlock()
 					} else {
 						failCount.Add(1)
-						klog.Debugf("fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", onFireLog.ID, err)
+						klog.Errorf("[%v] fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", s.statisticsService.instanceID, onFireLog.ID, err)
 					}
 				}
 			}
@@ -295,7 +303,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{},
 
 			var (
 				found    = int(foundCount.Load())
-				fail     = int(failCount.Load())
+				lost     = int(failCount.Load())
 				got      = len(ret)
 				failRate = float32(failCount.Load()) / float32(foundCount.Load())
 			)
@@ -306,7 +314,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{},
 			}
 
 			s.statisticsService.OnFindTimeoutOnFireLogs(found)
-			s.statisticsService.OnHoldTimeoutOnFireLogFail(fail)
+			s.statisticsService.OnHoldTimeoutOnFireLogFail(lost)
 			s.statisticsService.OnHoldTimeoutOnFireLogSuccess(len(ret))
 			s.statisticsService.UpdateLastTimeFetchTimeoutOnFireLogFailRate(failRate)
 
@@ -335,6 +343,8 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{},
 					klog.Trace("fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs")
 				}
 			}
+
+			klog.Errorf("fetch timeout time:%v, got:%v, lost:%v", time.Since(startTime), got, lost)
 
 			//根据冲突概率调整的间隔休眠
 			time.Sleep(sleepDuration)

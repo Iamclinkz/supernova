@@ -4,14 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	lru "github.com/hashicorp/golang-lru"
-	"golang.org/x/time/rate"
 	"supernova/pkg/discovery"
 	"supernova/pkg/util"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
 	"sync"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
+	lru "github.com/hashicorp/golang-lru"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -20,29 +22,36 @@ const (
 )
 
 type JobService struct {
-	scheduleOperator schedule_operator.Operator
-	cache            *lru.Cache
-	jobMutexes       sync.Map
-	limiter          *rate.Limiter
+	scheduleOperator  schedule_operator.Operator
+	cache             *lru.Cache
+	jobMutexes        sync.Map
+	limiter           *rate.Limiter
+	statisticsService *StatisticsService
 }
 
-func NewJobService(scheduleOperator schedule_operator.Operator) *JobService {
+func NewJobService(scheduleOperator schedule_operator.Operator, statisticsService *StatisticsService) *JobService {
 	cache, _ := lru.New(maxCachedJobs)
 	return &JobService{
-		scheduleOperator: scheduleOperator,
-		cache:            cache,
-		limiter:          rate.NewLimiter(rate.Every(fetchJobIntervalLimit), 1),
+		scheduleOperator:  scheduleOperator,
+		cache:             cache,
+		limiter:           rate.NewLimiter(rate.Every(fetchJobIntervalLimit), 1),
+		statisticsService: statisticsService,
 	}
 }
 
+// 防止击穿
 type jobOrNotFound struct {
-	job *model.Job
+	job   *model.Job
+	legal bool
 }
 
 func (s *JobService) FetchJobFromID(ctx context.Context, jobID uint) (*model.Job, error) {
 	//检查是否cache
-	if cachedJob, ok := s.cache.Get(jobID); ok {
-		return cachedJob.(*model.Job), nil
+	if jon, ok := s.cache.Get(jobID); ok {
+		if jon.(*jobOrNotFound).legal {
+			return jon.(*jobOrNotFound).job, nil
+		}
+		return nil, schedule_operator.ErrNotFound
 	}
 
 	//没有cache，加个锁，请求数据库。同一个jobID的请求需要排队
@@ -50,8 +59,11 @@ func (s *JobService) FetchJobFromID(ctx context.Context, jobID uint) (*model.Job
 	jobMutex.Lock()
 	defer jobMutex.Unlock()
 
-	if cachedJob, ok := s.cache.Get(jobID); ok {
-		return cachedJob.(*model.Job), nil
+	if jon, ok := s.cache.Get(jobID); ok {
+		if jon.(*jobOrNotFound).legal {
+			return jon.(*jobOrNotFound).job, nil
+		}
+		return nil, schedule_operator.ErrNotFound
 	}
 
 	//不同的请求需要限制db的流量
@@ -61,11 +73,21 @@ func (s *JobService) FetchJobFromID(ctx context.Context, jobID uint) (*model.Job
 
 	job, err := s.scheduleOperator.FetchJobFromID(ctx, jobID)
 	if err != nil {
+		klog.Error(err)
+		if err == schedule_operator.ErrNotFound {
+			s.cache.Add(jobID, &jobOrNotFound{
+				job:   nil,
+				legal: false,
+			})
+		}
 		return nil, err
 	}
 
 	//将job加入缓存
-	s.cache.Add(jobID, job)
+	s.cache.Add(jobID, &jobOrNotFound{
+		job:   job,
+		legal: true,
+	})
 
 	return job, nil
 }

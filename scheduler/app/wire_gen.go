@@ -19,7 +19,7 @@ import (
 func genScheduler(instanceID string, enableTrace bool, tracerProvider *trace.TracerProvider, meterProvider *metric.MeterProvider, scheduleOperator schedule_operator.Operator, client discovery.DiscoverClient, schedulerWorkerCount int) (*Scheduler, error) {
 	statisticsService := service.NewStatisticsService(instanceID, enableTrace, client)
 	jobService := service.NewJobService(scheduleOperator, statisticsService)
-	triggerService := service.NewTriggerService(scheduleOperator, statisticsService)
+	triggerService := service.NewTriggerService(scheduleOperator, statisticsService, jobService)
 	onFireService := service.NewOnFireService(scheduleOperator, statisticsService)
 	executorManageService := service.NewExecutorManageService(statisticsService, client)
 	executorRouteService := service.NewExecutorRouteService(executorManageService)

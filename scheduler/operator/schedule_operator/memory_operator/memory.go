@@ -17,10 +17,11 @@ var _ schedule_operator.Operator = (*MemoryOperator)(nil)
 
 type MemoryOperator struct {
 	//trigger
-	triggers         map[uint]*model.Trigger
-	triggerTree      *btree.BTree //使用trigger.TriggerNextTime排序的b树。其实使用b+树更优，因为都是范围查询。但是先跑起来再调优吧
-	triggerIDCounter uint
-	triggerLock      sync.RWMutex
+	triggers map[uint]*model.Trigger
+	//使用trigger.TriggerNextTime排序的b树。其实使用b+树更优，因为都是范围查询。但是先跑起来再调优吧
+	triggerTriggerNextTimeTree *btree.BTree
+	triggerIDCounter           uint
+	triggerLock                sync.RWMutex
 
 	//job
 	jobs         map[uint]*model.Job
@@ -34,13 +35,23 @@ type MemoryOperator struct {
 	onFireLock         sync.RWMutex
 }
 
+func NewMemoryScheduleOperator() *MemoryOperator {
+	return &MemoryOperator{
+		triggers:                   make(map[uint]*model.Trigger),
+		triggerTriggerNextTimeTree: btree.New(5),
+		jobs:                       make(map[uint]*model.Job),
+		onFireLogs:                 make(map[uint]*model.OnFireLog),
+		onFireLogTree:              btree.New(5),
+	}
+}
+
 func (m *MemoryOperator) InsertJobs(ctx context.Context, jobs []*model.Job) error {
 	m.onFireLock.Lock()
 	defer m.onFireLock.Unlock()
 
 	for _, job := range jobs {
-		job.ID = m.jobIDCounter
 		m.jobIDCounter++
+		job.ID = m.jobIDCounter
 		m.jobs[job.ID] = job
 	}
 	return nil
@@ -76,39 +87,13 @@ func (m *MemoryOperator) IsJobIDExist(ctx context.Context, jobID uint) (bool, er
 	return ok, nil
 }
 
-func (m *MemoryOperator) OnTxStart(ctx context.Context) (context.Context, error) {
-	return ctx, nil
-}
-
-func (m *MemoryOperator) OnTxFail(ctx context.Context) error {
-	return nil
-}
-
-func (m *MemoryOperator) OnTxFinish(ctx context.Context) error {
-	return nil
-}
-
-func (m *MemoryOperator) Lock(ctx context.Context, lockName string) error {
-	return nil
-}
-
-func NewMemoryScheduleOperator() *MemoryOperator {
-	return &MemoryOperator{
-		triggers:      make(map[uint]*model.Trigger),
-		triggerTree:   btree.New(5),
-		jobs:          make(map[uint]*model.Job),
-		onFireLogs:    make(map[uint]*model.OnFireLog),
-		onFireLogTree: btree.New(5),
-	}
-}
-
 func (m *MemoryOperator) InsertOnFires(ctx context.Context, onFire []*model.OnFireLog) error {
 	m.onFireLock.Lock()
 	defer m.onFireLock.Unlock()
 
 	for _, fire := range onFire {
-		fire.ID = m.onFireLogIDCounter
 		m.onFireLogIDCounter++
+		fire.ID = m.onFireLogIDCounter
 		m.onFireLogs[fire.ID] = fire
 		m.onFireLogTree.ReplaceOrInsert(fire)
 	}
@@ -219,7 +204,19 @@ func (m *MemoryOperator) InsertJob(ctx context.Context, job *model.Job) error {
 	m.jobLock.Lock()
 	defer m.jobLock.Unlock()
 
+	m.jobIDCounter++
+	job.ID = m.jobIDCounter
+	job.UpdatedAt = time.Now()
 	m.jobs[job.ID] = job
+	return nil
+}
+
+func (m *MemoryOperator) insertTriggerWithoutLock(ctx context.Context, trigger *model.Trigger) error {
+	m.triggers[m.triggerIDCounter] = trigger
+	m.triggerIDCounter++
+	trigger.ID = m.triggerIDCounter
+	trigger.UpdatedAt = time.Now()
+	m.triggerTriggerNextTimeTree.ReplaceOrInsert(trigger)
 	return nil
 }
 
@@ -227,11 +224,7 @@ func (m *MemoryOperator) InsertTrigger(ctx context.Context, trigger *model.Trigg
 	m.triggerLock.Lock()
 	defer m.triggerLock.Unlock()
 
-	m.triggers[m.triggerIDCounter] = trigger
-	trigger.ID = m.triggerIDCounter
-	m.triggerIDCounter++
-	m.triggerTree.ReplaceOrInsert(trigger)
-	return nil
+	return m.insertTriggerWithoutLock(ctx, trigger)
 }
 
 func (m *MemoryOperator) InsertTriggers(ctx context.Context, triggers []*model.Trigger) error {
@@ -239,7 +232,7 @@ func (m *MemoryOperator) InsertTriggers(ctx context.Context, triggers []*model.T
 	defer m.triggerLock.Unlock()
 
 	for _, trigger := range triggers {
-		m.triggers[trigger.ID] = trigger
+		m.insertTriggerWithoutLock(ctx, trigger)
 	}
 	return nil
 }
@@ -259,8 +252,8 @@ func (m *MemoryOperator) UpdateTriggers(ctx context.Context, triggers []*model.T
 	for _, trigger := range triggers {
 		m.triggers[trigger.ID] = trigger
 		// 更新 triggerTree 索引
-		m.triggerTree.Delete(trigger)
-		m.triggerTree.ReplaceOrInsert(trigger)
+		m.triggerTriggerNextTimeTree.Delete(trigger)
+		m.triggerTriggerNextTimeTree.ReplaceOrInsert(trigger)
 	}
 	return nil
 }
@@ -270,7 +263,7 @@ func (m *MemoryOperator) FetchRecentTriggers(ctx context.Context, maxCount int, 
 	defer m.triggerLock.RUnlock()
 
 	var result []*model.Trigger
-	m.triggerTree.AscendGreaterOrEqual(&model.Trigger{TriggerNextTime: noEarlyThan}, func(item btree.Item) bool {
+	m.triggerTriggerNextTimeTree.AscendGreaterOrEqual(&model.Trigger{TriggerNextTime: noEarlyThan}, func(item btree.Item) bool {
 		trigger := item.(*model.Trigger)
 		if trigger.TriggerNextTime.Before(noLaterThan) && trigger.Status == constance.TriggerStatusNormal {
 			result = append(result, trigger)
@@ -325,6 +318,22 @@ func (m *MemoryOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int
 		return false
 	})
 	return result, nil
+}
+
+func (m *MemoryOperator) OnTxStart(ctx context.Context) (context.Context, error) {
+	return ctx, nil
+}
+
+func (m *MemoryOperator) OnTxFail(ctx context.Context) error {
+	return nil
+}
+
+func (m *MemoryOperator) OnTxFinish(ctx context.Context) error {
+	return nil
+}
+
+func (m *MemoryOperator) Lock(ctx context.Context, lockName string) error {
+	return nil
 }
 
 var _ schedule_operator.Operator = (*MemoryOperator)(nil)
