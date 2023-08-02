@@ -4,31 +4,75 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	lru "github.com/hashicorp/golang-lru"
+	"golang.org/x/time/rate"
 	"supernova/pkg/discovery"
 	"supernova/pkg/util"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
+	"sync"
+	"time"
+)
+
+const (
+	maxCachedJobs         = 100000
+	fetchJobIntervalLimit = 1 * time.Millisecond
 )
 
 type JobService struct {
-	scheduleOperator  schedule_operator.Operator
-	statisticsService *StatisticsService
+	scheduleOperator schedule_operator.Operator
+	cache            *lru.Cache
+	jobMutexes       sync.Map
+	limiter          *rate.Limiter
 }
 
-func NewJobService(jobOperator schedule_operator.Operator, statisticsService *StatisticsService) *JobService {
+func NewJobService(scheduleOperator schedule_operator.Operator) *JobService {
+	cache, _ := lru.New(maxCachedJobs)
 	return &JobService{
-		scheduleOperator:  jobOperator,
-		statisticsService: statisticsService,
+		scheduleOperator: scheduleOperator,
+		cache:            cache,
+		limiter:          rate.NewLimiter(rate.Every(fetchJobIntervalLimit), 1),
 	}
 }
 
+type jobOrNotFound struct {
+	job *model.Job
+}
+
 func (s *JobService) FetchJobFromID(ctx context.Context, jobID uint) (*model.Job, error) {
+	//检查是否cache
+	if cachedJob, ok := s.cache.Get(jobID); ok {
+		return cachedJob.(*model.Job), nil
+	}
+
+	//没有cache，加个锁，请求数据库。同一个jobID的请求需要排队
+	jobMutex := s.getJobMutex(jobID)
+	jobMutex.Lock()
+	defer jobMutex.Unlock()
+
+	if cachedJob, ok := s.cache.Get(jobID); ok {
+		return cachedJob.(*model.Job), nil
+	}
+
+	//不同的请求需要限制db的流量
+	if err := s.limiter.Wait(ctx); err != nil {
+		return nil, err
+	}
+
 	job, err := s.scheduleOperator.FetchJobFromID(ctx, jobID)
 	if err != nil {
 		return nil, err
 	}
 
+	//将job加入缓存
+	s.cache.Add(jobID, job)
+
 	return job, nil
+}
+
+func (s *JobService) getJobMutex(jobID uint) *sync.Mutex {
+	mutex, _ := s.jobMutexes.LoadOrStore(jobID, &sync.Mutex{})
+	return mutex.(*sync.Mutex)
 }
 
 func (s *JobService) AddJob(ctx context.Context, job *model.Job) error {
