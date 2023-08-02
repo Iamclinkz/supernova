@@ -34,7 +34,7 @@ func TestMemoryStore(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	memoryStoreScheduler.Start()
+	go memoryStoreScheduler.Start()
 	router := http.InitHttpHandler(memoryStoreScheduler)
 	klog.Infof("Start the server at %v", MemoryStoreSchedulerPort)
 

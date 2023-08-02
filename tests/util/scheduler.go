@@ -24,7 +24,7 @@ func StartSchedulers(count int) []*app.Scheduler {
 		}
 
 		ret = append(ret, scheduler)
-		scheduler.Start()
+		go scheduler.Start()
 
 		router := http.InitHttpHandler(scheduler)
 		klog.Infof("Start the server at %v", SchedulerServePortStart+i)

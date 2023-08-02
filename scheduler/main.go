@@ -32,7 +32,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	scheduler.Start()
+	go scheduler.Start()
 
 	router := http.InitHttpHandler(scheduler)
 	klog.Infof("Start the server at %v", setupConfig.HttpPort)

@@ -114,6 +114,10 @@ func (s *StatisticsService) WatchScheduler() {
 			watchSchedulerTicker.Stop()
 			return
 		case <-watchSchedulerTicker.C:
+			tmp := len(s.discoveryClient.DiscoverServices(constance.SchedulerServiceName))
+			if tmp == 0 {
+				tmp = 1
+			}
 			s.currentSchedulerCount = len(s.discoveryClient.DiscoverServices(constance.SchedulerServiceName))
 			klog.Tracef("current scheduler count:%v", s.currentSchedulerCount)
 			watchSchedulerTicker.Reset(time.Second * 2)
