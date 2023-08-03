@@ -4,6 +4,7 @@ import (
 	"flag"
 	"strconv"
 	"supernova/executor/app"
+	"supernova/pkg/session/trace"
 	processor_plugin_shell "supernova/processor-plugin/processor-plugin-shell"
 	"time"
 
@@ -35,6 +36,10 @@ func main() {
 		WithConsulDiscovery(*ConsulHost, strconv.Itoa(*ConsulPort), *HealthCheckPort).
 		WithProcessor(shellExecutor).
 		WithGrpcServe("9.134.5.191", *GrpcPort).
+		WithOTelConfig(&trace.OTelConfig{
+			EnableTrace:   false,
+			EnableMetrics: false,
+		}).
 		Build()
 
 	if err != nil {

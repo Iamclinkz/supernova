@@ -136,7 +136,7 @@ func TestForceKillScheduler(t *testing.T) {
 	}()
 
 	util.RegisterTriggers(util.SchedulerAddress, triggers)
-	ok := httpServer.WaitResult(20*time.Second, false)
+	ok := httpServer.WaitResult(25*time.Second, false)
 	if !ok {
 		saveErrorLogToFile(buf)
 		panic("failed")

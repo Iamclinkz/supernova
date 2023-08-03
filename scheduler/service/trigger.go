@@ -416,7 +416,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogsStandalone(closeCh chan
 						ret = append(ret, onFireLog)
 						mu.Unlock()
 					} else {
-						klog.Debugf("[%v]fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", onFireLog.ID, err)
+						klog.Debugf("[%v]fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", s.instanceID, onFireLog.ID, err)
 					}
 				}
 			}

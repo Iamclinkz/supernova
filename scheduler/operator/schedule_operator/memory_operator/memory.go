@@ -63,9 +63,9 @@ func NewMemoryScheduleOperator() *MemoryOperator {
 	go func() {
 		for {
 			time.Sleep(2 * time.Second)
-			klog.Errorf("left onFireLog:%v, finished:%v, fetchFail:%v, conflictCount:%v",
+			klog.Errorf("left onFireLog:%v, finished:%v, fetchFail:%v, conflictCount:%v, failCount:%v",
 				ret.currentUnFinishOnFireLog.Load(),
-				ret.finishedOnFireLog.Load(), ret.fetchFailLog.Load(), ret.conflictCount.Load())
+				ret.finishedOnFireLog.Load(), ret.fetchFailLog.Load(), ret.conflictCount.Load(), ret.failCount.Load())
 		}
 	}()
 	return ret

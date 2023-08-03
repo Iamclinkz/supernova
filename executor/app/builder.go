@@ -187,6 +187,13 @@ func (b *ExecutorBuilder) Build() (*Executor, error) {
 		return nil, errors.New("no selected service discovery")
 	}
 
+	if b.oTelConfig == nil {
+		b.oTelConfig = &tconf.OTelConfig{
+			EnableTrace:   false,
+			EnableMetrics: false,
+		}
+	}
+
 	return genExecutor(b.instanceID, b.oTelConfig,
 		b.traceProvider, b.metricsProvider, b.tags, b.pcs,
 		b.serveConf, b.processorCount, b.discoveryClient, b.extraConf)

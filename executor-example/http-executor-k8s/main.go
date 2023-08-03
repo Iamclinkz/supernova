@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"supernova/executor/app"
+	"supernova/pkg/session/trace"
 	processor_plugin_http "supernova/processor-plugin/processor-plugin-http"
 	"time"
 
@@ -37,6 +38,11 @@ func main() {
 		WithProcessor(httpExecutor).
 		WithGrpcServe("0.0.0.0", setupConfig.GrpcPort).
 		WithInstanceID(os.Getenv("HOSTNAME")).
+		//todo
+		WithOTelConfig(&trace.OTelConfig{
+			EnableTrace:   false,
+			EnableMetrics: false,
+		}).
 		Build()
 
 	if err != nil {
