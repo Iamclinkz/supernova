@@ -36,6 +36,15 @@
         "program": "${workspaceFolder}/tests/functional-test",
         "buildFlags": "-tags=integration",
         "args": ["-test.run", "TestMemoryStore","-test.timeout", "1800s"]
+      },
+      {
+        "name": "Debug stress",
+        "type": "go",
+        "request": "launch",
+        "mode": "test",
+        "program": "${workspaceFolder}/tests/functional-test",
+        "buildFlags": "-tags=integration",
+        "args": ["-test.run", "TestWithoutFail","-test.timeout", "1800s"]
       }
     ]
   }

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"supernova/executor/app"
+	"supernova/executor/processor"
 	"supernova/pkg/session/trace"
 	processor_plugin_http "supernova/processor-plugin/processor-plugin-http"
 	"time"
@@ -35,7 +36,10 @@ func main() {
 	builder := app.NewExecutorBuilder()
 	executor, err := builder.
 		WithK8sDiscovery(setupConfig.K8sNamespace, setupConfig.K8sHealthCheckPort).
-		WithProcessor(httpExecutor).
+		WithProcessor(httpExecutor, &processor.ProcessConfig{
+			Async:          true,
+			MaxWorkerCount: 10000,
+		}).
 		WithGrpcServe("0.0.0.0", setupConfig.GrpcPort).
 		WithInstanceID(os.Getenv("HOSTNAME")).
 		//todo

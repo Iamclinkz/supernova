@@ -4,6 +4,7 @@ import (
 	"flag"
 	"strconv"
 	"supernova/executor/app"
+	"supernova/executor/processor"
 	"supernova/pkg/session/trace"
 	processor_plugin_shell "supernova/processor-plugin/processor-plugin-shell"
 	"time"
@@ -34,7 +35,10 @@ func main() {
 		WithResourceTag("LargeMemory").
 		WithInstanceID("instance-2").
 		WithConsulDiscovery(*ConsulHost, strconv.Itoa(*ConsulPort), *HealthCheckPort).
-		WithProcessor(shellExecutor).
+		WithProcessor(shellExecutor, &processor.ProcessConfig{
+			Async:          false,
+			MaxWorkerCount: 500,
+		}).
 		WithGrpcServe("9.134.5.191", *GrpcPort).
 		WithOTelConfig(&trace.OTelConfig{
 			EnableTrace:   false,

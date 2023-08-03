@@ -2,14 +2,15 @@ package service
 
 import (
 	"context"
-	"github.com/cloudwego/kitex/pkg/klog"
-	"go.opentelemetry.io/otel"
-	trace2 "go.opentelemetry.io/otel/trace"
 	"supernova/executor/processor"
 	"supernova/pkg/api"
 	"supernova/pkg/session/trace"
 	"sync"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
+	"go.opentelemetry.io/otel"
+	trace2 "go.opentelemetry.io/otel/trace"
 )
 
 type ProcessorService struct {
@@ -30,6 +31,7 @@ func NewProcessorService(pcs map[string]*processor.PC, instanceID string, oTelCo
 		processorWorkerCh: make(map[string]chan *ProcessJobParam, len(pcs)),
 		wg:                sync.WaitGroup{},
 		instanceID:        instanceID,
+		oTelConfig:        oTelConfig,
 	}
 
 	if oTelConfig.EnableTrace {
@@ -77,6 +79,10 @@ func (s *ProcessorService) asyncWork(waitCh <-chan *ProcessJobParam, processConf
 		p       = processConfig.Processor
 	)
 	klog.Infof("[%v] ProcessorService work for:%v started", s.instanceID, glue)
+	for i := 0; i < processConfig.Config.MaxWorkerCount; i++ {
+		limitCh <- struct{}{}
+	}
+
 	for {
 		select {
 		case <-s.stopCh:

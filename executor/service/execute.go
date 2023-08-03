@@ -33,9 +33,7 @@ type ExecuteService struct {
 
 func NewExecuteService(statisticsService *StatisticsService, processorService *ProcessorService,
 	duplicateService *DuplicateService, processorCount int, oTelConfig *trace2.OTelConfig) *ExecuteService {
-	if processorCount <= 0 || processorCount > 512 {
-		processorCount = 512
-	}
+	processorCount = 4
 
 	var err error
 	tw, err := util.NewTimeWheel(time.Millisecond*200, 100, util.TickSafeMode())

@@ -174,9 +174,11 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 	}
 
 	if err = executorWrapper.Operator.RunJob(model.GenRunJobRequest(onFireLog, job, util.GenTraceContext(traceCtx))); err != nil {
-		//如果执行出错，说明是流错误。不扣除RetryCount。等下次再执行
-		span.RecordError(fmt.Errorf("fail to run job:%v", err))
-		span.End()
+		if s.oTelConfig.EnableTrace {
+			//如果执行出错，说明是流错误。不扣除RetryCount。等下次再执行
+			span.RecordError(fmt.Errorf("fail to run job:%v", err))
+			span.End()
+		}
 		s.statisticsService.OnFireFail(FireFailReasonExecutorConnectError)
 		return errors.New("run job fail:" + err.Error())
 	}
