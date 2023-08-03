@@ -21,14 +21,16 @@ type GrpcHandler struct {
 	gracefulStopped   atomic.Bool
 	enableOTel        bool
 	tracer            trace.Tracer
+	instanceID        string
 }
 
 func NewGrpcHandler(executeService *service.ExecuteService,
-	statisticsService *service.StatisticsService, enableOTel bool) *GrpcHandler {
+	statisticsService *service.StatisticsService, enableOTel bool, instanceID string) *GrpcHandler {
 	ret := &GrpcHandler{
 		executeService:    executeService,
 		statisticsService: statisticsService,
 		enableOTel:        enableOTel,
+		instanceID:        instanceID,
 	}
 
 	if enableOTel {
@@ -61,7 +63,7 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 		for !stop.Load() {
 			req, connError = stream.Recv()
 			if connError != nil {
-				klog.Errorf("receive job request error:%v", connError)
+				klog.Errorf("[%v] receive job request error:%v", e.instanceID, connError)
 				stop.Store(true)
 				wg.Done()
 				return
@@ -107,7 +109,7 @@ func (e *GrpcHandler) RunJob(stream api.Executor_RunJobServer) (err error) {
 					streamSendSpan.RecordError(connError)
 					streamSendSpan.End()
 				}
-				klog.Warnf("send responase back failed with error:%v", err)
+				klog.Warnf("[%v] send responase back failed with error:%v", e.instanceID, err)
 				//再把这个JobResult扔回去，让别的Scheduler发送
 				e.executeService.PushJobResponse(resp)
 				stop.Store(true)

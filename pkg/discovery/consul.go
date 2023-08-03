@@ -109,7 +109,8 @@ func (c *ConsulDiscoveryClient) Register(instance *ServiceInstance) error {
 			Port:    instance.Port,
 			Meta:    consulMeta,
 			Check: &api.AgentServiceCheck{
-				TTL: fmt.Sprintf("%vs", conf.DiscoveryMiddlewareCheckHeartBeatDuration.Seconds()),
+				DeregisterCriticalServiceAfter: "10s",
+				TTL:                            fmt.Sprintf("%vs", conf.DiscoveryMiddlewareCheckHeartBeatDuration.Seconds()),
 			},
 		}
 
@@ -120,18 +121,18 @@ func (c *ConsulDiscoveryClient) Register(instance *ServiceInstance) error {
 				panic(err)
 			}
 
-			ticker := time.NewTicker(3 * time.Second)
 			for {
 				select {
-				case <-ticker.C:
+				case <-c.pushStopCh:
+					klog.Infof("consul TTL updated stopped")
+					return
+				default:
 					if err = consulClient.Agent().UpdateTTL("service:"+instance.InstanceId, "healthy", "passing"); err != nil {
 						klog.Errorf("Failed to update TTL: %v\n", err)
 					} else {
 						klog.Tracef("consul TTL updated successfully")
 					}
-				case <-c.pushStopCh:
-					klog.Infof("consul TTL updated stopped")
-					return
+					time.Sleep(3 * time.Second)
 				}
 			}
 		}()

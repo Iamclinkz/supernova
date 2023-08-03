@@ -104,9 +104,6 @@ func (s *SimpleHttpServer) GetResult() *Result {
 // WaitResult return ok
 func (s *SimpleHttpServer) WaitResult(maxWaitTime time.Duration, exit bool) bool {
 	timeout := time.After(maxWaitTime)
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
 
@@ -125,14 +122,15 @@ func (s *SimpleHttpServer) WaitResult(maxWaitTime time.Duration, exit bool) bool
 				log.Printf("result ok:\n%v\n", result)
 				return true
 			}
-		case <-ticker.C:
+		case <-signalCh:
+			return true
+		default:
 			err, result := s.CheckResult()
 			if err == nil {
 				log.Printf("result ok:\n%v\n", result)
 				return true
 			}
-		case <-signalCh:
-			return true
+			time.Sleep(1 * time.Second)
 		}
 	}
 }

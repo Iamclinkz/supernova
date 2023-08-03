@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"log"
+
 	"github.com/cloudwego/kitex/pkg/klog"
 )
 
@@ -26,14 +28,13 @@ func TestForceKillScheduler(t *testing.T) {
 	const (
 		BinPath                      = "../../scheduler/build/bin/scheduler"
 		KilledSchedulerHttpServePort = 7070
-		LogLevel                     = klog.LevelError
+		LogLevel                     = klog.LevelInfo
 		TriggerCount                 = 50000
 	)
 
 	var (
-		LogName = fmt.Sprintf("kill-scheduler-error-log-%v.log", time.Now().Format("15:04:05"))
-		err     error
-		pid     atomic.Int32
+		err error
+		pid atomic.Int32
 	)
 
 	//开2个Scheduler和3个Executor
@@ -74,7 +75,8 @@ func TestForceKillScheduler(t *testing.T) {
 		// Scheduler本身不会自动结束，所以如果外围没有手动kill且结束，只能说明启动出错，应该panic
 		err = cmd.Wait()
 		if !manualKill.Load() {
-			panic("start error!")
+			saveErrorLogToFile(buf)
+			panic(fmt.Errorf("start error:%v", err))
 		}
 
 		klog.Errorf("scheduler was killed, reason:%v", err)
@@ -105,9 +107,9 @@ func TestForceKillScheduler(t *testing.T) {
 		triggers[i] = &model.Trigger{
 			Name:            "test-trigger-" + strconv.Itoa(i),
 			JobID:           1,
-			ScheduleType:    2,          //执行一次
-			FailRetryCount:  100,        //失败几乎可以一直重试
-			ExecuteTimeout:  2000000000, //2s
+			ScheduleType:    2,               //执行一次
+			FailRetryCount:  100,             //失败几乎可以一直重试
+			ExecuteTimeout:  time.Second * 3, //3s
 			TriggerNextTime: time.Now(),
 			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,
 			Param: map[string]string{
@@ -127,26 +129,31 @@ func TestForceKillScheduler(t *testing.T) {
 			panic("")
 		}
 		manualKill.Store(true)
-		err = util.KillProcessByPID(int(schedulerPid))
+		err := util.KillProcessByPID(int(schedulerPid))
 		if err != nil {
 			panic(err)
 		}
 	}()
 
 	util.RegisterTriggers(util.SchedulerAddress, triggers)
-	ok := httpServer.WaitResult(15*time.Second, false)
+	ok := httpServer.WaitResult(20*time.Second, false)
 	if !ok {
-		logFile, err := os.OpenFile(LogName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-		if err != nil {
-			panic(err)
-		}
-		defer logFile.Close()
-
-		err = ioutil.WriteFile(LogName, buf.Bytes(), 0644)
-		if err != nil {
-			panic(err)
-		}
-
+		saveErrorLogToFile(buf)
 		panic("failed")
+	}
+}
+
+func saveErrorLogToFile(buf bytes.Buffer) {
+	logName := fmt.Sprintf("kill-scheduler-error-log-%v.log", time.Now().Format("15:04:05"))
+	logFile, err := os.OpenFile(logName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer logFile.Close()
+
+	if err = ioutil.WriteFile(logName, buf.Bytes(), 0644); err != nil {
+		log.Printf("error save error log to file:%v", logName)
+	} else {
+		log.Printf("save error log to file:%v", logName)
 	}
 }

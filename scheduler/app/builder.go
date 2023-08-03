@@ -115,6 +115,7 @@ func (b *SchedulerBuilder) WithOTelConfig(oTelConfig *trace.OTelConfig) *Schedul
 	if !oTelConfig.EnableMetrics {
 		b.meterProvider = nil
 	}
+	b.oTelConfig = oTelConfig
 	return b
 }
 

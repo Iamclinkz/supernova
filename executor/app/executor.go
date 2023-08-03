@@ -81,6 +81,7 @@ func newExecutorInner(
 		processorService:  processorService,
 		statisticsService: statisticsService,
 		stopOnce:          sync.Once{},
+		serviceExporter:   exporter.NewExporter(executeService, statisticsService, serveConf, enableOTel, instanceID),
 	}
 
 	for _, p := range processor {
@@ -89,7 +90,6 @@ func newExecutorInner(
 		}
 	}
 
-	ret.serviceExporter = exporter.NewExporter(executeService, statisticsService, serveConf, enableOTel)
 	return ret
 }
 

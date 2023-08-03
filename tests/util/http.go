@@ -53,7 +53,7 @@ func RegisterTriggers(schedulerAddress string, triggers []*model.Trigger) {
 	if costMs == 0 {
 		costMs = 1
 	}
-	log.Printf("triggers inserted success, count: %vms, cost time:%v, speed: %ventry/ms",
+	log.Printf("triggers inserted success, count: %v, cost time:%vms, speed: %v entry/ms",
 		len(triggers), costMs, float64(len(triggers))/float64(costMs))
 }
 

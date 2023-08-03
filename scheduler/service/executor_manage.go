@@ -71,16 +71,13 @@ func ExecutorMapToString(m map[string]*Executor) string {
 }
 
 func (s *ExecutorManageService) HeartBeat() {
-	updateExecutorTicker := time.NewTicker(1 * time.Millisecond)
-
 	for {
 		select {
 		case <-s.shutdownCh:
-			updateExecutorTicker.Stop()
 			return
-		case <-updateExecutorTicker.C:
+		default:
 			s.updateExecutor()
-			updateExecutorTicker.Reset(s.statisticsService.GetExecutorHeartbeatInterval())
+			time.Sleep(s.statisticsService.GetExecutorHeartbeatInterval())
 		}
 	}
 }

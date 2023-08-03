@@ -113,21 +113,23 @@ func NewStatisticsService(instanceID string, oTelConfig *trace2.OTelConfig,
 }
 
 func (s *StatisticsService) WatchScheduler() {
-	watchSchedulerTicker := time.NewTicker(1 * time.Millisecond)
+	if s.standalone {
+		klog.Infof("WatchScheduler stopped in standalone mode")
+		return
+	}
 
 	for {
 		select {
 		case <-s.shutdownCh:
-			watchSchedulerTicker.Stop()
 			return
-		case <-watchSchedulerTicker.C:
+		default:
 			tmp := len(s.discoveryClient.DiscoverServices(constance.SchedulerServiceName))
 			if tmp == 0 {
 				tmp = 1
 			}
 			s.currentSchedulerCount = len(s.discoveryClient.DiscoverServices(constance.SchedulerServiceName))
 			klog.Tracef("current scheduler count:%v", s.currentSchedulerCount)
-			watchSchedulerTicker.Reset(time.Second * 2)
+			time.Sleep(2 * time.Second)
 		}
 	}
 }
@@ -193,9 +195,9 @@ func (s *StatisticsService) GetHandleTriggerForwardDuration() time.Duration {
 
 func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
 	if s.standalone {
-		return 5000
+		return 10000
 	}
-	return 2000
+	return 3000
 }
 
 func (s *StatisticsService) GetScheduleInterval() time.Duration {

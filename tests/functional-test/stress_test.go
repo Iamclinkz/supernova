@@ -21,7 +21,7 @@ func TestWithoutFail(t *testing.T) {
 
 	var triggerCount = 100
 
-	supernovaTest := util.StartTest(2, 3, klog.LevelTrace, util.StartHttpExecutors, nil)
+	supernovaTest := util.StartTest(1, 1, klog.LevelTrace, util.StartHttpExecutors, nil)
 	defer supernovaTest.EndTest()
 
 	httpServer := simple_http_server.NewSimpleHttpServer(

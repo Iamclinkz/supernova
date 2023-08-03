@@ -74,21 +74,18 @@ func (s *ScheduleService) Schedule() {
 	s.timeWheel.Start()
 	s.startWorker()
 	go s.checkTimeoutOnFireLogs()
-	ticker := time.NewTicker(s.statisticsService.GetScheduleInterval())
 
 	klog.Infof("ScheduleService start Schedule, worker count:%v, standalone:%v", s.workerCount, s.standalone)
 	for {
 		select {
 		case <-s.stopCh:
 			klog.Infof("schedule go routine stopped")
-			ticker.Stop()
 			return
-		case <-ticker.C:
+		default:
 			onFireLogs, err := s.triggerService.fetchUpdateMarkTrigger()
 			if err != nil {
 				klog.Errorf("Schedule Error:%v", err)
 			} else {
-				//now := time.Now()
 				for _, onFireLog := range onFireLogs {
 					currentLog := onFireLog
 					s.timeWheel.Add(time.Until(currentLog.ShouldFireAt), func() {
@@ -96,7 +93,7 @@ func (s *ScheduleService) Schedule() {
 					}, false)
 				}
 			}
-			ticker.Reset(s.statisticsService.GetScheduleInterval())
+			time.Sleep(s.statisticsService.GetScheduleInterval())
 		}
 	}
 }

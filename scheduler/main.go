@@ -2,6 +2,7 @@ package main
 
 import (
 	"strings"
+	"supernova/pkg/session/trace"
 	"supernova/scheduler/app"
 	"supernova/scheduler/handler/http"
 
@@ -27,6 +28,11 @@ func main() {
 	case "k8s":
 		builder.WithK8sDiscovery(setupConfig.K8sNamespace)
 	}
+
+	builder.WithOTelConfig(&trace.OTelConfig{
+		EnableTrace:   false,
+		EnableMetrics: false,
+	})
 
 	scheduler, err := builder.Build()
 	if err != nil {

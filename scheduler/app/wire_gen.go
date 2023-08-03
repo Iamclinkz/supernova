@@ -20,7 +20,7 @@ import (
 func genScheduler(instanceID string, OTelConfig *trace.OTelConfig, tracerProvider *trace2.TracerProvider, meterProvider *metric.MeterProvider, scheduleOperator schedule_operator.Operator, client discovery.DiscoverClient, schedulerWorkerCount int, standalone bool) (*Scheduler, error) {
 	statisticsService := service.NewStatisticsService(instanceID, OTelConfig, client, standalone)
 	jobService := service.NewJobService(scheduleOperator, statisticsService)
-	triggerService := service.NewTriggerService(scheduleOperator, statisticsService, jobService, standalone)
+	triggerService := service.NewTriggerService(scheduleOperator, statisticsService, jobService, standalone, instanceID)
 	onFireService := service.NewOnFireService(scheduleOperator, statisticsService)
 	executorManageService := service.NewExecutorManageService(statisticsService, client)
 	executorRouteService := service.NewExecutorRouteService(executorManageService)

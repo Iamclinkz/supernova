@@ -21,15 +21,18 @@ type TriggerService struct {
 	scheduleOperator  schedule_operator.Operator
 	statisticsService *StatisticsService
 	standalone        bool
+	//for debug
+	instanceID string
 }
 
 func NewTriggerService(scheduleOperator schedule_operator.Operator,
-	statisticsService *StatisticsService, jobService *JobService, standalone bool) *TriggerService {
+	statisticsService *StatisticsService, jobService *JobService, standalone bool, instanceID string) *TriggerService {
 	return &TriggerService{
 		scheduleOperator:  scheduleOperator,
 		statisticsService: statisticsService,
 		jobService:        jobService,
 		standalone:        standalone,
+		instanceID:        instanceID,
 	}
 }
 
@@ -46,9 +49,10 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		txCtx                  = context.TODO()
 		onFireLogs             []*model.OnFireLog
 		fetchedTriggers        []*model.Trigger
+		fetchLen               int
 	)
 
-	klog.Errorf("try fetchUpdateMarkTrigger")
+	klog.Infof("[%v] try fetchUpdateMarkTrigger", s.instanceID)
 	//1.开启事务，保证同时只能有一个实例拿到任务，且如果失败，则回滚
 	if txCtx, err = s.scheduleOperator.OnTxStart(context.TODO()); err != nil {
 		return nil, fmt.Errorf("OnTxStart error:%v", err)
@@ -70,12 +74,13 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		goto badEnd
 	}
 
-	if len(fetchedTriggers) == 0 {
+	fetchLen = len(fetchedTriggers)
+	if fetchLen == 0 {
 		goto emptyEnd
 	}
 
 	//klog.Tracef("fetchUpdateMarkTrigger fetched triggers:%s", model.TriggersToString(fetchedTriggers))
-	onFireLogs = make([]*model.OnFireLog, 0, len(fetchedTriggers))
+	onFireLogs = make([]*model.OnFireLog, 0, fetchLen)
 	//3.依次让trigger更新自己，如果有问题的，则需要删除trigger
 	for _, trigger := range fetchedTriggers {
 		//这里需要注意，如果一个trigger的触发时间很短，例如1s一次，而我们的HandleTriggerDuration较长，例如5s一次，
@@ -85,7 +90,7 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 				//todo 这里需要处理misfire逻辑
 				//这里赋值成fireTime，时间轮有容错。
 				//todo:这里再想一下，暂时测试方便，改一下TriggerLastTime了，但是需要打散一下
-				trigger.TriggerNextTime = time.Now().Add(util.TimeRandBetween(200*time.Millisecond, 1*time.Second))
+				trigger.TriggerNextTime = time.Now().Add(util.GetRandomOffsetByNum(fetchLen))
 			}
 			fireTime := trigger.TriggerNextTime
 
@@ -297,7 +302,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{},
 				t2 := time.Now()
 				for _, onFireLog := range onFireLogs {
 					//打散任务触发时间
-					onFireLog.ShouldFireAt = t2.Add(util.TimeRandBetween(100, 800*time.Millisecond))
+					onFireLog.ShouldFireAt = t2.Add(util.GetRandomOffsetByNum(1000))
 					onFireLog.RedoAt = onFireLog.GetNextRedoAt()
 					if err := s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog); err == nil {
 						mu.Lock()
@@ -390,12 +395,19 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogsStandalone(closeCh chan
 				continue
 			}
 
-			ret := make([]*model.OnFireLog, 0, len(onFireLogs))
+			fetchLen := len(onFireLogs)
+			if fetchLen == 0 {
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			ret := make([]*model.OnFireLog, 0, fetchLen)
 
 			processBatch := func(startIndex, endIndex int) {
 				defer wg.Done()
 				for i := startIndex; i < endIndex; i++ {
 					onFireLog := onFireLogs[i]
+					onFireLog.ShouldFireAt = time.Now().Add(util.GetRandomOffsetByNum(fetchLen))
 					onFireLog.RedoAt = onFireLog.GetNextRedoAt()
 					if err = s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog); err == nil {
 						//我们抢占这个待执行的过期OnFireLog成功
@@ -427,12 +439,11 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogsStandalone(closeCh chan
 			}
 
 			var (
-				foundCount = len(onFireLogs)
-				gotCount   = len(ret)
-				missCount  = foundCount - gotCount
+				gotCount  = len(ret)
+				missCount = fetchLen - gotCount
 			)
 
-			s.statisticsService.OnFindTimeoutOnFireLogs(foundCount)
+			s.statisticsService.OnFindTimeoutOnFireLogs(fetchLen)
 			s.statisticsService.OnHoldTimeoutOnFireLogFail(missCount)
 			s.statisticsService.OnHoldTimeoutOnFireLogSuccess(gotCount)
 			if gotCount >= 0 {
@@ -440,7 +451,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogsStandalone(closeCh chan
 				klog.Infof("fetchTimeoutAndRefreshOnFireLogs fetched timeout logs, len:%v", len(ret))
 			} else {
 				//如果本轮没有获得任何一个OnFireLog
-				if foundCount > 0 {
+				if fetchLen > 0 {
 					//查找到一些个过期的OnFireLog，但是自己一个都没获得到
 					klog.Errorf("fetchTimeoutAndRefreshOnFireLogs find %v logs, but fetch nothing", len(onFireLogs))
 				} else {
