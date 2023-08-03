@@ -23,14 +23,16 @@ func TestMemoryStore(t *testing.T) {
 
 	start := time.Now()
 
-	var triggerCount = 100
+	var triggerCount = 500000
 
 	//只开3个Executor，Scheduler手动指定成memory版本的
-	supernovaTest := util.StartTest(0, 3, klog.LevelInfo, util.StartHttpExecutors, nil)
+	supernovaTest := util.StartTest(0, 3, klog.LevelError, util.StartHttpExecutors, nil)
 	defer supernovaTest.EndTest()
 
 	builder := app.NewSchedulerBuilder()
-	memoryStoreScheduler, err := builder.WithMemoryStore().WithConsulDiscovery(util.DevConsulHost, util.DevConsulPort).Build()
+	memoryStoreScheduler, err := builder.WithMemoryStore().
+		WithConsulDiscovery(util.DevConsulHost, util.DevConsulPort).WithOTelCollector(util.DevTraceConfig).
+		Build()
 	if err != nil {
 		panic(err)
 	}
@@ -83,9 +85,9 @@ func TestMemoryStore(t *testing.T) {
 		triggers[i] = &model.Trigger{
 			Name:            "test-trigger-" + strconv.Itoa(i),
 			JobID:           1,
-			ScheduleType:    2,          //执行一次
-			FailRetryCount:  5,          //失败重试五次。因为simple_http_service每次都需要开go程执行请求，瞬间很多个请求打过去可能造成失败的情况。。
-			ExecuteTimeout:  3000000000, //3s
+			ScheduleType:    2,               //执行一次
+			FailRetryCount:  5,               //失败重试五次。因为simple_http_service每次都需要开go程执行请求，瞬间很多个请求打过去可能造成失败的情况。。
+			ExecuteTimeout:  5 * time.Second, //3s
 			TriggerNextTime: time.Now(),
 			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,
 			Param: map[string]string{
@@ -99,5 +101,5 @@ func TestMemoryStore(t *testing.T) {
 	util.RegisterTriggers(MemoryStoreSchedulerAddress, triggers)
 
 	klog.Infof("register triggers success, cost:%v\n", time.Since(start))
-	httpServer.WaitResult(20*time.Second, true)
+	httpServer.WaitResult(60*time.Second, true)
 }

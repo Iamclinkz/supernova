@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"log"
+
 	"github.com/cloudwego/kitex/pkg/klog"
 )
 
@@ -26,7 +28,7 @@ func StartTest(schedulerCount, executorCount int, level klog.Level, startFunc Ex
 }
 
 func (t *SupernovaTest) EndTest() {
-	klog.Infof("start test end")
+	log.Println("start test end")
 
 	wg := sync.WaitGroup{}
 	wg.Add(len(t.executors))
@@ -47,5 +49,5 @@ func (t *SupernovaTest) EndTest() {
 	}
 
 	wg.Wait()
-	klog.Infof("SupernovaTest End")
+	log.Println("SupernovaTest End")
 }

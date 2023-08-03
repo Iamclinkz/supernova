@@ -122,7 +122,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 			JobID:           1,
 			ScheduleType:    2,               //执行一次
 			FailRetryCount:  100,             //失败几乎可以一直重试
-			ExecuteTimeout:  2 * time.Second, //2s
+			ExecuteTimeout:  5 * time.Second, //5s
 			TriggerNextTime: time.Now(),
 			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,
 			Param: map[string]string{

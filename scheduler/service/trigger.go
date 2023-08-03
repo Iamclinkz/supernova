@@ -46,6 +46,7 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		fetchedTriggers        []*model.Trigger
 	)
 
+	klog.Errorf("try fetchUpdateMarkTrigger")
 	//1.开启事务，保证同时只能有一个实例拿到任务，且如果失败，则回滚
 	if txCtx, err = s.scheduleOperator.OnTxStart(context.TODO()); err != nil {
 		return nil, fmt.Errorf("OnTxStart error:%v", err)
@@ -131,11 +132,14 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		goto badEnd
 	}
 
+	if err = s.scheduleOperator.UnLock(txCtx, constance.FetchUpdateMarkTriggerLockName); err != nil {
+		return nil, fmt.Errorf("unLock error:%v", err)
+	}
 	if err = s.scheduleOperator.OnTxFinish(txCtx); err != nil {
 		return nil, fmt.Errorf("onTxFinish error:%v", err)
 	}
 
-	//	klog.Errorf("fetchUpdateMarkTrigger fetched triggers, len:%v,use time:%v", len(onFireLogs), time.Since(begin))
+	klog.Errorf("fetchUpdateMarkTrigger fetched triggers, len:%v,use time:%v", len(onFireLogs), time.Since(begin))
 	s.statisticsService.OnFetchNeedFireTriggers(len(onFireLogs))
 	return onFireLogs, nil
 
@@ -262,13 +266,13 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{},
 
 				beginHandleTime := startTime.Add(-s.statisticsService.GetHandleTriggerForwardDuration())
 
-				onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(), offset, startTime, beginHandleTime, offset)
+				onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(), batchSize, startTime, beginHandleTime, offset)
 				if err != nil {
 					klog.Errorf("fetchTimeoutAndRefreshOnFireLogs error: %v", err)
 					return
 				} else {
 					if len(onFireLogs) != 0 {
-						klog.Errorf("fetch len:%v : %s", len(onFireLogs), model.OnFireLogsToString(onFireLogs))
+						klog.Tracef("fetch len:%v : %s", len(onFireLogs), model.OnFireLogsToString(onFireLogs))
 					}
 				}
 
@@ -290,7 +294,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{},
 						mu.Unlock()
 					} else {
 						failCount.Add(1)
-						klog.Errorf("[%v] fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", s.statisticsService.instanceID, onFireLog.ID, err)
+						klog.Debugf("[%v] fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", s.statisticsService.instanceID, onFireLog.ID, err)
 					}
 				}
 			}
@@ -345,7 +349,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{},
 				}
 			}
 
-			klog.Errorf("fetch timeout time:%v, got:%v, lost:%v", time.Since(startTime), got, lost)
+			klog.Infof("fetch timeout time:%v, got:%v, lost:%v", time.Since(startTime), got, lost)
 
 			//根据冲突概率调整的间隔休眠
 			time.Sleep(sleepDuration)

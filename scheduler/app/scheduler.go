@@ -85,6 +85,7 @@ func newSchedulerInner(
 		jobService:        jobService,
 		triggerService:    triggerService,
 		onFireService:     onFireService,
+		stopOnce:          sync.Once{},
 	}
 }
 

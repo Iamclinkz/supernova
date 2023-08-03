@@ -182,6 +182,7 @@ func (c *ConsulDiscoveryClient) DeRegister(instanceId string) error {
 		}
 	}
 
+	klog.Infof("[%v] try deRegister", instanceId)
 	serviceRegistration := &api.AgentServiceRegistration{
 		ID: instanceId,
 	}

@@ -80,6 +80,7 @@ func newExecutorInner(
 		executeService:    executeService,
 		processorService:  processorService,
 		statisticsService: statisticsService,
+		stopOnce:          sync.Once{},
 	}
 
 	for _, p := range processor {
