@@ -1,8 +1,10 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"github.com/go-redis/redis/v8"
 	"supernova/pkg/conf"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
@@ -11,6 +13,8 @@ import (
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/operator/schedule_operator/memory_operator"
 	"supernova/scheduler/operator/schedule_operator/mysql_operator"
+	"supernova/scheduler/operator/schedule_operator/redis_operator"
+	"time"
 
 	"go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -76,6 +80,24 @@ func (b *SchedulerBuilder) WithMysqlStore(config *conf.MysqlConf) *SchedulerBuil
 
 func (b *SchedulerBuilder) WithMemoryStore() *SchedulerBuilder {
 	b.scheduleOperator = memory_operator.NewMemoryScheduleOperator()
+	return b
+}
+
+func (b *SchedulerBuilder) WithRedisStore() *SchedulerBuilder {
+	cli := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "password",
+		DB:       0,
+	})
+
+	ctx, cancel := context.WithTimeout(context.TODO(), 3*time.Second)
+	defer cancel()
+	_, err := cli.Ping(ctx).Result()
+	if err != nil {
+		panic(err)
+	}
+
+	b.scheduleOperator = redis_operator.NewRedisScheduleOperator(cli)
 	return b
 }
 

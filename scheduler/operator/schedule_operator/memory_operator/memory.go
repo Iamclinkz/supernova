@@ -405,20 +405,6 @@ func (m *MemoryOperator) FetchTriggerFromID(ctx context.Context, triggerID uint)
 	return trigger.ToModelOnFireLog(), nil
 }
 
-//func (m *MemoryOperator) FindTriggerByName(ctx context.Context, triggerName string) (*model.Trigger, error) {
-//	m.triggerLock.RLock()
-//	defer m.triggerLock.RUnlock()
-//
-//	for _, trigger := range m.triggers {
-//		if trigger.Name == triggerName {
-//			newTrigger := &model.Trigger{}
-//			*newTrigger = *trigger
-//			return newTrigger, nil
-//		}
-//	}
-//	return nil, schedule_operator.ErrNotFound
-//}
-
 func (m *MemoryOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int, noLaterThan, noEarlyThan time.Time, offset int) ([]*model.OnFireLog, error) {
 	m.onFireLock.RLock()
 	defer m.onFireLock.RUnlock()

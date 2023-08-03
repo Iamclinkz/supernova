@@ -15,22 +15,22 @@ import (
 	"github.com/cloudwego/kitex/pkg/klog"
 )
 
-func TestMemoryStore(t *testing.T) {
+// todo 待测
+func TestRedisStore(t *testing.T) {
 	const (
-		MemoryStoreSchedulerPort    = "8180"
-		MemoryStoreSchedulerAddress = "http://9.134.5.191:" + MemoryStoreSchedulerPort
+		RedisStoreSchedulerPort    = "8180"
+		RedisStoreSchedulerAddress = "http://9.134.5.191:" + RedisStoreSchedulerPort
 	)
 
 	start := time.Now()
 
-	var triggerCount = 500000
+	var triggerCount = 50
 
-	//只开3个Executor，Scheduler手动指定成memory版本的
 	supernovaTest := util.StartTest(0, 3, klog.LevelError, util.StartHttpExecutors, nil)
 	defer supernovaTest.EndTest()
 
 	builder := app.NewSchedulerBuilder()
-	memoryStoreScheduler, err := builder.WithMemoryStore().
+	memoryStoreScheduler, err := builder.WithRedisStore().
 		WithConsulDiscovery(util.DevConsulHost, util.DevConsulPort).WithOTelConfig(&trace.OTelConfig{
 		EnableTrace:    false,
 		EnableMetrics:  true,
@@ -42,10 +42,10 @@ func TestMemoryStore(t *testing.T) {
 	}
 	go memoryStoreScheduler.Start()
 	router := http.InitHttpHandler(memoryStoreScheduler)
-	klog.Infof("Start the server at %v", MemoryStoreSchedulerPort)
+	klog.Infof("Start the server at %v", RedisStoreSchedulerPort)
 
 	go func() {
-		if err = router.Run(":" + MemoryStoreSchedulerPort); err != nil {
+		if err = router.Run(":" + RedisStoreSchedulerPort); err != nil {
 			panic(err)
 		}
 	}()
@@ -67,7 +67,7 @@ func TestMemoryStore(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 	//加一个任务
-	if err := util.RegisterJob(MemoryStoreSchedulerAddress, &model.Job{
+	if err := util.RegisterJob(RedisStoreSchedulerAddress, &model.Job{
 		Name:                  "test-http-job",
 		ExecutorRouteStrategy: constance.ExecutorRouteStrategyTypeRandom, //随机路由
 		GlueType:              "Http",
@@ -102,7 +102,7 @@ func TestMemoryStore(t *testing.T) {
 		}
 	}
 
-	util.RegisterTriggers(MemoryStoreSchedulerAddress, triggers)
+	util.RegisterTriggers(RedisStoreSchedulerAddress, triggers)
 
 	klog.Infof("register triggers success, cost:%v\n", time.Since(start))
 	httpServer.WaitResult(60*time.Second, true)
