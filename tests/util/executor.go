@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"supernova/executor/app"
+	"supernova/executor/processor"
 	"supernova/pkg/session/trace"
 	processor_plugin_http "supernova/processor-plugin/processor-plugin-http"
 	processor_plugin_idle "supernova/processor-plugin/processor-plugin-idle"
@@ -51,7 +52,10 @@ func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf, extraConfig any
 		builder := app.NewExecutorBuilder()
 		executor, err := builder.WithInstanceID(GenUnderCloudExecutorID()).WithConsulDiscovery(
 			DevConsulHost, DevConsulPort, instanceConf.HealthCheckPort).
-			WithProcessor(httpExecutor).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).
+			WithProcessor(httpExecutor, &processor.ProcessConfig{
+				Async:          true,
+				MaxWorkerCount: 10000,
+			}).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).
 			WithOTelConfig(&trace.OTelConfig{
 				EnableTrace:    false,
 				EnableMetrics:  true,
@@ -79,7 +83,10 @@ func StartIdleExecutors(instanceConfigs []*ExecutorInstanceConf,
 		builder := app.NewExecutorBuilder()
 		executor, err := builder.WithInstanceID(GenUnderCloudExecutorID()).WithConsulDiscovery(
 			DevConsulHost, DevConsulPort, instanceConf.HealthCheckPort).
-			WithProcessor(idleExecutor).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).
+			WithProcessor(idleExecutor, &processor.ProcessConfig{
+				Async:          true,
+				MaxWorkerCount: 10000,
+			}).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).
 			WithOTelConfig(&trace.OTelConfig{
 				EnableTrace:    false,
 				EnableMetrics:  true,

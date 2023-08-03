@@ -109,10 +109,9 @@ func (e *ExecuteService) work() {
 
 				workCtx context.Context
 
-				workSpan             trace.Span
-				dupWaitExecuteSpan   trace.Span
-				executeSpan          trace.Span
-				pushResponseChanSpan trace.Span
+				workSpan           trace.Span
+				dupWaitExecuteSpan trace.Span
+				executeSpan        trace.Span
 			)
 			if doTrace {
 				workCtx, workSpan = util.NewSpanFromTraceContext("executorWork", e.tracer, jobRequest.TraceContext)
@@ -172,63 +171,44 @@ func (e *ExecuteService) work() {
 			}, false)
 
 			klog.Tracef("worker start handle job, OnFireID:%v", jobRequest.OnFireLogID)
-			if doTrace {
-				_, executeSpan = e.tracer.Start(workCtx, "executeTask")
-			}
-			e.notifyOnStartExecute(jobRequest)
-			jobResponse := new(api.RunJobResponse)
-			jobResponse.OnFireLogID = jobRequest.OnFireLogID
-			jobResponse.TraceContext = jobRequest.TraceContext
 
-			processor := e.processorService.GetRegister(jobRequest.Job.GlueType)
-			if processor == nil {
+			after := func(request *api.RunJobRequest, response *api.RunJobResponse, executeTime time.Duration) {
+				e.statisticsService.RecordExecuteTime(executeTime)
+				ok := e.timeWheel.Remove(task)
+				//这里如果不ok，说明时间轮定时器中的内容没了，说明本次执行超时，定时器触发，且一定已经返回了一个超时错误。
+				//这种情况下，如果本次虽然超时，但是任务执行成功了，则扔回去一个成功回复。而如果执行失败，就不再扔回去失败回复了。
+				//反正已经是扣除失败次数了
+				if ok {
+					e.jobResponseCh <- response
+				} else {
+					if doTrace {
+						executeSpan.RecordError(errors.New("execute overtime"))
+						executeSpan.End()
+					}
+					if response.Result.Ok {
+						e.statisticsService.OnOverTimeTaskExecuteSuccess(jobRequest, response)
+						klog.Warnf("OnOverTimeTaskExecuteSuccess:[%v]", jobRequest.OnFireLogID)
+						e.jobResponseCh <- response
+					}
+				}
+				e.notifyOnFinishExecute(jobRequest, response)
+			}
+			param := &ProcessJobParam{
+				traceCtx:   workCtx,
+				jobRequest: jobRequest,
+				after:      after,
+			}
+
+			e.notifyOnStartExecute(jobRequest)
+
+			if ok := e.processorService.ProcessJob(jobRequest.Job.GlueType, param); !ok {
 				//如果找不到Processor，那么框架填充error
 				klog.Errorf("can not find processor for OnFireID:%v, glueType required:%v", jobRequest.OnFireLogID,
 					jobRequest.Job.GlueType)
+				jobResponse := new(api.RunJobResponse)
 				jobResponse.Result = new(api.JobResult)
 				jobResponse.Result.Ok = false
 				jobResponse.Result.Err = constance.CanNotFindProcessorErrMsg
-			} else {
-				begin := time.Now()
-				//如果有Processor，那么用户自定义的Processor执行
-				jobResponse.Result = processor.Process(jobRequest.Job)
-				//更新任务执行时间
-				e.statisticsService.RecordExecuteTime(time.Since(begin))
-			}
-			e.notifyOnFinishExecute(jobRequest, jobResponse)
-
-			ok := e.timeWheel.Remove(task)
-			//这里如果不ok，说明时间轮定时器中的内容没了，说明本次执行超时，定时器触发，且一定已经返回了一个超时错误。
-			//这种情况下，如果本次虽然超时，但是任务执行成功了，则扔回去一个成功回复。而如果执行失败，就不再扔回去失败回复了。
-			//反正已经是扣除失败次数了
-			if ok {
-				if doTrace {
-					executeSpan.End()
-					_, pushResponseChanSpan = e.tracer.Start(workCtx, "pushResponseChan")
-				}
-				e.jobResponseCh <- jobResponse
-				if doTrace {
-					pushResponseChanSpan.End()
-				}
-			} else {
-				if doTrace {
-					executeSpan.RecordError(errors.New("execute overtime"))
-					executeSpan.End()
-				}
-				if jobResponse.Result.Ok {
-					e.statisticsService.OnOverTimeTaskExecuteSuccess(jobRequest, jobResponse)
-					klog.Warnf("OnOverTimeTaskExecuteSuccess:[%v]", jobRequest.OnFireLogID)
-					if doTrace {
-						_, pushResponseChanSpan = e.tracer.Start(workCtx, "pushResponseChan")
-						e.jobResponseCh <- jobResponse
-						pushResponseChanSpan.End()
-					}
-				}
-			}
-
-			klog.Tracef("worker execute job finished:%+v", jobResponse)
-			if doTrace {
-				workSpan.End()
 			}
 		}
 	}

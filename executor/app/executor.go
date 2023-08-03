@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/signal"
 	"supernova/executor/exporter"
-	"supernova/executor/processor"
 	"supernova/executor/service"
 	"supernova/pkg/conf"
 	"supernova/pkg/constance"
@@ -26,7 +25,6 @@ type Executor struct {
 	//config
 	instanceID     string
 	tags           []string
-	processor      map[string]processor.JobProcessor
 	serveConf      *discovery.ServiceServeConf
 	processorCount int
 	extraConf      map[string]string
@@ -55,7 +53,6 @@ func newExecutorInner(
 	tracerProvider *trace.TracerProvider,
 	meterProvider *metric.MeterProvider,
 	tags []string,
-	processor map[string]processor.JobProcessor,
 	serveConf *discovery.ServiceServeConf,
 	processorCount int,
 	extraConf map[string]string,
@@ -69,7 +66,6 @@ func newExecutorInner(
 	ret := &Executor{
 		instanceID:        instanceID,
 		tags:              tags,
-		processor:         processor,
 		serveConf:         serveConf,
 		oTelConfig:        oTelConfig,
 		tracerProvider:    tracerProvider,
@@ -83,12 +79,6 @@ func newExecutorInner(
 		statisticsService: statisticsService,
 		stopOnce:          sync.Once{},
 		serviceExporter:   exporter.NewExporter(executeService, statisticsService, serveConf, oTelConfig.EnableTrace, instanceID),
-	}
-
-	for _, p := range processor {
-		if err := ret.processorService.Register(p); err != nil {
-			panic(err)
-		}
 	}
 
 	return ret
@@ -114,6 +104,7 @@ func (e *Executor) Start() {
 	//创建execute worker，开始提供executor服务
 	e.executeService.Start()
 	go e.serviceExporter.StartServe()
+	e.processorService.Start()
 
 	//注册到本服务到用户指定的服务发现中间件中
 	if err = e.register(); err != nil {
@@ -148,6 +139,7 @@ func (e *Executor) Stop() {
 				klog.Warnf("meterProvider stop error:%v", err)
 			}
 		}
+		e.processorService.Stop()
 		klog.Infof("%v stopped", e.instanceID)
 	}
 

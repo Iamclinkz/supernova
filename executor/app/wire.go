@@ -1,6 +1,3 @@
-//go:build wireinject
-// +build wireinject
-
 package app
 
 import (
@@ -19,7 +16,7 @@ func genExecutor(
 	traceProvider *sdktrace.TracerProvider,
 	meterProvider *sdkmetrics.MeterProvider,
 	tags []string,
-	processor map[string]processor.JobProcessor,
+	pcs map[string]*processor.PC,
 	serveConf *discovery.ServiceServeConf,
 	processorCount int, client discovery.DiscoverClient,
 	extraConf map[string]string,

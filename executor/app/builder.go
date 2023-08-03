@@ -15,7 +15,7 @@ import (
 type ExecutorBuilder struct {
 	instanceID      string
 	tags            []string
-	processor       map[string]processor.JobProcessor
+	pcs             map[string]*processor.PC
 	serveConf       *discovery.ServiceServeConf
 	processorCount  int
 	discoveryClient discovery.DiscoverClient
@@ -29,7 +29,7 @@ type ExecutorBuilder struct {
 func NewExecutorBuilder() *ExecutorBuilder {
 	return &ExecutorBuilder{
 		tags:      make([]string, 0),
-		processor: make(map[string]processor.JobProcessor, 0),
+		pcs:       make(map[string]*processor.PC, 0),
 		extraConf: make(map[string]string),
 	}
 }
@@ -108,14 +108,22 @@ func (b *ExecutorBuilder) WithK8sDiscovery(namespace, k8sCheckHealthPort string)
 	return b
 }
 
-func (b *ExecutorBuilder) WithProcessor(p processor.JobProcessor) *ExecutorBuilder {
+func (b *ExecutorBuilder) WithProcessor(p processor.JobProcessor, config *processor.ProcessConfig) *ExecutorBuilder {
 	glueType := p.GetGlueType()
 
 	if glueType == "" && b.err == nil {
 		b.err = errors.New("processor.GetGlueType() return nothing")
+		return b
+	}
+	if (config == nil || config.MaxWorkerCount <= 0) && b.err == nil {
+		b.err = errors.New("config is none")
+		return b
 	}
 
-	b.processor[glueType] = p
+	b.pcs[glueType] = &processor.PC{
+		Processor: p,
+		Config:    config,
+	}
 	b.tags = append(b.tags, discovery.GlueTypeTagPrefix+glueType)
 	return b
 }
@@ -163,7 +171,7 @@ func (b *ExecutorBuilder) Build() (*Executor, error) {
 		return nil, errors.New("no instanceID")
 	}
 
-	if len(b.processor) == 0 {
+	if len(b.pcs) == 0 {
 		return nil, errors.New("no processor")
 	}
 
@@ -180,6 +188,6 @@ func (b *ExecutorBuilder) Build() (*Executor, error) {
 	}
 
 	return genExecutor(b.instanceID, b.oTelConfig,
-		b.traceProvider, b.metricsProvider, b.tags, b.processor,
+		b.traceProvider, b.metricsProvider, b.tags, b.pcs,
 		b.serveConf, b.processorCount, b.discoveryClient, b.extraConf)
 }
