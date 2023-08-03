@@ -3,8 +3,9 @@ package util
 import (
 	"fmt"
 	"supernova/executor/app"
+	"supernova/pkg/session/trace"
 	processor_plugin_http "supernova/processor-plugin/processor-plugin-http"
-	"supernova/processor-plugin/processor-plugin-idle"
+	processor_plugin_idle "supernova/processor-plugin/processor-plugin-idle"
 
 	"github.com/google/uuid"
 )
@@ -51,7 +52,11 @@ func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf, extraConfig any
 		executor, err := builder.WithInstanceID(GenUnderCloudExecutorID()).WithConsulDiscovery(
 			DevConsulHost, DevConsulPort, instanceConf.HealthCheckPort).
 			WithProcessor(httpExecutor).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).
-			WithOTelConfig(DevTraceConfig).
+			WithOTelConfig(&trace.OTelConfig{
+				EnableTrace:    false,
+				EnableMetrics:  true,
+				InstrumentConf: DevTraceConfig,
+			}).
 			Build()
 
 		if err != nil {
@@ -75,7 +80,11 @@ func StartIdleExecutors(instanceConfigs []*ExecutorInstanceConf,
 		executor, err := builder.WithInstanceID(GenUnderCloudExecutorID()).WithConsulDiscovery(
 			DevConsulHost, DevConsulPort, instanceConf.HealthCheckPort).
 			WithProcessor(idleExecutor).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).
-			WithOTelConfig(DevTraceConfig).
+			WithOTelConfig(&trace.OTelConfig{
+				EnableTrace:    false,
+				EnableMetrics:  true,
+				InstrumentConf: DevTraceConfig,
+			}).
 			Build()
 
 		if err != nil {
