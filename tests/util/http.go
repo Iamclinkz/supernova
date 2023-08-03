@@ -25,7 +25,7 @@ func RegisterTriggers(schedulerAddress string, triggers []*model.Trigger) {
 	//保证数据库不会被击穿
 	//concurrencyLimit := make(chan struct{}, 30)
 
-	groupSize := 40
+	groupSize := 4000
 	groupCount := (len(triggers) + groupSize - 1) / groupSize
 
 	for i := 0; i < groupCount; i++ {

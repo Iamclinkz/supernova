@@ -11,6 +11,7 @@ import (
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 	"supernova/pkg/util"
+	"sync"
 	"syscall"
 	"time"
 
@@ -44,6 +45,7 @@ type Executor struct {
 	statisticsService *service.StatisticsService
 
 	serviceExporter exporter.Exporter
+	stopOnce        sync.Once
 }
 
 func newExecutorInner(
@@ -78,6 +80,7 @@ func newExecutorInner(
 		executeService:    executeService,
 		processorService:  processorService,
 		statisticsService: statisticsService,
+		stopOnce:          sync.Once{},
 	}
 
 	for _, p := range processor {
@@ -126,21 +129,25 @@ func (e *Executor) Start() {
 }
 
 func (e *Executor) Stop() {
-	err := e.discoveryClient.DeRegister(e.instanceID)
-	if err != nil {
-		klog.Errorf("fail to DeRegister executor service:%v", err)
-	}
-	e.executeService.Stop()
-	e.serviceExporter.Stop()
-	if e.enableOTel {
-		if err = e.tracerProvider.Shutdown(context.TODO()); err != nil {
-			klog.Warnf("tracerProvider stop error:%v", err)
+	stopF := func() {
+		err := e.discoveryClient.DeRegister(e.instanceID)
+		if err != nil {
+			klog.Errorf("fail to DeRegister executor service:%v", err)
 		}
-		if err = e.meterProvider.Shutdown(context.TODO()); err != nil {
-			klog.Warnf("meterProvider stop error:%v", err)
+		e.executeService.Stop()
+		e.serviceExporter.Stop()
+		if e.enableOTel {
+			if err = e.tracerProvider.Shutdown(context.TODO()); err != nil {
+				klog.Warnf("tracerProvider stop error:%v", err)
+			}
+			if err = e.meterProvider.Shutdown(context.TODO()); err != nil {
+				klog.Warnf("meterProvider stop error:%v", err)
+			}
 		}
+		klog.Infof("%v stopped", e.instanceID)
 	}
-	klog.Infof("%v stopped", e.instanceID)
+
+	e.stopOnce.Do(stopF)
 }
 
 func (e *Executor) GracefulStop() {

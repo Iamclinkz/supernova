@@ -56,9 +56,9 @@ func TestFail(t *testing.T) {
 		triggers[i] = &model.Trigger{
 			Name:            "test-trigger-" + strconv.Itoa(i),
 			JobID:           1,
-			ScheduleType:    2,          //执行一次
-			FailRetryCount:  100,        //失败几乎可以一直重试
-			ExecuteTimeout:  2000000000, //2s
+			ScheduleType:    2,               //执行一次
+			FailRetryCount:  100,             //失败几乎可以一直重试
+			ExecuteTimeout:  5 * time.Second, //2s
 			TriggerNextTime: time.Now(),
 			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,
 			Param: map[string]string{

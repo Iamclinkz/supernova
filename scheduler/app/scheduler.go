@@ -4,11 +4,15 @@ import (
 	"context"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"os"
+	"os/signal"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 	"supernova/pkg/session/trace"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/service"
+	"sync"
+	"syscall"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
@@ -16,6 +20,7 @@ import (
 type Scheduler struct {
 	//config
 	instanceID string //for debug
+	standalone bool
 
 	//openTelemetry
 	oTelConfig     *trace.OTelConfig
@@ -35,6 +40,7 @@ type Scheduler struct {
 	jobService        *service.JobService
 	triggerService    *service.TriggerService
 	onFireService     *service.OnFireService
+	stopOnce          sync.Once
 }
 
 func newSchedulerInner(
@@ -63,6 +69,7 @@ func newSchedulerInner(
 ) *Scheduler {
 	return &Scheduler{
 		instanceID: instanceID,
+		standalone: standAlone,
 
 		oTelConfig:     oTelConfig,
 		tracerProvider: tracerProvider,
@@ -81,6 +88,7 @@ func newSchedulerInner(
 		jobService:        jobService,
 		triggerService:    triggerService,
 		onFireService:     onFireService,
+		stopOnce:          sync.Once{},
 	}
 }
 
@@ -100,28 +108,37 @@ func (s *Scheduler) Start() {
 	go s.scheduleService.Schedule()
 	go s.manageService.HeartBeat()
 	go s.statisticsService.WatchScheduler()
-	klog.Info("Scheduler started")
+
+	klog.Infof("Scheduler started: %+v", s)
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-signalCh
+	klog.Infof("[%v]found signal:%v, start graceful stop", s.instanceID, sig)
+	s.Stop()
 }
 
 func (s *Scheduler) Stop() {
-	s.scheduleService.Stop()
-	s.manageService.Stop()
-	s.statisticsService.Stop()
-	if s.oTelConfig.EnableTrace {
-		if err := s.tracerProvider.Shutdown(context.TODO()); err != nil {
-			klog.Errorf("stop tracerProvider error:%v", err)
+	stopF := func() {
+		s.scheduleService.Stop()
+		s.manageService.Stop()
+		s.statisticsService.Stop()
+		if s.oTelConfig.EnableTrace {
+			if err := s.tracerProvider.Shutdown(context.TODO()); err != nil {
+				klog.Errorf("stop tracerProvider error:%v", err)
+			}
 		}
-	}
-	if s.oTelConfig.EnableMetrics {
-		if err := s.meterProvider.Shutdown(context.TODO()); err != nil {
-			klog.Errorf("stop meterProvider error:%v", err)
+		if s.oTelConfig.EnableMetrics {
+			if err := s.meterProvider.Shutdown(context.TODO()); err != nil {
+				klog.Errorf("stop meterProvider error:%v", err)
+			}
 		}
+		err := s.discoveryClient.DeRegister(s.instanceID)
+		if err != nil {
+			klog.Errorf("[%v] DeRegister error:%v", s.instanceID, err)
+		}
+		klog.Infof("[%v] stopped", s.instanceID)
 	}
-	err := s.discoveryClient.DeRegister(s.instanceID)
-	if err != nil {
-		klog.Errorf("[%v] DeRegister error:%v", s.instanceID, err)
-	}
-	klog.Infof("[%v] stopped", s.instanceID)
+	s.stopOnce.Do(stopF)
 }
 
 func (s *Scheduler) GetJobOperator() schedule_operator.Operator {

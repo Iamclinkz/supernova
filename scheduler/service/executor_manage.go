@@ -153,7 +153,7 @@ func (s *ExecutorManageService) updateExecutor() {
 				err:        err,
 			}
 
-			if status.GracefulStopped {
+			if err == nil && status.GracefulStopped {
 				klog.Infof("find executor:%v graceful stopping", e.ServiceData.InstanceId)
 			}
 		}(newExecutor, counter)

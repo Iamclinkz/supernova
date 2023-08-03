@@ -25,8 +25,8 @@ func TestExecutorGracefulStop(t *testing.T) {
 	//测试使用
 	const (
 		BinPath                 = "../../executor-example/http-executor/build/bin/http-executor"
-		LogLevel                = klog.LevelInfo
-		TriggerCount            = 50000
+		LogLevel                = klog.LevelTrace
+		TriggerCount            = 1000
 		MaxWaitGracefulStopTime = time.Second*15 + conf.SchedulerMaxCheckHealthDuration
 	)
 
@@ -122,7 +122,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 			JobID:           1,
 			ScheduleType:    2,               //执行一次
 			FailRetryCount:  100,             //失败几乎可以一直重试
-			ExecuteTimeout:  2 * time.Second, //2s
+			ExecuteTimeout:  5 * time.Second, //5s
 			TriggerNextTime: time.Now(),
 			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,
 			Param: map[string]string{

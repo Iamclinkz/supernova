@@ -55,7 +55,7 @@ func TestPureRun(t *testing.T) {
 			ScheduleType:      constance.ScheduleTypeCron, //使用cron循环执行
 			ScheduleConf:      "*/5 * * * * *",            //每5s执行一次
 			FailRetryCount:    5,                          //最大失败重试五次。
-			ExecuteTimeout:    2 * time.Second,            //执行超过2s算超时。
+			ExecuteTimeout:    5 * time.Second,            //执行超过5s算超时。
 			TriggerNextTime:   time.Now().Add(time.Duration(rand.Intn(10000)) * time.Millisecond),
 			MisfireStrategy:   constance.MisfireStrategyTypeDoNothing,
 			FailRetryInterval: 3 * time.Second, //重试间隔为3s

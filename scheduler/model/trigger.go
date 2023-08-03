@@ -37,6 +37,7 @@ type Trigger struct {
 	Status      constance.TriggerStatus
 	Param       map[string]string
 	AtLeastOnce bool //语义，至少一次。如果为false，则为至多一次
+	Deleted     bool //是否无效（可以删除）
 }
 
 func (t *Trigger) String() string {
@@ -63,7 +64,8 @@ var SecondParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Mont
 func (t *Trigger) NextExecutionTime() (time.Time, error) {
 	switch t.ScheduleType {
 	case constance.ScheduleTypeNone, constance.ScheduleTypeOnce:
-		//如果是不执行，或者只执行一次，那么下次执行时间设置为很久以后
+		//如果是不执行，或者只执行一次，那么下次执行时间设置为很久以后，并且设置删除
+		t.Deleted = true
 		return util.VeryLateTime(), nil
 	case constance.ScheduleTypeCron:
 		cronParser, err := SecondParser.Parse(t.ScheduleConf)

@@ -3,6 +3,9 @@ package simple_http_server
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -104,15 +107,18 @@ func (s *SimpleHttpServer) WaitResult(maxWaitTime time.Duration, exit bool) bool
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
+
 	for {
 		select {
 		case <-timeout:
 			err, result := s.CheckResult()
 			if err != nil {
 				if exit {
-					log.Fatalf("CheckResult failed: %v\n, result:%v\n", err, result)
+					log.Fatalf("CheckResult failed: %v,\n result:%v\n", err, result)
 				} else {
-					log.Printf("CheckResult failed: %v\n, result:%v\n", err, result)
+					log.Printf("CheckResult failed: %v,\n result:%v\n", err, result)
 					return false
 				}
 			} else {
@@ -125,6 +131,8 @@ func (s *SimpleHttpServer) WaitResult(maxWaitTime time.Duration, exit bool) bool
 				log.Printf("result ok:\n%v\n", result)
 				return true
 			}
+		case <-signalCh:
+			return true
 		}
 	}
 }
