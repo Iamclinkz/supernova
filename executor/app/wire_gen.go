@@ -8,19 +8,20 @@ package app
 
 import (
 	"go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/trace"
+	trace2 "go.opentelemetry.io/otel/sdk/trace"
 	"supernova/executor/processor"
 	"supernova/executor/service"
 	"supernova/pkg/discovery"
+	"supernova/pkg/session/trace"
 )
 
 // Injectors from wire.go:
 
-func genExecutor(instanceID string, enableOTel bool, traceProvider *trace.TracerProvider, meterProvider *metric.MeterProvider, tags []string, processor2 map[string]processor.JobProcessor, serveConf *discovery.ServiceServeConf, processorCount int, client discovery.DiscoverClient, extraConf map[string]string) (*Executor, error) {
+func genExecutor(instanceID string, oTelConfig *trace.OTelConfig, traceProvider *trace2.TracerProvider, meterProvider *metric.MeterProvider, tags []string, processor2 map[string]processor.JobProcessor, serveConf *discovery.ServiceServeConf, processorCount int, client discovery.DiscoverClient, extraConf map[string]string) (*Executor, error) {
 	duplicateService := service.NewDuplicateService()
-	statisticsService := service.NewStatisticsService(enableOTel, instanceID)
+	statisticsService := service.NewStatisticsService(instanceID, oTelConfig)
 	processorService := service.NewProcessorService()
-	executeService := service.NewExecuteService(statisticsService, processorService, duplicateService, processorCount, enableOTel)
-	executor := newExecutorInner(instanceID, enableOTel, traceProvider, meterProvider, tags, processor2, serveConf, processorCount, extraConf, client, duplicateService, executeService, processorService, statisticsService)
+	executeService := service.NewExecuteService(statisticsService, processorService, duplicateService, processorCount, oTelConfig)
+	executor := newExecutorInner(instanceID, oTelConfig, traceProvider, meterProvider, tags, processor2, serveConf, processorCount, extraConf, client, duplicateService, executeService, processorService, statisticsService)
 	return executor, nil
 }

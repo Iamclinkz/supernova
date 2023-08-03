@@ -51,7 +51,7 @@ func StartHttpExecutors(instanceConfigs []*ExecutorInstanceConf, extraConfig any
 		executor, err := builder.WithInstanceID(GenUnderCloudExecutorID()).WithConsulDiscovery(
 			DevConsulHost, DevConsulPort, instanceConf.HealthCheckPort).
 			WithProcessor(httpExecutor).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).
-			WithOTelCollector(DevTraceConfig).
+			WithOTelConfig(DevTraceConfig).
 			Build()
 
 		if err != nil {
@@ -75,7 +75,7 @@ func StartIdleExecutors(instanceConfigs []*ExecutorInstanceConf,
 		executor, err := builder.WithInstanceID(GenUnderCloudExecutorID()).WithConsulDiscovery(
 			DevConsulHost, DevConsulPort, instanceConf.HealthCheckPort).
 			WithProcessor(idleExecutor).WithGrpcServe(instanceConf.GrpcServeHost, instanceConf.GrpcServePort).
-			WithOTelCollector(DevTraceConfig).
+			WithOTelConfig(DevTraceConfig).
 			Build()
 
 		if err != nil {

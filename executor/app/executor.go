@@ -10,6 +10,7 @@ import (
 	"supernova/pkg/conf"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
+	trace2 "supernova/pkg/session/trace"
 	"supernova/pkg/util"
 	"sync"
 	"syscall"
@@ -31,7 +32,7 @@ type Executor struct {
 	extraConf      map[string]string
 
 	//trace
-	enableOTel     bool
+	oTelConfig     *trace2.OTelConfig
 	tracerProvider *trace.TracerProvider
 	meterProvider  *metric.MeterProvider
 
@@ -50,7 +51,7 @@ type Executor struct {
 
 func newExecutorInner(
 	instanceID string,
-	enableOTel bool,
+	oTelConfig *trace2.OTelConfig,
 	tracerProvider *trace.TracerProvider,
 	meterProvider *metric.MeterProvider,
 	tags []string,
@@ -70,7 +71,7 @@ func newExecutorInner(
 		tags:              tags,
 		processor:         processor,
 		serveConf:         serveConf,
-		enableOTel:        enableOTel,
+		oTelConfig:        oTelConfig,
 		tracerProvider:    tracerProvider,
 		meterProvider:     meterProvider,
 		extraConf:         extraConf,
@@ -81,7 +82,7 @@ func newExecutorInner(
 		processorService:  processorService,
 		statisticsService: statisticsService,
 		stopOnce:          sync.Once{},
-		serviceExporter:   exporter.NewExporter(executeService, statisticsService, serveConf, enableOTel, instanceID),
+		serviceExporter:   exporter.NewExporter(executeService, statisticsService, serveConf, oTelConfig.EnableTrace, instanceID),
 	}
 
 	for _, p := range processor {
@@ -136,10 +137,13 @@ func (e *Executor) Stop() {
 		}
 		e.executeService.Stop()
 		e.serviceExporter.Stop()
-		if e.enableOTel {
+		if e.oTelConfig.EnableTrace {
 			if err = e.tracerProvider.Shutdown(context.TODO()); err != nil {
 				klog.Warnf("tracerProvider stop error:%v", err)
 			}
+		}
+
+		if e.oTelConfig.EnableMetrics {
 			if err = e.meterProvider.Shutdown(context.TODO()); err != nil {
 				klog.Warnf("meterProvider stop error:%v", err)
 			}

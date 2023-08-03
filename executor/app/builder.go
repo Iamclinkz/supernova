@@ -4,7 +4,6 @@ import (
 	"errors"
 	"strconv"
 	"supernova/executor/processor"
-	"supernova/pkg/conf"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
 	tconf "supernova/pkg/session/trace"
@@ -23,6 +22,7 @@ type ExecutorBuilder struct {
 	extraConf       map[string]string
 	traceProvider   *sdktrace.TracerProvider
 	metricsProvider *sdkmetrics.MeterProvider
+	oTelConfig      *tconf.OTelConfig
 	err             error
 }
 
@@ -134,12 +134,23 @@ func (b *ExecutorBuilder) WithProcessorCount(count int) *ExecutorBuilder {
 	return b
 }
 
-func (b *ExecutorBuilder) WithOTelCollector(instrumentConf *conf.OTelConf) *ExecutorBuilder {
-	var err error
-	b.traceProvider, b.metricsProvider, err = tconf.InitProvider(constance.ExecutorServiceName, instrumentConf)
-	if err != nil && b.err != nil {
-		b.err = err
+func (b *ExecutorBuilder) WithOTelConfig(oTelConfig *tconf.OTelConfig) *ExecutorBuilder {
+	if oTelConfig.EnableTrace || oTelConfig.EnableMetrics {
+		var err error
+		b.traceProvider, b.metricsProvider, err = tconf.InitProvider(constance.SchedulerServiceName, oTelConfig.InstrumentConf)
+		if err != nil && b.err != nil {
+			b.err = err
+		}
 	}
+
+	//来不及改了。。先这样吧
+	if !oTelConfig.EnableTrace {
+		b.traceProvider = nil
+	}
+	if !oTelConfig.EnableMetrics {
+		b.metricsProvider = nil
+	}
+	b.oTelConfig = oTelConfig
 	return b
 }
 
@@ -168,7 +179,7 @@ func (b *ExecutorBuilder) Build() (*Executor, error) {
 		return nil, errors.New("no selected service discovery")
 	}
 
-	return genExecutor(b.instanceID, b.traceProvider != nil && b.metricsProvider != nil,
+	return genExecutor(b.instanceID, b.oTelConfig,
 		b.traceProvider, b.metricsProvider, b.tags, b.processor,
 		b.serveConf, b.processorCount, b.discoveryClient, b.extraConf)
 }

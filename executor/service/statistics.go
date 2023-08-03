@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"supernova/pkg/api"
+	trace2 "supernova/pkg/session/trace"
 	"sync/atomic"
 	"time"
 
@@ -20,7 +21,7 @@ type StatisticsService struct {
 	//当前还没有处理结束的response个数。这里的“还没有处理结束”指的是如果需要回复，那么回复成功（stream发送成功）算结束
 	//如果不需要回复，那么直接结束。
 	unFinishedRequestCount atomic.Int64
-	enableOTel             bool
+	oTelConfig             *trace2.OTelConfig
 
 	//trace
 	tracer trace.Tracer
@@ -38,15 +39,17 @@ type StatisticsService struct {
 	executeTimeHistogram                metric.Int64Histogram     //纯执行时间
 }
 
-func NewStatisticsService(enableOTel bool, instanceID string) *StatisticsService {
+func NewStatisticsService(instanceID string, oTelConfig *trace2.OTelConfig) *StatisticsService {
 	ret := &StatisticsService{
-		enableOTel: enableOTel,
+		oTelConfig: oTelConfig,
 		instanceID: instanceID,
 	}
-	if enableOTel {
+	if oTelConfig.EnableTrace {
 		//trace
 		ret.tracer = otel.Tracer("StatisticsTracer")
+	}
 
+	if oTelConfig.EnableMetrics {
 		//metrics
 		ret.meter = otel.Meter("StatisticsMeter")
 		ret.defaultMetricsOption = metric.WithAttributes(
@@ -110,7 +113,7 @@ func NewStatisticsService(enableOTel bool, instanceID string) *StatisticsService
 
 func (s *StatisticsService) OnSendRunJobResponseSuccess(response *api.RunJobResponse) {
 	s.unFinishedRequestCount.Add(-1)
-	if s.enableOTel {
+	if s.oTelConfig.EnableTrace {
 		s.runJobResponseSuccessCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), -1, s.defaultMetricsOption)
 	}
@@ -118,13 +121,13 @@ func (s *StatisticsService) OnSendRunJobResponseSuccess(response *api.RunJobResp
 
 func (s *StatisticsService) OnNoNeedSendResponse(request *api.RunJobRequest) {
 	s.unFinishedRequestCount.Add(-1)
-	if s.enableOTel {
+	if s.oTelConfig.EnableTrace {
 		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), -1, s.defaultMetricsOption)
 	}
 }
 
 func (s *StatisticsService) OnDuplicateRequest(request *api.RunJobRequest) {
-	if s.enableOTel {
+	if s.oTelConfig.EnableTrace {
 		s.duplicateExecuteRequestCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
 }
@@ -132,7 +135,7 @@ func (s *StatisticsService) OnDuplicateRequest(request *api.RunJobRequest) {
 func (s *StatisticsService) OnReceiveRunJobRequest(request *api.RunJobRequest) {
 	klog.Tracef("receive execute jobRequest, OnFireID:%v", request.OnFireLogID)
 	s.unFinishedRequestCount.Add(1)
-	if s.enableOTel {
+	if s.oTelConfig.EnableTrace {
 		s.receiveRunJobRequestCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
@@ -140,14 +143,14 @@ func (s *StatisticsService) OnReceiveRunJobRequest(request *api.RunJobRequest) {
 
 func (s *StatisticsService) OnOverTimeTaskExecuteSuccess(request *api.RunJobRequest, response *api.RunJobResponse) {
 	s.unFinishedRequestCount.Add(1)
-	if s.enableOTel {
+	if s.oTelConfig.EnableTrace {
 		s.unFinishedRequestCountUpDownCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
 }
 
 func (s *StatisticsService) OnStartExecute(jobRequest *api.RunJobRequest) {
 	s.currentJobCount.Add(1)
-	if s.enableOTel {
+	if s.oTelConfig.EnableTrace {
 		s.currentJobCountUpDownCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 		s.executeJobCount.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
@@ -155,13 +158,13 @@ func (s *StatisticsService) OnStartExecute(jobRequest *api.RunJobRequest) {
 
 func (s *StatisticsService) OnFinishExecute(jobRequest *api.RunJobRequest, jobResponse *api.RunJobResponse) {
 	s.currentJobCount.Add(-1)
-	if s.enableOTel {
+	if s.oTelConfig.EnableTrace {
 		s.currentJobCountUpDownCounter.Add(context.Background(), -1, s.defaultMetricsOption)
 	}
 }
 
 func (s *StatisticsService) OnTaskOvertime(jobRequest *api.RunJobRequest) {
-	if s.enableOTel {
+	if s.oTelConfig.EnableTrace {
 		s.overtimeTaskCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
 }
@@ -192,7 +195,7 @@ func (s *StatisticsService) GetUnReplyRequestCount() int64 {
 
 // RecordExecuteTime 记录任务执行时间
 func (s *StatisticsService) RecordExecuteTime(delay time.Duration) {
-	if !s.enableOTel {
+	if !s.oTelConfig.EnableTrace {
 		return
 	}
 

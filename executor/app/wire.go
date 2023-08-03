@@ -10,11 +10,12 @@ import (
 	"supernova/executor/processor"
 	"supernova/executor/service"
 	"supernova/pkg/discovery"
+	trace2 "supernova/pkg/session/trace"
 )
 
 func genExecutor(
 	instanceID string,
-	enableOTel bool,
+	oTelConfig *trace2.OTelConfig,
 	traceProvider *sdktrace.TracerProvider,
 	meterProvider *sdkmetrics.MeterProvider,
 	tags []string,

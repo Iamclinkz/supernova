@@ -5,6 +5,7 @@ import (
 	"errors"
 	"supernova/executor/constance"
 	"supernova/pkg/api"
+	trace2 "supernova/pkg/session/trace"
 	"supernova/pkg/util"
 	"sync"
 	"time"
@@ -26,12 +27,12 @@ type ExecuteService struct {
 	wg                *sync.WaitGroup
 	timeWheel         *util.TimeWheel
 	executeListeners  []ExecuteListener
-	enableOTel        bool
+	oTelConfig        *trace2.OTelConfig
 	tracer            trace.Tracer
 }
 
 func NewExecuteService(statisticsService *StatisticsService, processorService *ProcessorService,
-	duplicateService *DuplicateService, processorCount int, enableOTel bool) *ExecuteService {
+	duplicateService *DuplicateService, processorCount int, oTelConfig *trace2.OTelConfig) *ExecuteService {
 	if processorCount <= 0 || processorCount > 512 {
 		processorCount = 512
 	}
@@ -53,11 +54,12 @@ func NewExecuteService(statisticsService *StatisticsService, processorService *P
 		wg:                &sync.WaitGroup{},
 		timeWheel:         tw,
 		executeListeners:  make([]ExecuteListener, 0, 2),
-		enableOTel:        enableOTel,
+		oTelConfig:        oTelConfig,
 	}
-	if enableOTel {
+	if oTelConfig.EnableTrace {
 		ret.tracer = otel.Tracer("ExecuteTracer")
 	}
+
 	ret.RegisterExecuteListener(statisticsService)
 	ret.RegisterExecuteListener(duplicateService)
 	return ret
@@ -103,7 +105,7 @@ func (e *ExecuteService) work() {
 			return
 		case jobRequest := <-e.jobRequestCh:
 			var (
-				doTrace = len(jobRequest.TraceContext) != 0 && e.enableOTel
+				doTrace = len(jobRequest.TraceContext) != 0 && e.oTelConfig.EnableTrace
 
 				workCtx context.Context
 
