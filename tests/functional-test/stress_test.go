@@ -19,9 +19,9 @@ import (
 func TestWithoutFail(t *testing.T) {
 	start := time.Now()
 
-	var triggerCount = 100
+	var triggerCount = 100000
 
-	supernovaTest := util.StartTest(1, 1, klog.LevelTrace, util.StartHttpExecutors, nil)
+	supernovaTest := util.StartTest(2, 3, klog.LevelError, util.StartHttpExecutors, nil)
 	defer supernovaTest.EndTest()
 
 	httpServer := simple_http_server.NewSimpleHttpServer(
@@ -79,5 +79,5 @@ func TestWithoutFail(t *testing.T) {
 	util.RegisterTriggers(util.SchedulerAddress, triggers)
 
 	log.Printf("register triggers successed, cost:%v\n", time.Since(start))
-	httpServer.WaitResult(20*time.Second, true)
+	httpServer.WaitResult(120*time.Second, true)
 }
