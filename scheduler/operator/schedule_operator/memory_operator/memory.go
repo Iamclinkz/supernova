@@ -43,6 +43,7 @@ type MemoryOperator struct {
 	finishedOnFireLog        atomic.Int64
 	fetchFailLog             atomic.Int64
 	conflictCount            atomic.Int64
+	failCount                atomic.Int64
 }
 
 func NewMemoryScheduleOperator() *MemoryOperator {
@@ -56,6 +57,7 @@ func NewMemoryScheduleOperator() *MemoryOperator {
 		finishedOnFireLog:          atomic.Int64{},
 		fetchFailLog:               atomic.Int64{},
 		conflictCount:              atomic.Int64{},
+		failCount:                  atomic.Int64{},
 	}
 
 	go func() {
@@ -226,6 +228,7 @@ func (m *MemoryOperator) UpdateOnFireLogFail(ctx context.Context, onFireLogID ui
 	fire.LeftTryCount--
 	fire.Result = errorMsg
 	fire.UpdatedAt = time.Now()
+	m.failCount.Add(1)
 	return nil
 }
 

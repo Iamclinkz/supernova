@@ -26,7 +26,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 	const (
 		BinPath                 = "../../executor-example/http-executor/build/bin/http-executor"
 		LogLevel                = klog.LevelTrace
-		TriggerCount            = 1000
+		TriggerCount            = 10000
 		MaxWaitGracefulStopTime = time.Second*15 + conf.SchedulerMaxCheckHealthDuration
 	)
 

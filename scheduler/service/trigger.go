@@ -353,19 +353,19 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{},
 
 			if got >= 0 {
 				//获取成功一部分
-				klog.Infof("fetchTimeoutAndRefreshOnFireLogs fetched timeout logs, len:%v", len(ret))
+				klog.Infof("[%v]fetchTimeoutAndRefreshOnFireLogs fetched timeout logs, len:%v", s.instanceID, len(ret))
 			} else {
 				//如果本轮没有获得任何一个OnFireLog
 				if found > 0 {
 					//查找到一些个过期的OnFireLog，但是自己一个都没获得到
-					klog.Errorf("fetchTimeoutAndRefreshOnFireLogs find %v logs, but fetch nothing", found)
+					klog.Errorf("[%v]fetchTimeoutAndRefreshOnFireLogs find %v logs, but fetch nothing", s.instanceID, found)
 				} else {
 					//没有查找到过期的OnFireLog
-					klog.Trace("fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs")
+					klog.Trace("[%v]fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs")
 				}
 			}
 
-			klog.Infof("fetch timeout time:%v, got:%v, lost:%v", time.Since(startTime), got, lost)
+			klog.Infof("[%v]fetch timeout time:%v, got:%v, lost:%v", time.Since(startTime), s.instanceID, got, lost)
 
 			//根据冲突概率调整的间隔休眠
 			time.Sleep(sleepDuration)
@@ -390,7 +390,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogsStandalone(closeCh chan
 			onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(),
 				s.statisticsService.GetHandleTimeoutOnFireLogMaxCount(), now, beginHandleTime, 0)
 			if err != nil {
-				klog.Errorf("fetchTimeoutAndRefreshOnFireLogsStandalone error in standalone mode")
+				klog.Errorf("[%v]fetchTimeoutAndRefreshOnFireLogsStandalone error in standalone mode")
 				time.Sleep(1 * time.Second)
 				continue
 			}
@@ -416,7 +416,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogsStandalone(closeCh chan
 						ret = append(ret, onFireLog)
 						mu.Unlock()
 					} else {
-						klog.Debugf("fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", onFireLog.ID, err)
+						klog.Debugf("[%v]fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", onFireLog.ID, err)
 					}
 				}
 			}
@@ -448,15 +448,15 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogsStandalone(closeCh chan
 			s.statisticsService.OnHoldTimeoutOnFireLogSuccess(gotCount)
 			if gotCount >= 0 {
 				//获取成功一部分
-				klog.Infof("fetchTimeoutAndRefreshOnFireLogs fetched timeout logs, len:%v", len(ret))
+				klog.Infof("[%v]fetchTimeoutAndRefreshOnFireLogs fetched timeout logs, len:%v", s.instanceID, len(ret))
 			} else {
 				//如果本轮没有获得任何一个OnFireLog
 				if fetchLen > 0 {
 					//查找到一些个过期的OnFireLog，但是自己一个都没获得到
-					klog.Errorf("fetchTimeoutAndRefreshOnFireLogs find %v logs, but fetch nothing", len(onFireLogs))
+					klog.Errorf("[%v]fetchTimeoutAndRefreshOnFireLogs find %v logs, but fetch nothing", s.instanceID, len(onFireLogs))
 				} else {
 					//没有查找到过期的OnFireLog
-					klog.Trace("fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs")
+					klog.Trace("[%v]fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs", s.instanceID)
 				}
 			}
 		}
