@@ -2,13 +2,13 @@ package app
 
 import (
 	"context"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
+	"supernova/pkg/session/trace"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/service"
-
-	"go.opentelemetry.io/otel/sdk/metric"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
@@ -18,9 +18,9 @@ type Scheduler struct {
 	instanceID string //for debug
 
 	//openTelemetry
-	enableOTel     bool
+	oTelConfig     *trace.OTelConfig
 	tracerProvider *sdktrace.TracerProvider
-	meterProvider  *metric.MeterProvider
+	meterProvider  *sdkmetric.MeterProvider
 
 	//operator
 	jobOperator schedule_operator.Operator
@@ -40,16 +40,17 @@ type Scheduler struct {
 func newSchedulerInner(
 	//config
 	instanceID string,
+	standAlone bool,
 
 	//trace
-	enableOTel bool,
-	tracerProvider *sdktrace.TracerProvider,
-	meterProvider *metric.MeterProvider,
+	oTelConfig *trace.OTelConfig,
 
 	//operator
 	jobOperator schedule_operator.Operator,
 
 	discoveryClient discovery.DiscoverClient,
+	tracerProvider *sdktrace.TracerProvider,
+	meterProvider *sdkmetric.MeterProvider,
 
 	//service
 	scheduleService *service.ScheduleService,
@@ -63,7 +64,7 @@ func newSchedulerInner(
 	return &Scheduler{
 		instanceID: instanceID,
 
-		enableOTel:     enableOTel,
+		oTelConfig:     oTelConfig,
 		tracerProvider: tracerProvider,
 		meterProvider:  meterProvider,
 
@@ -106,16 +107,21 @@ func (s *Scheduler) Stop() {
 	s.scheduleService.Stop()
 	s.manageService.Stop()
 	s.statisticsService.Stop()
-	if s.enableOTel {
+	if s.oTelConfig.EnableTrace {
 		if err := s.tracerProvider.Shutdown(context.TODO()); err != nil {
 			klog.Errorf("stop tracerProvider error:%v", err)
 		}
+	}
+	if s.oTelConfig.EnableMetrics {
 		if err := s.meterProvider.Shutdown(context.TODO()); err != nil {
 			klog.Errorf("stop meterProvider error:%v", err)
 		}
 	}
-	s.discoveryClient.DeRegister(s.instanceID)
-	klog.Infof("%v stopped", s.instanceID)
+	err := s.discoveryClient.DeRegister(s.instanceID)
+	if err != nil {
+		klog.Errorf("[%v] DeRegister error:%v", s.instanceID, err)
+	}
+	klog.Infof("[%v] stopped", s.instanceID)
 }
 
 func (s *Scheduler) GetJobOperator() schedule_operator.Operator {

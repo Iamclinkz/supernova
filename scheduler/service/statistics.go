@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
+	trace2 "supernova/pkg/session/trace"
 	"supernova/pkg/util"
 	"time"
 
@@ -18,8 +19,9 @@ import (
 
 type StatisticsService struct {
 	instanceID string
-	enableOTel bool
+	oTelConfig *trace2.OTelConfig
 	tracer     trace.Tracer
+	standalone bool
 
 	discoveryClient       discovery.DiscoverClient
 	currentSchedulerCount int
@@ -40,17 +42,22 @@ type StatisticsService struct {
 	scheduleDelayHistogram        metric.Int64Histogram //调度时间（任务应该被安排执行时间 - 任务实际被安排执行时间）
 }
 
-func NewStatisticsService(instanceID string, enableOTel bool, discoveryClient discovery.DiscoverClient) *StatisticsService {
+func NewStatisticsService(instanceID string, oTelConfig *trace2.OTelConfig,
+	discoveryClient discovery.DiscoverClient, standalone bool) *StatisticsService {
 	ret := &StatisticsService{
 		instanceID:                     instanceID,
-		enableOTel:                     enableOTel,
+		oTelConfig:                     oTelConfig,
 		currentSchedulerCount:          1,
 		discoveryClient:                discoveryClient,
 		shutdownCh:                     make(chan struct{}),
 		lastTimeFetchOnFireLogInterval: 4 * time.Second,
+		standalone:                     standalone,
 	}
-	if enableOTel {
+	if oTelConfig.EnableTrace {
 		ret.tracer = otel.Tracer("StatisticTracer")
+	}
+
+	if oTelConfig.EnableMetrics {
 		ret.meter = otel.Meter("StatisticMeter")
 		ret.defaultMetricsOption = metric.WithAttributes(
 			attribute.Key("InstanceID").String(instanceID),
@@ -127,28 +134,28 @@ func (s *StatisticsService) Stop() {
 
 // OnFetchNeedFireTriggers 获得的需要执行的Trigger的个数
 func (s *StatisticsService) OnFetchNeedFireTriggers(count int) {
-	if s.enableOTel {
+	if s.oTelConfig.EnableMetrics {
 		s.fetchedTriggersCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
 }
 
 // OnFindTimeoutOnFireLogs 找到的过期的OnFireLogs个数
 func (s *StatisticsService) OnFindTimeoutOnFireLogs(count int) {
-	if s.enableOTel {
+	if s.oTelConfig.EnableMetrics {
 		s.foundTimeoutLogsCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
 }
 
 // OnHoldTimeoutOnFireLogFail 获得失败的过期的OnFireLogs个数
 func (s *StatisticsService) OnHoldTimeoutOnFireLogFail(count int) {
-	if s.enableOTel {
+	if s.oTelConfig.EnableMetrics {
 		s.holdTimeoutLogsFailureCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
 }
 
 // OnHoldTimeoutOnFireLogSuccess 获得的过期的OnFireLogs个数
 func (s *StatisticsService) OnHoldTimeoutOnFireLogSuccess(count int) {
-	if s.enableOTel {
+	if s.oTelConfig.EnableMetrics {
 		s.holdTimeoutLogsSuccessCounter.Add(context.Background(), int64(count), s.defaultMetricsOption)
 	}
 }
@@ -181,6 +188,9 @@ func (s *StatisticsService) GetHandleTriggerForwardDuration() time.Duration {
 }
 
 func (s *StatisticsService) GetHandleTimeoutOnFireLogMaxCount() int {
+	if s.standalone {
+		return 5000
+	}
 	return 2000
 }
 
@@ -235,7 +245,7 @@ func (s *StatisticsService) GetCheckExecutorHeartBeatTimeout() time.Duration {
 
 // RecordScheduleDelay 记录任务调度的时间。即任务应该被安排执行时间 - 任务实际被安排执行时间
 func (s *StatisticsService) RecordScheduleDelay(delay time.Duration) {
-	if !s.enableOTel {
+	if !s.oTelConfig.EnableMetrics {
 		return
 	}
 
@@ -250,7 +260,7 @@ func (s *StatisticsService) GetHandleTriggerMaxCount() int {
 
 // OnFireFail 任务扔给Executor执行失败
 func (s *StatisticsService) OnFireFail(reason FireFailReason) {
-	if s.enableOTel {
+	if s.oTelConfig.EnableMetrics {
 		s.fireFailureCounter.Add(context.Background(), 1,
 			metric.WithAttributes(attribute.String("reason", string(reason))), s.defaultMetricsOption)
 	}
@@ -258,7 +268,7 @@ func (s *StatisticsService) OnFireFail(reason FireFailReason) {
 
 // OnFireSuccess 任务扔给Executor执行成功
 func (s *StatisticsService) OnFireSuccess() {
-	if s.enableOTel {
+	if s.oTelConfig.EnableMetrics {
 		s.fireSuccessCounter.Add(context.Background(), 1, s.defaultMetricsOption)
 	}
 }

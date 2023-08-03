@@ -20,14 +20,16 @@ type TriggerService struct {
 	jobService        *JobService
 	scheduleOperator  schedule_operator.Operator
 	statisticsService *StatisticsService
+	standalone        bool
 }
 
 func NewTriggerService(scheduleOperator schedule_operator.Operator,
-	statisticsService *StatisticsService, jobService *JobService) *TriggerService {
+	statisticsService *StatisticsService, jobService *JobService, standalone bool) *TriggerService {
 	return &TriggerService{
 		scheduleOperator:  scheduleOperator,
 		statisticsService: statisticsService,
 		jobService:        jobService,
+		standalone:        standalone,
 	}
 }
 
@@ -51,9 +53,12 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		return nil, fmt.Errorf("OnTxStart error:%v", err)
 	}
 
-	if err = s.scheduleOperator.Lock(txCtx, constance.FetchUpdateMarkTriggerLockName); err != nil {
-		err = fmt.Errorf("lock error:%v", err)
-		goto badEnd
+	if !s.standalone {
+		//单机模式不需要加分布式锁
+		if err = s.scheduleOperator.Lock(txCtx, constance.FetchUpdateMarkTriggerLockName); err != nil {
+			err = fmt.Errorf("lock error:%v", err)
+			goto badEnd
+		}
 	}
 
 	//2.拿到位于[beginTriggerHandleTime,endTriggerHandleTime]之间的最近要执行的trigger
@@ -131,16 +136,25 @@ func (s *TriggerService) fetchUpdateMarkTrigger() ([]*model.OnFireLog, error) {
 		goto badEnd
 	}
 
+	if !s.standalone {
+		if err = s.scheduleOperator.UnLock(txCtx, constance.FetchUpdateMarkTriggerLockName); err != nil {
+			err = fmt.Errorf("UnLock error:%v", err)
+			goto badEnd
+		}
+	}
+
 	if err = s.scheduleOperator.OnTxFinish(txCtx); err != nil {
 		return nil, fmt.Errorf("onTxFinish error:%v", err)
 	}
 
-	//	klog.Errorf("fetchUpdateMarkTrigger fetched triggers, len:%v,use time:%v", len(onFireLogs), time.Since(begin))
+	klog.Tracef("fetchUpdateMarkTrigger fetched triggers, len:%v,use time:%v", len(onFireLogs), time.Since(begin))
 	s.statisticsService.OnFetchNeedFireTriggers(len(onFireLogs))
 	return onFireLogs, nil
 
 badEnd:
-	s.scheduleOperator.UnLock(txCtx, constance.FetchUpdateMarkTriggerLockName)
+	if !s.standalone {
+		_ = s.scheduleOperator.UnLock(txCtx, constance.FetchUpdateMarkTriggerLockName)
+	}
 	if txFailErr := s.scheduleOperator.OnTxFail(txCtx); txFailErr != nil {
 		return nil, fmt.Errorf("fetchUpdateMarkTrigger txFailErr:%v, originError:%v", txFailErr, err)
 	}
@@ -353,95 +367,86 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{},
 	}
 }
 
-//func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogs(closeCh chan struct{}, onFireLogCh chan *model.OnFireLog) {
-//	var (
-//		now             = time.Now()
-//		beginHandleTime = now.Add(-s.statisticsService.GetHandleTriggerForwardDuration()) //最多到之前的多长时间
-//		maxGetCount     = s.statisticsService.GetHandleTimeoutOnFireLogMaxCount()
-//		batchCount      = 200 //	一次最多拿200个
-//		ret             = make([]*model.OnFireLog, 0, maxGetCount/2)
-//	)
-//
-//	onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(), batchCount, now, beginHandleTime, 0)
-//	if err != nil {
-//		return nil, fmt.Errorf("fetch timeout triggers error:%v", err)
-//	}
-//
-//	mu := sync.Mutex{}
-//	//因为不考虑极端的情况下，失败的应该不多？且各个Scheduler动态调整捞取过期OnFireLog时间+捞取间隔较长，
-//	//所以这里用了乐观锁，取到过期的OnFireLog之后，尝试更新RedoAt字段。如果更新成功，则自己执行。更新失败则说明要不任务已经
-//	//成功了，要不让另一个进程抢先了，总之不是自己执行。
-//	const batchSize = 100
-//	var (
-//		wg           sync.WaitGroup
-//		failCount    atomic.Int32
-//		fetchTotal   = len(onFireLogs)
-//		batchCounter int
-//	)
-//
-//	sort.Slice(onFireLogs, func(i, j int) bool {
-//		return onFireLogs[i].RedoAt.Before(onFireLogs[j].RedoAt)
-//	})
-//
-//	processBatch := func(startIndex, endIndex int) {
-//		defer wg.Done()
-//		for i := startIndex; i < endIndex; i++ {
-//			onFireLog := onFireLogs[i]
-//			onFireLog.RedoAt = onFireLog.GetNextRedoAt()
-//			if err = s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog); err == nil {
-//				//我们抢占这个待执行的过期OnFireLog成功
-//				onFireLog.ShouldFireAt = time.Now()
-//				mu.Lock()
-//				ret = append(ret, onFireLog)
-//				mu.Unlock()
-//			} else {
-//				failCount.Add(1)
-//				klog.Debugf("fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", onFireLog.ID, err)
-//				return
-//			}
-//		}
-//	}
-//
-//	for i := 0; i < fetchTotal; i += batchSize {
-//		startIndex := i
-//		endIndex := i + batchSize
-//		if endIndex > fetchTotal {
-//			endIndex = fetchTotal
-//		}
-//		wg.Add(1)
-//		batchCounter++
-//		go processBatch(startIndex, endIndex)
-//	}
-//	if batchCounter == 0 {
-//		batchCounter = 1
-//	}
-//
-//	wg.Wait()
-//
-//	var (
-//		totalRequestCount = len(ret) + int(failCount.Load())
-//		gotCount          = len(ret)
-//		missCount         = int(failCount.Load())
-//	)
-//
-//	s.statisticsService.OnFindTimeoutOnFireLogs(totalRequestCount)
-//	s.statisticsService.OnHoldTimeoutOnFireLogFail(missCount)
-//	s.statisticsService.OnHoldTimeoutOnFireLogSuccess(gotCount)
-//	s.statisticsService.UpdateLastTimeFetchTimeoutOnFireLogFailRate(float32(failCount.Load()) / float32(batchCounter))
-//
-//	if gotCount >= 0 {
-//		//获取成功一部分
-//		klog.Infof("fetchTimeoutAndRefreshOnFireLogs fetched timeout logs, len:%v", len(ret))
-//	} else {
-//		//如果本轮没有获得任何一个OnFireLog
-//		if fetchTotal > 0 {
-//			//查找到一些个过期的OnFireLog，但是自己一个都没获得到
-//			klog.Errorf("fetchTimeoutAndRefreshOnFireLogs find %v logs, but fetch nothing", len(onFireLogs))
-//		} else {
-//			//没有查找到过期的OnFireLog
-//			klog.Trace("fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs")
-//		}
-//	}
-//
-//	return ret, nil
-//}
+func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogsStandalone(closeCh chan struct{}, onFireLogCh chan *model.OnFireLog) {
+	for {
+		select {
+		case <-closeCh:
+			return
+		default:
+			var (
+				now             = time.Now()
+				beginHandleTime = now.Add(-s.statisticsService.GetHandleTriggerForwardDuration()) //最多到之前的多长时间
+				batchSize       = 200
+				wg              sync.WaitGroup
+				mu              sync.Mutex
+			)
+
+			onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(),
+				s.statisticsService.GetHandleTimeoutOnFireLogMaxCount(), now, beginHandleTime, 0)
+			if err != nil {
+				klog.Errorf("fetchTimeoutAndRefreshOnFireLogsStandalone error in standalone mode")
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			ret := make([]*model.OnFireLog, 0, len(onFireLogs))
+
+			processBatch := func(startIndex, endIndex int) {
+				defer wg.Done()
+				for i := startIndex; i < endIndex; i++ {
+					onFireLog := onFireLogs[i]
+					onFireLog.RedoAt = onFireLog.GetNextRedoAt()
+					if err = s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog); err == nil {
+						//我们抢占这个待执行的过期OnFireLog成功
+						mu.Lock()
+						onFireLog.ShouldFireAt = time.Now()
+						ret = append(ret, onFireLog)
+						mu.Unlock()
+					} else {
+						klog.Debugf("fetchTimeoutAndRefreshOnFireLogs fetch onFireLog [id-%v] error:%v", onFireLog.ID, err)
+					}
+				}
+			}
+
+			n := len(onFireLogs)
+			for i := 0; i < n; i += batchSize {
+				startIndex := i
+				endIndex := i + batchSize
+				if endIndex > n {
+					endIndex = n
+				}
+				wg.Add(1)
+				go processBatch(startIndex, endIndex)
+			}
+
+			wg.Wait()
+
+			for _, onFireLog := range ret {
+				onFireLogCh <- onFireLog
+			}
+
+			var (
+				foundCount = len(onFireLogs)
+				gotCount   = len(ret)
+				missCount  = foundCount - gotCount
+			)
+
+			s.statisticsService.OnFindTimeoutOnFireLogs(foundCount)
+			s.statisticsService.OnHoldTimeoutOnFireLogFail(missCount)
+			s.statisticsService.OnHoldTimeoutOnFireLogSuccess(gotCount)
+			if gotCount >= 0 {
+				//获取成功一部分
+				klog.Infof("fetchTimeoutAndRefreshOnFireLogs fetched timeout logs, len:%v", len(ret))
+			} else {
+				//如果本轮没有获得任何一个OnFireLog
+				if foundCount > 0 {
+					//查找到一些个过期的OnFireLog，但是自己一个都没获得到
+					klog.Errorf("fetchTimeoutAndRefreshOnFireLogs find %v logs, but fetch nothing", len(onFireLogs))
+				} else {
+					//没有查找到过期的OnFireLog
+					klog.Trace("fetchTimeoutAndRefreshOnFireLogs failed to fetch any timeout logs")
+				}
+			}
+		}
+	}
+}

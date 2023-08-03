@@ -2,6 +2,7 @@ package functional_test
 
 import (
 	"strconv"
+	"supernova/pkg/session/trace"
 	"supernova/scheduler/app"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/handler/http"
@@ -30,7 +31,13 @@ func TestMemoryStore(t *testing.T) {
 	defer supernovaTest.EndTest()
 
 	builder := app.NewSchedulerBuilder()
-	memoryStoreScheduler, err := builder.WithMemoryStore().WithConsulDiscovery(util.DevConsulHost, util.DevConsulPort).Build()
+	memoryStoreScheduler, err := builder.WithMemoryStore().
+		WithConsulDiscovery(util.DevConsulHost, util.DevConsulPort).WithOTelConfig(&trace.OTelConfig{
+		EnableTrace:    false,
+		EnableMetrics:  true,
+		InstrumentConf: util.DevTraceConfig,
+	}).WithStandalone().Build()
+
 	if err != nil {
 		panic(err)
 	}

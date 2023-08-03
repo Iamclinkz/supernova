@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"supernova/pkg/api"
+	trace2 "supernova/pkg/session/trace"
 	"supernova/pkg/util"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
@@ -34,14 +35,15 @@ type ScheduleService struct {
 	jobResponseTaskCh     chan *api.RunJobResponse
 	wg                    sync.WaitGroup
 	workerCount           int
-	enableOTel            bool
+	oTelConfig            *trace2.OTelConfig
 	tracer                trace.Tracer
+	standalone            bool
 }
 
 func NewScheduleService(statisticsService *StatisticsService,
 	jobService *JobService, triggerService *TriggerService, onFireService *OnFireService,
 	executorSelectService *ExecutorRouteService,
-	workerCount int, executorManageService *ExecutorManageService, enableOTel bool) *ScheduleService {
+	workerCount int, executorManageService *ExecutorManageService, oTelConfig *trace2.OTelConfig, standalone bool) *ScheduleService {
 	tw, _ := util.NewTimeWheel(time.Millisecond*200, 512, util.TickSafeMode())
 	ret := &ScheduleService{
 		stopCh:                make(chan struct{}),
@@ -58,9 +60,10 @@ func NewScheduleService(statisticsService *StatisticsService,
 		jobResponseTaskCh:   make(chan *api.RunJobResponse, workerCount*200),
 		wg:                  sync.WaitGroup{},
 		workerCount:         workerCount,
-		enableOTel:          enableOTel,
+		oTelConfig:          oTelConfig,
+		standalone:          standalone,
 	}
-	if enableOTel {
+	if oTelConfig.EnableTrace {
 		ret.tracer = otel.Tracer("ScheduleTracer")
 	}
 	ret.executorManageService.RegisterReceiveMsgNotifyFunc(ret.onReceiveJobResponse)
@@ -73,7 +76,7 @@ func (s *ScheduleService) Schedule() {
 	go s.checkTimeoutOnFireLogs()
 	ticker := time.NewTicker(s.statisticsService.GetScheduleInterval())
 
-	klog.Infof("ScheduleService start Schedule, worker count:%v", s.workerCount)
+	klog.Infof("ScheduleService start Schedule, worker count:%v, standalone:%v", s.workerCount, s.standalone)
 	for {
 		select {
 		case <-s.stopCh:
@@ -144,7 +147,7 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 		traceCtx context.Context
 	)
 
-	if s.enableOTel {
+	if s.oTelConfig.EnableTrace {
 		//如果是第一次执行，或者onFireLog中没有Trace信息，那么我们搞一个Trace信息
 		if !retry || onFireLog.TraceContext == "" {
 			traceAttrs := []attribute.KeyValue{
@@ -165,7 +168,7 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 	if err = s.onFireService.UpdateOnFireLogExecutorStatus(context.TODO(), onFireLog); err != nil {
 		//任务更新失败，可能说明此OnFireLog当前已经过期，被其他Scheduler（或者自己）取走了或者任务执行成功不需要再执行了。
 		//总之不需要我们本次执行了
-		if s.enableOTel {
+		if s.oTelConfig.EnableTrace {
 			span.RecordError(fmt.Errorf("fail to update on fire log executor status:%v", err))
 			span.End()
 		}
@@ -190,7 +193,7 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 func (s *ScheduleService) handleRunJobResponse(response *api.RunJobResponse) {
 	var (
 		mySpan  trace.Span
-		doTrace = s.enableOTel && len(response.TraceContext) != 0
+		doTrace = s.oTelConfig.EnableTrace && len(response.TraceContext) != 0
 	)
 	if doTrace {
 		_, mySpan = util.NewSpanFromTraceContext("handleRunJobResponse", s.tracer, response.TraceContext)
@@ -260,5 +263,11 @@ func (s *ScheduleService) work() {
 
 // checkTimeoutOnFireLogs 从数据库中捞取超时的OnFireLogs，尝试再次执行
 func (s *ScheduleService) checkTimeoutOnFireLogs() {
-	s.triggerService.fetchTimeoutAndRefreshOnFireLogs(s.stopCh, s.overtimeOnFireLogCh)
+	if s.standalone {
+		s.triggerService.fetchTimeoutAndRefreshOnFireLogsStandalone(s.stopCh, s.overtimeOnFireLogCh)
+	} else {
+		//todo
+		//s.triggerService.fetchTimeoutAndRefreshOnFireLogs(s.stopCh, s.overtimeOnFireLogCh)
+		s.triggerService.fetchTimeoutAndRefreshOnFireLogsStandalone(s.stopCh, s.overtimeOnFireLogCh)
+	}
 }

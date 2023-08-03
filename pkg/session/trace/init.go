@@ -14,13 +14,19 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
-	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
-func InitProvider(serviceName string, instrumentConf *conf.OTelConf) (*sdktrace.TracerProvider, *sdkmetrics.MeterProvider, error) {
+type OTelConfig struct {
+	EnableTrace    bool
+	EnableMetrics  bool
+	InstrumentConf *conf.OTelConf
+}
+
+func InitProvider(serviceName string, instrumentConf *conf.OTelConf) (*sdktrace.TracerProvider, *sdkmetric.MeterProvider, error) {
 	ctx := context.Background()
 
 	res, err := resource.New(ctx,
@@ -62,11 +68,11 @@ func InitProvider(serviceName string, instrumentConf *conf.OTelConf) (*sdktrace.
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create metrics exporter: %w", err)
 	}
-	readerOption := sdkmetrics.WithReader(sdkmetrics.NewPeriodicReader(metricsExporter, sdkmetrics.WithInterval(5*time.Second)))
+	readerOption := sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricsExporter, sdkmetric.WithInterval(5*time.Second)))
 
-	meterProvider := sdkmetrics.NewMeterProvider(
+	meterProvider := sdkmetric.NewMeterProvider(
 		readerOption,
-		sdkmetrics.WithResource(res),
+		sdkmetric.WithResource(res),
 	)
 	otel.SetMeterProvider(meterProvider)
 

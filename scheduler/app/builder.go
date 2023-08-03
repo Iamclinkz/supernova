@@ -26,6 +26,8 @@ type SchedulerBuilder struct {
 	tracerProvider       *sdktrace.TracerProvider
 	meterProvider        *metric.MeterProvider
 	err                  error
+	standalone           bool
+	oTelConfig           *trace.OTelConfig
 }
 
 func NewSchedulerBuilder() *SchedulerBuilder {
@@ -97,13 +99,27 @@ func (b *SchedulerBuilder) WithInstanceID(instanceID string) *SchedulerBuilder {
 	return b
 }
 
-func (b *SchedulerBuilder) WithOTelCollector(instrumentConf *conf.OTelConf) *SchedulerBuilder {
-	var err error
-	b.tracerProvider, b.meterProvider, err = trace.InitProvider(constance.SchedulerServiceName, instrumentConf)
-	if err != nil && b.err != nil {
-		b.err = err
+func (b *SchedulerBuilder) WithOTelConfig(oTelConfig *trace.OTelConfig) *SchedulerBuilder {
+	if oTelConfig.EnableTrace || oTelConfig.EnableMetrics {
+		var err error
+		b.tracerProvider, b.meterProvider, err = trace.InitProvider(constance.SchedulerServiceName, oTelConfig.InstrumentConf)
+		if err != nil && b.err != nil {
+			b.err = err
+		}
 	}
 
+	//来不及改了。。先这样吧
+	if !oTelConfig.EnableTrace {
+		b.tracerProvider = nil
+	}
+	if !oTelConfig.EnableMetrics {
+		b.meterProvider = nil
+	}
+	return b
+}
+
+func (b *SchedulerBuilder) WithStandalone() *SchedulerBuilder {
+	b.standalone = true
 	return b
 }
 
@@ -124,6 +140,6 @@ func (b *SchedulerBuilder) Build() (*Scheduler, error) {
 		b.instanceID = fmt.Sprintf("Scheduler-%v", uuid.New())
 	}
 
-	return genScheduler(b.instanceID, b.tracerProvider != nil && b.meterProvider != nil,
-		b.tracerProvider, b.meterProvider, b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount)
+	return genScheduler(b.instanceID, b.oTelConfig,
+		b.tracerProvider, b.meterProvider, b.scheduleOperator, b.discoveryClient, b.schedulerWorkerCount, b.standalone)
 }

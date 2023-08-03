@@ -8,22 +8,23 @@ package app
 
 import (
 	"go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/trace"
+	trace2 "go.opentelemetry.io/otel/sdk/trace"
 	"supernova/pkg/discovery"
+	"supernova/pkg/session/trace"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/service"
 )
 
 // Injectors from wire.go:
 
-func genScheduler(instanceID string, enableTrace bool, tracerProvider *trace.TracerProvider, meterProvider *metric.MeterProvider, scheduleOperator schedule_operator.Operator, client discovery.DiscoverClient, schedulerWorkerCount int) (*Scheduler, error) {
-	statisticsService := service.NewStatisticsService(instanceID, enableTrace, client)
+func genScheduler(instanceID string, OTelConfig *trace.OTelConfig, tracerProvider *trace2.TracerProvider, meterProvider *metric.MeterProvider, scheduleOperator schedule_operator.Operator, client discovery.DiscoverClient, schedulerWorkerCount int, standalone bool) (*Scheduler, error) {
+	statisticsService := service.NewStatisticsService(instanceID, OTelConfig, client, standalone)
 	jobService := service.NewJobService(scheduleOperator, statisticsService)
-	triggerService := service.NewTriggerService(scheduleOperator, statisticsService, jobService)
+	triggerService := service.NewTriggerService(scheduleOperator, statisticsService, jobService, standalone)
 	onFireService := service.NewOnFireService(scheduleOperator, statisticsService)
 	executorManageService := service.NewExecutorManageService(statisticsService, client)
 	executorRouteService := service.NewExecutorRouteService(executorManageService)
-	scheduleService := service.NewScheduleService(statisticsService, jobService, triggerService, onFireService, executorRouteService, schedulerWorkerCount, executorManageService, enableTrace)
-	scheduler := newSchedulerInner(instanceID, enableTrace, tracerProvider, meterProvider, scheduleOperator, client, scheduleService, statisticsService, executorRouteService, executorManageService, jobService, triggerService, onFireService)
+	scheduleService := service.NewScheduleService(statisticsService, jobService, triggerService, onFireService, executorRouteService, schedulerWorkerCount, executorManageService, OTelConfig, standalone)
+	scheduler := newSchedulerInner(instanceID, standalone, OTelConfig, scheduleOperator, client, tracerProvider, meterProvider, scheduleService, statisticsService, executorRouteService, executorManageService, jobService, triggerService, onFireService)
 	return scheduler, nil
 }

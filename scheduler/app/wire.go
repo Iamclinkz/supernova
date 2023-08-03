@@ -8,12 +8,14 @@ import (
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"supernova/pkg/discovery"
+	"supernova/pkg/session/trace"
 	"supernova/scheduler/operator/schedule_operator"
 	"supernova/scheduler/service"
 )
 
-func genScheduler(instanceID string, enableTrace bool,
-	tracerProvider *sdktrace.TracerProvider, meterProvider *sdkmetrics.MeterProvider, scheduleOperator schedule_operator.Operator, client discovery.DiscoverClient, schedulerWorkerCount int) (*Scheduler, error) {
+func genScheduler(instanceID string, OTelConfig *trace.OTelConfig,
+	tracerProvider *sdktrace.TracerProvider, meterProvider *sdkmetrics.MeterProvider,
+	scheduleOperator schedule_operator.Operator, client discovery.DiscoverClient, schedulerWorkerCount int, standalone bool) (*Scheduler, error) {
 	wire.Build(
 		newSchedulerInner,
 

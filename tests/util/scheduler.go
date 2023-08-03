@@ -2,6 +2,7 @@ package util
 
 import (
 	"strconv"
+	trace2 "supernova/pkg/session/trace"
 	"supernova/scheduler/app"
 	"supernova/scheduler/handler/http"
 	"time"
@@ -15,7 +16,11 @@ func StartSchedulers(count int) []*app.Scheduler {
 		builder := app.NewSchedulerBuilder()
 		scheduler, err := builder.WithMysqlStore(DevMysqlConfig).
 			WithConsulDiscovery(DevConsulHost, DevConsulPort).
-			WithOTelCollector(DevTraceConfig).
+			WithOTelConfig(&trace2.OTelConfig{
+				EnableTrace:    false,
+				EnableMetrics:  true,
+				InstrumentConf: DevTraceConfig,
+			}).
 			WithInstanceID("Test-Scheduler-" + strconv.Itoa(i)).
 			Build()
 

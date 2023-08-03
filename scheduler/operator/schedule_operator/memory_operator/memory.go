@@ -40,10 +40,10 @@ type MemoryOperator struct {
 func NewMemoryScheduleOperator() *MemoryOperator {
 	return &MemoryOperator{
 		triggers:                   make(map[uint]*dao.Trigger),
-		triggerTriggerNextTimeTree: btree.New(5),
+		triggerTriggerNextTimeTree: btree.New(64),
 		jobs:                       make(map[uint]*dao.Job),
 		onFireLogs:                 make(map[uint]*dao.OnFireLog),
-		onFireLogRedoAtTree:        btree.New(5),
+		onFireLogRedoAtTree:        btree.New(64),
 	}
 }
 
