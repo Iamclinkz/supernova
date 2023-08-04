@@ -108,6 +108,7 @@ func (s *Scheduler) Start() {
 	go s.scheduleService.Schedule()
 	go s.manageService.HeartBeat()
 	go s.statisticsService.WatchScheduler()
+	go s.onFireService.Start()
 
 	klog.Infof("Scheduler started: %+v", s)
 	signalCh := make(chan os.Signal, 1)
@@ -122,14 +123,15 @@ func (s *Scheduler) Stop() {
 		s.scheduleService.Stop()
 		s.manageService.Stop()
 		s.statisticsService.Stop()
+		s.onFireService.Stop()
 		if s.oTelConfig.EnableTrace {
 			if err := s.tracerProvider.Shutdown(context.TODO()); err != nil {
-				klog.Errorf("stop tracerProvider error:%v", err)
+				klog.Errorf("[%v]stop tracerProvider error:%v", s.instanceID, err)
 			}
 		}
 		if s.oTelConfig.EnableMetrics {
 			if err := s.meterProvider.Shutdown(context.TODO()); err != nil {
-				klog.Errorf("stop meterProvider error:%v", err)
+				klog.Errorf("[%v]stop meterProvider error:%v", s.instanceID, err)
 			}
 		}
 		err := s.discoveryClient.DeRegister(s.instanceID)

@@ -236,7 +236,10 @@ var (
 	tmpMap = make(map[uint]struct{})
 )
 
-func (m *MemoryOperator) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID uint, result string) error {
+func (m *MemoryOperator) UpdateOnFireLogsSuccess(ctx context.Context, onFireLogs []struct {
+	ID     uint
+	Result string
+}) error {
 	m.onFireLock.Lock()
 	defer m.onFireLock.Unlock()
 
@@ -259,7 +262,7 @@ func (m *MemoryOperator) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID
 	tmpMap[onFireLogID] = struct{}{}
 	fire.Success = true
 	fire.Status = constance.OnFireStatusFinished
-	fire.Result = result
+	fire.Result = onFireLogs
 	fire.RedoAt = util.VeryLateTime()
 	fire.UpdatedAt = time.Now()
 

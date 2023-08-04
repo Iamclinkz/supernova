@@ -200,7 +200,10 @@ func (r *RedisOperator) UpdateOnFireLogFail(ctx context.Context, onFireLogID uin
 	return nil
 }
 
-func (r *RedisOperator) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID uint, result string) error {
+func (r *RedisOperator) UpdateOnFireLogsSuccess(ctx context.Context, onFireLogs []struct {
+	ID     uint
+	Result string
+}) error {
 	onFireKey := "onFireLog:" + strconv.Itoa(int(onFireLogID))
 
 	err := r.redisClient.ZRem(ctx, "onFireLogRedoAt", onFireKey).Err()

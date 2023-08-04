@@ -25,8 +25,11 @@ type Operator interface {
 	//即需要使用Status作为乐观锁的判断条件。
 	//更新失败，retry_count--
 	UpdateOnFireLogFail(ctx context.Context, onFireLogID uint, errorMsg string) error
-	//更新成功，Status为Finished，Success为true，redo_at为很久以后
-	UpdateOnFireLogSuccess(ctx context.Context, onFireLogID uint, result string) error
+	//批量更新成功，Status为Finished，Success为true，redo_at为很久以后
+	UpdateOnFireLogsSuccess(ctx context.Context, onFireLogs []struct {
+		ID     uint
+		Result string
+	}) error
 	//停止，Status为Finished，redo_at为很久以后
 	UpdateOnFireLogStop(ctx context.Context, onFireLogID uint, msg string) error
 	//查

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"supernova/pkg/util"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/dal"
@@ -147,30 +148,33 @@ func (m *MysqlOperator) UpdateOnFireLogStop(ctx context.Context, onFireLogID uin
 		}).Error
 }
 
-func (m *MysqlOperator) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID uint, result string) error {
+func (m *MysqlOperator) UpdateOnFireLogsSuccess(ctx context.Context, onFireLogs []struct {
+	ID     uint
+	Result string
+}) error {
 	db, ok := ctx.Value(transactionKey).(*gorm.DB)
 	if !ok {
 		db = m.db.DB()
 	}
 
-	return db.Model(&dao.OnFireLog{}).
-		Where("id = ? AND status != ?", onFireLogID, constance.OnFireStatusFinished).
-		Updates(map[string]interface{}{
-			"success": true,
-			"status":  constance.OnFireStatusFinished,
-			"result":  result,
-			"redo_at": util.VeryLateTime(),
-		}).Error
-	// ret := db.Unscoped().Delete(&dao.OnFireLog{}, onFireLogID)
-	// if ret.Error != nil {
-	// 	return fmt.Errorf("failed to delete OnFireLog with ID %d: %w", onFireLogID, ret.Error)
-	// }
+	// 构建批量插入/更新语句
+	sqlBuilder := strings.Builder{}
+	sqlBuilder.WriteString("INSERT INTO on_fire_log (id, success, status, result, redo_at) VALUES ")
 
-	// if ret.RowsAffected == 0 {
-	// 	return fmt.Errorf("no OnFireLog found with ID %d", onFireLogID)
-	// }
+	valueStrings := make([]string, 0, len(onFireLogs))
+	for _, onFireLog := range onFireLogs {
+		valueStrings = append(valueStrings, fmt.Sprintf("(%d, true, %d, '%s', '%s')",
+			onFireLog.ID, constance.OnFireStatusFinished, onFireLog.Result, util.VeryLateTime()))
+	}
 
-	// return nil
+	sqlBuilder.WriteString(strings.Join(valueStrings, ", "))
+	sqlBuilder.WriteString(" ON DUPLICATE KEY UPDATE success = true, status = ?, result = VALUES(result), redo_at = VALUES(redo_at)")
+
+	// 执行批量插入/更新
+	return db.Exec(
+		sqlBuilder.String(),
+		constance.OnFireStatusFinished,
+	).Error
 }
 
 func (m *MysqlOperator) UpdateOnFireLogFail(ctx context.Context, onFireLogID uint, errorMsg string) error {
