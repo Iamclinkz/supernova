@@ -3,13 +3,14 @@ package redis_operator
 import (
 	"context"
 	"encoding/json"
-	"github.com/go-redis/redis/v8"
-	"github.com/pkg/errors"
 	"strconv"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
 	"time"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/pkg/errors"
 )
 
 type RedisOperator struct {
@@ -228,6 +229,10 @@ func (r *RedisOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int,
 		return nil, err
 	}
 
+	if len(onFireLogKeys) == 0 {
+		return []*model.OnFireLog{}, nil
+	}
+
 	onFireLogStrs, err := r.redisClient.MGet(ctx, onFireLogKeys...).Result()
 	if err != nil {
 		return nil, err
@@ -438,6 +443,11 @@ func (r *RedisOperator) FetchRecentTriggers(ctx context.Context, maxCount int, n
 
 	if err != nil {
 		return nil, err
+	}
+
+	// 如果 triggerKeys 为空，直接返回一个空列表
+	if len(triggerKeys) == 0 {
+		return []*model.Trigger{}, nil
 	}
 
 	triggerStrs, err := r.redisClient.MGet(ctx, triggerKeys...).Result()

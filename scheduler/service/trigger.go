@@ -390,7 +390,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogsStandalone(closeCh chan
 			onFireLogs, err := s.scheduleOperator.FetchTimeoutOnFireLog(context.TODO(),
 				s.statisticsService.GetHandleTimeoutOnFireLogMaxCount(), now, beginHandleTime, 0)
 			if err != nil {
-				klog.Errorf("[%v]fetchTimeoutAndRefreshOnFireLogsStandalone error in standalone mode")
+				klog.Errorf("[%v]fetchTimeoutAndRefreshOnFireLogsStandalone error in standalone mode:%v", s.instanceID, err)
 				time.Sleep(1 * time.Second)
 				continue
 			}

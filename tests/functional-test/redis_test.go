@@ -24,9 +24,9 @@ func TestRedisStore(t *testing.T) {
 
 	start := time.Now()
 
-	var triggerCount = 50
+	var triggerCount = 50000
 
-	supernovaTest := util.StartTest(0, 3, klog.LevelError, util.StartHttpExecutors, nil)
+	supernovaTest := util.StartTest(0, 3, klog.LevelInfo, util.StartHttpExecutors, nil)
 	defer supernovaTest.EndTest()
 
 	builder := app.NewSchedulerBuilder()
