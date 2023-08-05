@@ -141,8 +141,7 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 	if retry && executorWrapper == nil && !onFireLog.AtLeastOnce {
 		klog.Errorf("[%v]retry onFireLog:%v can not find executor", s.instanceID, onFireLog.ID)
 		onAtLeastOnceFail(onFireLog, job)
-		//todo 先这么处理一下吧，来不及了TAT
-		_ = s.onFireService.UpdateOnFireLogSuccess(context.TODO(), onFireLog.ID, "retry onFireLog can not find executor")
+		_ = s.onFireService.UpdateOnFireLogStop(context.TODO(), onFireLog.ID, "can not find executor for retry onFireLog")
 		return fmt.Errorf("retry onFireLog:%v can not find executor", onFireLog.ID)
 	}
 

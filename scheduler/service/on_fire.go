@@ -98,8 +98,14 @@ func (s *OnFireService) batchUpdateOnFireLogsSuccess() {
 		timeout.Stop()
 
 		if len(buffer) > 0 {
-			if err := s.scheduleOperator.UpdateOnFireLogsSuccess(context.TODO(), buffer); err != nil {
-				klog.Errorf("[%v]batchUpdateOnFireLogsSuccess error: %v", s.instanceID, err)
+			for i := 0; i < 3; i++ {
+				//经过n次测试，Mysql下，这里特别特别小的概率会出现两个Scheduler进程更新同一个OnFireLog成功的情况，这样这1000条都会失败，
+				//因为成功应该强制覆盖之前的全部结果，所以可以无脑重试。这种情况极少，所以不做特殊处理了
+				if err := s.scheduleOperator.UpdateOnFireLogsSuccess(context.TODO(), buffer); err != nil {
+					klog.Errorf("[%v]batchUpdateOnFireLogsSuccess error: %v", s.instanceID, err)
+				} else {
+					break
+				}
 			}
 			buffer = buffer[:0]
 		}

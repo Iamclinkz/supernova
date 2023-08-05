@@ -140,7 +140,7 @@ func (m *MysqlOperator) UpdateOnFireLogStop(ctx context.Context, onFireLogID uin
 
 	// 更新满足条件的记录
 	return db.Model(&dao.OnFireLog{}).
-		Where("id = ?", onFireLogID).
+		Where("id = ? AND success != true", onFireLogID).
 		Updates(map[string]interface{}{
 			"status":  constance.OnFireStatusFinished,
 			"result":  msg,
