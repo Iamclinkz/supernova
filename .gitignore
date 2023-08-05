@@ -1,5 +1,6 @@
 scheduler/build/*
-stress-test/tests/*.log
+tests/functional-test/*.log
+tests/log/*
 executor-example/http-executor/build/*
 executor-example/http-executor-k8s/build/*
 executor-example/shell-executor/build/*

@@ -7,7 +7,6 @@ import (
 	"supernova/executor/processor"
 	"supernova/pkg/session/trace"
 	processor_plugin_shell "supernova/processor-plugin/processor-plugin-shell"
-	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
 )
@@ -50,7 +49,5 @@ func main() {
 		panic(err)
 	}
 
-	go executor.Start()
-
-	time.Sleep(12 * time.Hour)
+	executor.Start()
 }

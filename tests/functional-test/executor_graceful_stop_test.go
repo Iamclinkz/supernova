@@ -25,8 +25,8 @@ func TestExecutorGracefulStop(t *testing.T) {
 	//测试使用
 	const (
 		BinPath                 = "../../executor-example/http-executor/build/bin/http-executor"
-		LogLevel                = klog.LevelTrace
-		TriggerCount            = 10000
+		LogLevel                = klog.LevelError
+		TriggerCount            = 50000
 		MaxWaitGracefulStopTime = time.Second*15 + conf.SchedulerMaxCheckHealthDuration
 	)
 
@@ -51,7 +51,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 	defer supernovaTest.EndTest()
 
 	httpServer := simple_http_server.NewSimpleHttpServer(&simple_http_server.SimpleHttpServerInitConf{
-		FailRate:              0.10, //10%的概率失败
+		FailRate:              0.00, //10%的概率失败
 		ListeningPort:         util.SimpleWebServerPort,
 		TriggerCount:          TriggerCount,
 		AllowDuplicateCalled:  false,

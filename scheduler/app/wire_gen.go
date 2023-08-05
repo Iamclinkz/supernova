@@ -22,9 +22,9 @@ func genScheduler(instanceID string, OTelConfig *trace.OTelConfig, tracerProvide
 	jobService := service.NewJobService(scheduleOperator, statisticsService)
 	triggerService := service.NewTriggerService(scheduleOperator, statisticsService, jobService, standalone, instanceID)
 	onFireService := service.NewOnFireService(scheduleOperator, statisticsService, instanceID)
-	executorManageService := service.NewExecutorManageService(statisticsService, client)
+	executorManageService := service.NewExecutorManageService(statisticsService, client, instanceID)
 	executorRouteService := service.NewExecutorRouteService(executorManageService)
-	scheduleService := service.NewScheduleService(statisticsService, jobService, triggerService, onFireService, executorRouteService, schedulerWorkerCount, executorManageService, OTelConfig, standalone)
+	scheduleService := service.NewScheduleService(statisticsService, jobService, triggerService, onFireService, executorRouteService, schedulerWorkerCount, executorManageService, OTelConfig, standalone, instanceID)
 	scheduler := newSchedulerInner(instanceID, standalone, OTelConfig, scheduleOperator, client, tracerProvider, meterProvider, scheduleService, statisticsService, executorRouteService, executorManageService, jobService, triggerService, onFireService)
 	return scheduler, nil
 }

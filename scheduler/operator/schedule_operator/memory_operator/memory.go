@@ -243,31 +243,34 @@ func (m *MemoryOperator) UpdateOnFireLogsSuccess(ctx context.Context, onFireLogs
 	m.onFireLock.Lock()
 	defer m.onFireLock.Unlock()
 
-	fire, ok := m.onFireLogs[onFireLogID]
-	if !ok {
-		return schedule_operator.ErrNotFound
-	}
-
-	if fire.Status == constance.OnFireStatusFinished {
-		return errors.New("already finished")
-	}
-
-	if item := m.onFireLogRedoAtTree.Delete(fire); item == nil {
-		_, ok := tmpMap[onFireLogID]
+	for _, mf := range onFireLogs {
+		fire, ok := m.onFireLogs[mf.ID]
 		if !ok {
-			panic("")
+			return schedule_operator.ErrNotFound
 		}
+
+		if fire.Status == constance.OnFireStatusFinished {
+			return errors.New("already finished")
+		}
+
+		if item := m.onFireLogRedoAtTree.Delete(fire); item == nil {
+			_, ok := tmpMap[mf.ID]
+			if !ok {
+				panic("")
+			}
+		}
+
+		tmpMap[mf.ID] = struct{}{}
+		fire.Success = true
+		fire.Status = constance.OnFireStatusFinished
+		fire.Result = mf.Result
+		fire.RedoAt = util.VeryLateTime()
+		fire.UpdatedAt = time.Now()
+
+		m.currentUnFinishOnFireLog.Add(-1)
+		m.finishedOnFireLog.Add(1)
 	}
 
-	tmpMap[onFireLogID] = struct{}{}
-	fire.Success = true
-	fire.Status = constance.OnFireStatusFinished
-	fire.Result = onFireLogs
-	fire.RedoAt = util.VeryLateTime()
-	fire.UpdatedAt = time.Now()
-
-	m.currentUnFinishOnFireLog.Add(-1)
-	m.finishedOnFireLog.Add(1)
 	return nil
 }
 

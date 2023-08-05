@@ -204,13 +204,14 @@ func (r *RedisOperator) UpdateOnFireLogsSuccess(ctx context.Context, onFireLogs 
 	ID     uint
 	Result string
 }) error {
-	onFireKey := "onFireLog:" + strconv.Itoa(int(onFireLogID))
+	//todo
+	// onFireKey := "onFireLog:" + strconv.Itoa(int(onFireLogID))
 
-	err := r.redisClient.ZRem(ctx, "onFireLogRedoAt", onFireKey).Err()
+	// err := r.redisClient.ZRem(ctx, "onFireLogRedoAt", onFireKey).Err()
 
-	if err != nil {
-		return err
-	}
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }

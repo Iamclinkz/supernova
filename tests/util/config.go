@@ -34,3 +34,8 @@ var (
 		CollectorEndpointPort: "4317",
 	}
 )
+
+var (
+	GracefulStoppedExecutorLogPath = "/exiasun-cbs/codes/go/supernova/tests/log/graceful_stopped_executor.log"
+	KilledSchedulerLogPath         = "/exiasun-cbs/codes/go/supernova/tests/log/killed_scheduler.log"
+)

@@ -1,14 +1,13 @@
 package simple_http_server
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"log"
 	"math/rand"
-	"net/http"
-	"strconv"
 	"sync"
+	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 type SimpleHttpServer struct {
@@ -17,6 +16,11 @@ type SimpleHttpServer struct {
 	mu              sync.Mutex
 	calledCount     []int //每个trigger执行次数
 	successCount    []int //每个trigger成功执行次数
+	shutdownCh      chan struct{}
+
+	firstRequestTime  time.Time
+	lastRequestTime   time.Time
+	totalRequestCount int64
 }
 
 func NewSimpleHttpServer(initConf *SimpleHttpServerInitConf, checkConf *SimpleHttpServerCheckConf) *SimpleHttpServer {
@@ -26,42 +30,21 @@ func NewSimpleHttpServer(initConf *SimpleHttpServerInitConf, checkConf *SimpleHt
 		mu:              sync.Mutex{},
 		calledCount:     make([]int, initConf.TriggerCount),
 		successCount:    make([]int, initConf.TriggerCount),
+		shutdownCh:      make(chan struct{}),
 	}
 }
 
 func (s *SimpleHttpServer) Start() {
+	log.Printf("SimpleHttpServer started on port:%v\n", s.serveConfig.ListeningPort)
 	router := gin.New()
 
-	router.POST("/test", func(c *gin.Context) {
-		paramJSON := c.GetHeader("param")
-		if paramJSON == "" {
-			panic("")
-		}
-		var param map[string]string
-		err := json.Unmarshal([]byte(paramJSON), &param)
-		if err != nil {
-			panic("")
-		}
-		if param[TriggerIDFieldName] == "" {
-			panic("")
-		}
+	router.POST("/test", s.handleTest)
+	router.GET("/view", s.handleView)
+	router.GET("/shutdown", s.handleShutdown)
+	router.GET("/executor-log", s.handleExecutorLog)
+	router.GET("/scheduler-log", s.handleSchedulerLog)
 
-		var onFireID uint
-		if intID, err := strconv.Atoi(param[TriggerIDFieldName]); err != nil {
-			panic(err)
-		} else {
-			onFireID = uint(intID)
-		}
-
-		fail := s.IsFail(onFireID)
-		if fail {
-			c.String(http.StatusInternalServerError, "Error")
-		} else {
-			c.String(http.StatusOK, "OK")
-		}
-	})
-
-	err := router.Run(fmt.Sprintf(":%d", s.serveConfig.ListeningPort))
+	err := router.Run(fmt.Sprintf("0.0.0.0:%d", s.serveConfig.ListeningPort))
 	if err != nil {
 		panic("")
 	}

@@ -10,14 +10,17 @@ import (
 )
 
 type Result struct {
-	SuccessCount       int    //成功执行的任务个数
-	HaveNotCalledCount int    //一次都没执行过的任务个数
-	CalledButFailCount int    //执行过，但是最终结果是失败的任务个数
-	CalledTotal        int    //总计被执行的次数
-	UncalledTriggers   []uint //一次都没有执行过的trigger
-	FailedTriggers     []uint //到最后，仍然没有执行成功的trigger
-	CalledTwiceOrMore  []uint
-	FailTriggerRate    float32 //失败的trigger的个数
+	SuccessCount         int    //成功执行的任务个数
+	HaveNotCalledCount   int    //一次都没执行过的任务个数
+	CalledButFailCount   int    //执行过，但是最终结果是失败的任务个数
+	CalledTotal          int    //总计被执行的次数
+	UncalledTriggers     []uint //一次都没有执行过的trigger
+	FailedTriggers       []uint //到最后，仍然没有执行成功的trigger
+	CalledTwiceOrMore    []uint
+	FailTriggerRate      float32 //失败的trigger的个数
+	FirstRequestTime     time.Time
+	LastRequestTime      time.Time
+	AvgRequestsPerSecond float64
 }
 
 func (r *Result) String() string {
@@ -64,13 +67,18 @@ func (s *SimpleHttpServer) CheckResult() (error, *Result) {
 }
 
 func (s *SimpleHttpServer) GetResult() *Result {
-	result := &Result{
-		UncalledTriggers: make([]uint, 0),
-		FailedTriggers:   make([]uint, 0),
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	elapsedTime := s.lastRequestTime.Sub(s.firstRequestTime).Seconds()
+	avgRequestsPerSecond := float64(s.totalRequestCount) / elapsedTime
+	result := &Result{
+		UncalledTriggers:     make([]uint, 0),
+		FailedTriggers:       make([]uint, 0),
+		FirstRequestTime:     s.firstRequestTime,
+		LastRequestTime:      s.lastRequestTime,
+		AvgRequestsPerSecond: avgRequestsPerSecond,
+	}
 
 	for triggerID := 0; triggerID < s.serveConfig.TriggerCount; triggerID++ {
 		successCount := s.successCount[triggerID]
@@ -133,4 +141,8 @@ func (s *SimpleHttpServer) WaitResult(maxWaitTime time.Duration, exit bool) bool
 			time.Sleep(1 * time.Second)
 		}
 	}
+}
+
+func (s *SimpleHttpServer) WaitStop() {
+	<-s.shutdownCh
 }

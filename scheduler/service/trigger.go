@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"log"
+
 	"github.com/cloudwego/kitex/pkg/klog"
 )
 
@@ -179,8 +181,8 @@ func (s *TriggerService) AddTrigger(trigger *model.Trigger) error {
 	trigger.Status = constance.TriggerStatusNormal
 	trigger.TriggerLastTime = util.VeryEarlyTime()
 	if trigger.FailRetryInterval < time.Second {
-		//重试间隔至少1s
-		trigger.FailRetryInterval = time.Second
+		//重试间隔至少2s
+		trigger.FailRetryInterval = 2 * time.Second
 	}
 
 	if err := s.scheduleOperator.InsertTrigger(context.TODO(), trigger); err != nil {
@@ -244,6 +246,10 @@ func (s *TriggerService) AddTriggers(triggers []*model.Trigger) error {
 	for _, trigger := range triggers {
 		if err := s.ValidateTrigger(trigger); err != nil {
 			return fmt.Errorf("error trigger:%+v", trigger)
+		}
+
+		if trigger.FailRetryInterval < time.Second {
+			trigger.FailRetryInterval = 2 * time.Second
 		}
 		trigger.Status = constance.TriggerStatusNormal
 		trigger.TriggerLastTime = util.VeryEarlyTime()
@@ -412,7 +418,6 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogsStandalone(closeCh chan
 					if err = s.scheduleOperator.UpdateOnFireLogRedoAt(context.TODO(), onFireLog); err == nil {
 						//我们抢占这个待执行的过期OnFireLog成功
 						mu.Lock()
-						onFireLog.ShouldFireAt = time.Now()
 						ret = append(ret, onFireLog)
 						mu.Unlock()
 					} else {
@@ -435,6 +440,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogsStandalone(closeCh chan
 			wg.Wait()
 
 			for _, onFireLog := range ret {
+				log.Printf("[%v]find:%v", s.instanceID, onFireLog.ID)
 				onFireLogCh <- onFireLog
 			}
 

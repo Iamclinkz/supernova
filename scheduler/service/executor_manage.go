@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"supernova/pkg/constance"
 	"supernova/pkg/discovery"
@@ -15,6 +16,7 @@ import (
 )
 
 type ExecutorManageService struct {
+	instanceID string
 	shutdownCh chan struct{}
 
 	executorLock     sync.Mutex           //CheckExecutorAlive和updateExecutor，对executors的访问互斥的锁
@@ -28,8 +30,10 @@ type ExecutorManageService struct {
 	onJobResponseNotifyFuncFunc executor_operator.OnJobResponseNotifyFunc
 }
 
-func NewExecutorManageService(statisticsService *StatisticsService, discoveryClient discovery.DiscoverClient) *ExecutorManageService {
+func NewExecutorManageService(statisticsService *StatisticsService,
+	discoveryClient discovery.DiscoverClient, instanceID string) *ExecutorManageService {
 	return &ExecutorManageService{
+		instanceID:              instanceID,
 		shutdownCh:              make(chan struct{}),
 		executors:               make(map[string]*Executor),
 		statisticsService:       statisticsService,
@@ -151,7 +155,7 @@ func (s *ExecutorManageService) updateExecutor() {
 			}
 
 			if err == nil && status.GracefulStopped {
-				klog.Infof("find executor:%v graceful stopping", e.ServiceData.InstanceId)
+				log.Printf("find executor:%v graceful stopping", e.ServiceData.InstanceId)
 			}
 		}(newExecutor, counter)
 		counter++
@@ -170,7 +174,7 @@ func (s *ExecutorManageService) updateExecutor() {
 
 	s.executors = newExecutors
 
-	klog.Infof("new executors:%v", ExecutorMapToString(newExecutors))
+	log.Printf("new executors:%v", ExecutorMapToString(newExecutors))
 
 	s.NotifyExecutorListener()
 	s.checkSequenceNum++

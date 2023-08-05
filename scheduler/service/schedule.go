@@ -1,9 +1,12 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"supernova/pkg/api"
 	trace2 "supernova/pkg/session/trace"
@@ -22,6 +25,7 @@ import (
 )
 
 type ScheduleService struct {
+	instanceID            string
 	stopCh                chan struct{}
 	statisticsService     *StatisticsService
 	jobService            *JobService
@@ -43,7 +47,8 @@ type ScheduleService struct {
 func NewScheduleService(statisticsService *StatisticsService,
 	jobService *JobService, triggerService *TriggerService, onFireService *OnFireService,
 	executorSelectService *ExecutorRouteService,
-	workerCount int, executorManageService *ExecutorManageService, oTelConfig *trace2.OTelConfig, standalone bool) *ScheduleService {
+	workerCount int, executorManageService *ExecutorManageService, oTelConfig *trace2.OTelConfig, standalone bool,
+	instanceID string) *ScheduleService {
 	tw, _ := util.NewTimeWheel(time.Millisecond*200, 512, util.TickSafeMode())
 	ret := &ScheduleService{
 		stopCh:                make(chan struct{}),
@@ -62,6 +67,7 @@ func NewScheduleService(statisticsService *StatisticsService,
 		workerCount:         workerCount,
 		oTelConfig:          oTelConfig,
 		standalone:          standalone,
+		instanceID:          instanceID,
 	}
 	if oTelConfig.EnableTrace {
 		ret.tracer = otel.Tracer("ScheduleTracer")
@@ -102,7 +108,7 @@ func (s *ScheduleService) Stop() {
 	close(s.stopCh)
 	s.timeWheel.Stop()
 	s.wg.Wait()
-	klog.Infof("ScheduleService worker, timeWheel, scheduler stopped")
+	klog.Infof("[%v]ScheduleService worker, timeWheel, scheduler stopped", s.instanceID)
 
 	//todo 优雅退出？要不要处理完管道里的所有消息？
 }
@@ -132,6 +138,14 @@ func (s *ScheduleService) fire(onFireLog *model.OnFireLog, retry bool) error {
 	}
 
 	executorWrapper, err := s.executorSelectService.ChooseJobExecutor(job, onFireLog, retry)
+	if retry && executorWrapper == nil && !onFireLog.AtLeastOnce {
+		klog.Errorf("[%v]retry onFireLog:%v can not find executor", s.instanceID, onFireLog.ID)
+		onAtLeastOnceFail(onFireLog, job)
+		//todo 先这么处理一下吧，来不及了TAT
+		_ = s.onFireService.UpdateOnFireLogSuccess(context.TODO(), onFireLog.ID, "retry onFireLog can not find executor")
+		return fmt.Errorf("retry onFireLog:%v can not find executor", onFireLog.ID)
+	}
+
 	if err != nil || executorWrapper == nil {
 		_ = s.onFireService.UpdateOnFireLogFail(context.TODO(), onFireLog.ID, "No matched executors")
 		s.statisticsService.OnFireFail(FireFailReasonNoExecutor)
@@ -269,4 +283,40 @@ func (s *ScheduleService) checkTimeoutOnFireLogs() {
 		//s.triggerService.fetchTimeoutAndRefreshOnFireLogs(s.stopCh, s.overtimeOnFireLogCh)
 		s.triggerService.fetchTimeoutAndRefreshOnFireLogsStandalone(s.stopCh, s.overtimeOnFireLogCh)
 	}
+}
+
+// onAtLeastOnceFail tmp
+func onAtLeastOnceFail(failLog *model.OnFireLog, job *model.Job) {
+	data := map[string]interface{}{
+		"chatid":  "@all_group",
+		"msgtype": "text",
+		"text": map[string]string{
+			"content": ToAlarmMsg(failLog, job),
+		},
+	}
+	payload, err := json.Marshal(data)
+	if err != nil {
+		panic(err)
+	}
+
+	url := "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=a7805840-4f55-471b-b337-8fecf5fc07dc"
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+	if err != nil {
+		panic(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+}
+
+func ToAlarmMsg(onFire *model.OnFireLog, job *model.Job) string {
+	content := fmt.Sprintf("OnFireLog：\n执行ID：%d\n任务名称: %s\n触发器ID：%d\n任务ID：%d\n最大重试次数：%d\n当前剩余重试次数：%d\n执行器ID：%s\n执行参数：%v\n"+
+		"尝试重试失败，\n原因：无法找到合适的执行器。\n上次执行失败原因：%s，\n请选择是否手动执行。", onFire.ID, job.Name, onFire.TriggerID, onFire.JobID, onFire.TryCount,
+		onFire.LeftTryCount, onFire.ExecutorInstance, onFire.Param, onFire.Result)
+	return content
 }

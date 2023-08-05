@@ -108,7 +108,7 @@ func (m *MysqlOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int,
 
 	var dOnFireLogs []*dao.OnFireLog
 	err := db.Model(&dao.OnFireLog{}).
-		Select("id, trigger_id, job_id, executor_instance, param, redo_at, updated_at,trace_context").
+		Select("id, trigger_id, job_id, executor_instance, param, redo_at, updated_at,trace_context,result,try_count,left_try_count,fail_retry_interval,execute_timeout").
 		Where("redo_at BETWEEN ? AND ?", noEarlyThan, noLaterThan).
 		Where("status != ?", constance.OnFireStatusFinished).
 		Where("left_try_count > 0").
@@ -159,12 +159,12 @@ func (m *MysqlOperator) UpdateOnFireLogsSuccess(ctx context.Context, onFireLogs 
 
 	// 构建批量插入/更新语句
 	sqlBuilder := strings.Builder{}
-	sqlBuilder.WriteString("INSERT INTO on_fire_log (id, success, status, result, redo_at) VALUES ")
+	sqlBuilder.WriteString("INSERT INTO t_on_fire (id ,success, status, result, redo_at) VALUES ")
 
 	valueStrings := make([]string, 0, len(onFireLogs))
 	for _, onFireLog := range onFireLogs {
 		valueStrings = append(valueStrings, fmt.Sprintf("(%d, true, %d, '%s', '%s')",
-			onFireLog.ID, constance.OnFireStatusFinished, onFireLog.Result, util.VeryLateTime()))
+			onFireLog.ID, constance.OnFireStatusFinished, onFireLog.Result, util.VeryLateTime().Format("2006-01-02 15:04:05")))
 	}
 
 	sqlBuilder.WriteString(strings.Join(valueStrings, ", "))

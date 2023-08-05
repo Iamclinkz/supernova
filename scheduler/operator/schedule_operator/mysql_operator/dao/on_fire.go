@@ -10,10 +10,10 @@ import (
 type OnFireLog struct {
 	ID                uint                   `gorm:"column:id;primarykey"`
 	UpdatedAt         time.Time              `gorm:"column:updated_at"`
-	TriggerID         uint                   `gorm:"column:trigger_id;not null;"`
-	JobID             uint                   `gorm:"column:job_id;not null;"`
-	Status            constance.OnFireStatus `gorm:"column:status;type:tinyint(4);not null"`
-	TryCount          int                    `gorm:"column:try_count;not null"`
+	TriggerID         uint                   `gorm:"column:trigger_id;"`
+	JobID             uint                   `gorm:"column:job_id;"`
+	Status            constance.OnFireStatus `gorm:"column:status;type:tinyint(4);"`
+	TryCount          int                    `gorm:"column:try_count;"`
 	LeftTryCount      int                    `gorm:"column:left_try_count"`
 	ExecutorInstance  string                 `gorm:"column:executor_instance"`
 	RedoAt            time.Time              `gorm:"column:redo_at;not null;index"`
@@ -23,6 +23,7 @@ type OnFireLog struct {
 	TraceContext      string                 `gorm:"trace_context"`
 	Success           bool                   `gorm:"success"`
 	Result            string                 `gorm:"result;type:varchar(256)"`
+	ExecuteTimeout    time.Duration          `gorm:"execute_timeout"`
 }
 
 func (o *OnFireLog) TableName() string {
@@ -55,6 +56,7 @@ func FromModelOnFireLog(mOnFireLog *model.OnFireLog) (*OnFireLog, error) {
 		TraceContext:      mOnFireLog.TraceContext,
 		Success:           mOnFireLog.Success,
 		Result:            mOnFireLog.Result,
+		ExecuteTimeout:    mOnFireLog.ExecuteTimeout,
 	}, nil
 }
 
@@ -83,5 +85,6 @@ func ToModelOnFireLog(dOnFireLog *OnFireLog) (*model.OnFireLog, error) {
 		TraceContext:      dOnFireLog.TraceContext,
 		Success:           dOnFireLog.Success,
 		Result:            dOnFireLog.Result,
+		ExecuteTimeout:    dOnFireLog.ExecuteTimeout,
 	}, nil
 }

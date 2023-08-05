@@ -2,11 +2,12 @@ package service
 
 import (
 	"context"
-	"github.com/cloudwego/kitex/pkg/klog"
 	"supernova/scheduler/model"
 	"supernova/scheduler/operator/schedule_operator"
 	"sync"
 	"time"
+
+	"github.com/cloudwego/kitex/pkg/klog"
 )
 
 type OnFireService struct {
@@ -14,30 +15,25 @@ type OnFireService struct {
 	scheduleOperator  schedule_operator.Operator
 	statisticsService *StatisticsService
 
-	successBuffer []struct {
+	stopCh   chan struct{}
+	wg       sync.WaitGroup
+	updateCh chan struct {
 		ID     uint
 		Result string
 	}
-	successBufferLock sync.Mutex
-	successBufferCond *sync.Cond
-	stopCh            chan struct{}
-	wg                sync.WaitGroup
 }
 
 func NewOnFireService(jobOperator schedule_operator.Operator, statisticsService *StatisticsService, instanceID string) *OnFireService {
-	successBufferCond := sync.NewCond(&sync.Mutex{})
 	return &OnFireService{
 		scheduleOperator:  jobOperator,
 		statisticsService: statisticsService,
-		successBuffer: make([]struct {
-			ID     uint
-			Result string
-		}, 0),
-		successBufferLock: sync.Mutex{},
-		successBufferCond: successBufferCond,
 		instanceID:        instanceID,
 		stopCh:            make(chan struct{}),
 		wg:                sync.WaitGroup{},
+		updateCh: make(chan struct {
+			ID     uint
+			Result string
+		}, 10240),
 	}
 }
 func (s *OnFireService) UpdateOnFireLogExecutorStatus(ctx context.Context, onFireLog *model.OnFireLog) error {
@@ -49,15 +45,10 @@ func (s *OnFireService) UpdateOnFireLogFail(ctx context.Context, onFireLogID uin
 }
 
 func (s *OnFireService) UpdateOnFireLogSuccess(ctx context.Context, onFireLogID uint, result string) error {
-	s.successBufferLock.Lock()
-	s.successBuffer = append(s.successBuffer, struct {
+	s.updateCh <- struct {
 		ID     uint
 		Result string
-	}{ID: onFireLogID, Result: result})
-	s.successBufferLock.Unlock()
-
-	// 通知批量更新的goroutine
-	s.successBufferCond.Signal()
+	}{ID: onFireLogID, Result: result}
 
 	return nil
 }
@@ -73,41 +64,45 @@ func (s *OnFireService) Stop() {
 }
 
 func (s *OnFireService) batchUpdateOnFireLogsSuccess() {
-	const (
-		batchSize         = 10000
+	var (
+		batchSize         = 1000
 		maxBufferDuration = 1 * time.Second
+
+		buffer = make([]struct {
+			ID     uint
+			Result string
+		}, 0, 1024)
 	)
-	klog.Infof("[%v]batchUpdateOnFireLogsSuccess stopped", s.instanceID)
-	select {
-	case <-s.stopCh:
-		klog.Infof("[%v]batchUpdateOnFireLogsSuccess stopped", s.instanceID)
-		s.wg.Done()
-		return
-	default:
-	}
+	klog.Infof("[%v]batchUpdateOnFireLogsSuccess start", s.instanceID)
 
 	for {
-		s.successBufferCond.L.Lock()
-		timeout := time.After(maxBufferDuration)
-		for len(s.successBuffer) < batchSize {
-			select {
-			case <-timeout:
-				break
-			default:
-				s.successBufferCond.Wait()
-			}
-		}
-		s.successBufferCond.L.Unlock()
+		timeout := time.NewTimer(maxBufferDuration)
 
-		s.successBufferLock.Lock()
-		if len(s.successBuffer) > 0 {
-			if err := s.scheduleOperator.UpdateOnFireLogsSuccess(context.TODO(), s.successBuffer); err != nil {
-				klog.Errorf("[%v]batchUpdateOnFireLogsSuccess error: %v", s.instanceID, err)
-			} else {
-				s.successBuffer = s.successBuffer[:0]
+		timeoutCame := false
+		for len(buffer) < batchSize {
+			select {
+			case <-s.stopCh:
+				klog.Infof("[%v]batchUpdateOnFireLogsSuccess stop", s.instanceID)
+				s.wg.Done()
+				return
+			case log := <-s.updateCh:
+				buffer = append(buffer, log)
+			case <-timeout.C:
+				timeoutCame = true
+			}
+			if timeoutCame {
+				break
 			}
 		}
-		s.successBufferLock.Unlock()
+
+		timeout.Stop()
+
+		if len(buffer) > 0 {
+			if err := s.scheduleOperator.UpdateOnFireLogsSuccess(context.TODO(), buffer); err != nil {
+				klog.Errorf("[%v]batchUpdateOnFireLogsSuccess error: %v", s.instanceID, err)
+			}
+			buffer = buffer[:0]
+		}
 	}
 }
 
