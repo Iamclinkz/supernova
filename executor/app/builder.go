@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"log"
 	"strconv"
 	"supernova/executor/processor"
 	"supernova/pkg/constance"
@@ -94,6 +95,11 @@ func (b *ExecutorBuilder) WithConsulDiscovery(consulHost, consulPort string,
 }
 
 func (b *ExecutorBuilder) WithK8sDiscovery(namespace, k8sCheckHealthPort string) *ExecutorBuilder {
+	if namespace == "" || k8sCheckHealthPort == "" {
+		panic("")
+	} else {
+		log.Printf("ns:%v, port:%v\n", namespace, k8sCheckHealthPort)
+	}
 	discoveryClient, err := discovery.NewDiscoveryClient(
 		discovery.TypeK8s,
 		discovery.NewK8sMiddlewareConfig(namespace),

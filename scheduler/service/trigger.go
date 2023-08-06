@@ -13,8 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"log"
-
 	"github.com/cloudwego/kitex/pkg/klog"
 )
 
@@ -440,7 +438,7 @@ func (s *TriggerService) fetchTimeoutAndRefreshOnFireLogsStandalone(closeCh chan
 			wg.Wait()
 
 			for _, onFireLog := range ret {
-				log.Printf("[%v]find:%v", s.instanceID, onFireLog.ID)
+				klog.Debugf("[%v]find onFireLog:%v", s.instanceID, onFireLog.ID)
 				onFireLogCh <- onFireLog
 			}
 

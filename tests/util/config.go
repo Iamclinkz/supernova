@@ -10,6 +10,9 @@ var (
 	SchedulerServePortStart = 8080
 	SchedulerPort           = SchedulerServePortStart
 	SchedulerAddress        = "http://9.134.5.191:" + strconv.Itoa(SchedulerPort)
+
+	K8sSchedulerPort    = 5050
+	K8sSchedulerAddress = "http://localhost:" + strconv.Itoa(K8sSchedulerPort)
 )
 
 var (

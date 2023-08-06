@@ -22,6 +22,7 @@ var LogLevel = flag.Int("logLevel", 5, "log level")
 var HealthCheckPort = flag.Int("healthCheckPort", 9090, "health check port")
 var ConsulHost = flag.String("consulHost", "9.134.5.191", "consul host")
 var ConsulPort = flag.Int("consulPort", 8500, "consul port")
+var InstanceID = flag.String("instanceID", "instance-unknown", "instanceID")
 
 func main() {
 	flag.Parse()
@@ -31,7 +32,7 @@ func main() {
 	executor, err := builder.
 		WithCustomTag("A").
 		WithResourceTag("LargeMemory").
-		WithInstanceID("instance-1").
+		WithInstanceID(*InstanceID).
 		WithConsulDiscovery(*ConsulHost, strconv.Itoa(*ConsulPort), *HealthCheckPort).
 		WithProcessor(httpExecutor, &processor.ProcessConfig{
 			Async:          true,

@@ -30,9 +30,13 @@ func main() {
 	}
 
 	builder.WithOTelConfig(&trace.OTelConfig{
-		EnableTrace:   false,
-		EnableMetrics: false,
+		//todo 从设置指定
+		EnableTrace:    false,
+		EnableMetrics:  true,
+		InstrumentConf: &setupConfig.OTelConf,
 	})
+
+	builder.WithInstanceID(setupConfig.InstanceID)
 
 	scheduler, err := builder.Build()
 	if err != nil {

@@ -61,6 +61,7 @@ func NewStatisticsService(instanceID string, oTelConfig *trace2.OTelConfig,
 		ret.meter = otel.Meter("StatisticMeter")
 		ret.defaultMetricsOption = metric.WithAttributes(
 			attribute.Key("InstanceID").String(instanceID),
+			attribute.Key("env").String(util.GetEnv()),
 		)
 
 		var err error
@@ -127,7 +128,7 @@ func (s *StatisticsService) WatchScheduler() {
 			if tmp == 0 {
 				tmp = 1
 			}
-			s.currentSchedulerCount = len(s.discoveryClient.DiscoverServices(constance.SchedulerServiceName))
+			s.currentSchedulerCount = tmp
 			klog.Tracef("current scheduler count:%v", s.currentSchedulerCount)
 			time.Sleep(2 * time.Second)
 		}
@@ -261,7 +262,7 @@ func (s *StatisticsService) RecordScheduleDelay(delay time.Duration) {
 
 // GetHandleTriggerMaxCount 获取本次最多获取多少条待触发的Trigger
 func (s *StatisticsService) GetHandleTriggerMaxCount() int {
-	return 200000
+	return 30000
 }
 
 // OnFireFail 任务扔给Executor执行失败

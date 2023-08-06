@@ -67,27 +67,27 @@ const mainViewTemplate = `
 		<th>值</th>
 	</tr>
 	<tr>
-		<td>返回成功数量</td>
+		<td>成功任务数量</td>
 		<td>{{.Result.SuccessCount}}</td>
 	</tr>
 	<tr>
-		<td>未成功TriggerID</td>
+		<td>一次都没有执行的任务数量</td>
 		<td>{{.Result.HaveNotCalledCount}}</td>
 	</tr>
 	<tr>
-		<td>未成功数量</td>
+		<td>执行过一次，但没执行第二次数量</td>
 		<td>{{.Result.CalledButFailCount}}</td>
 	</tr>
 	<tr>
-		<td>收到请求次数</td>
+		<td>共收到请求次数</td>
 		<td>{{.Result.CalledTotal}}</td>
 	</tr>
 	<tr>
-		<td>一次都没请求的TriggerID</td>
+		<td>一次都没请求的任务列表</td>
 		<td>{{.Result.UncalledTriggers}}</td>
 	</tr>
 	<tr>
-		<td>仍没有成功的TriggerID</td>
+		<td>未成功任务列表</td>
 		<td>{{.Result.FailedTriggers}}</td>
 	</tr>
 	<tr>
@@ -95,7 +95,7 @@ const mainViewTemplate = `
 		<td>{{.Result.FailTriggerRate}}</td>
 	</tr>
 	<tr>
-		<td>请求多次的TriggerID</td>
+		<td>发出多次请求的任务数量</td>
 		<td>{{.Result.CalledTwiceOrMore}}</td>
 	</tr>
 	<tr>

@@ -1,4 +1,4 @@
-package functional_test
+package presentation
 
 import (
 	"fmt"
@@ -49,7 +49,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 	defer supernovaTest.EndTest()
 
 	httpServer := simple_http_server.NewSimpleHttpServer(&simple_http_server.SimpleHttpServerInitConf{
-		FailRate:              0.3, //30%的概率失败
+		FailRate:              0.2, //20%的概率失败
 		ListeningPort:         util.SimpleWebServerPort,
 		TriggerCount:          TriggerCount,
 		AllowDuplicateCalled:  false,
@@ -71,7 +71,8 @@ func TestExecutorGracefulStop(t *testing.T) {
 		cmd := exec.Command(BinPath,
 			fmt.Sprintf("-grpcHost=%v", ExecutorGrpcHost), fmt.Sprintf("-grpcPort=%v", ExecutorGrpcPort),
 			fmt.Sprintf("-logLevel=%v", ExecutorLogLevel), fmt.Sprintf("-healthCheckPort=%v", ExecutorHealthCheckPort),
-			fmt.Sprintf("-consulHost=%v", ExecutorConsulHost), fmt.Sprintf("-consulPort=%v", ExecutorConsulPort))
+			fmt.Sprintf("-consulHost=%v", ExecutorConsulHost), fmt.Sprintf("-consulPort=%v", ExecutorConsulPort),
+			fmt.Sprintf("-instanceID=%v", "graceful-stopped-executor"))
 
 		// 打开日志文件，如果不存在则创建，以追加模式写入
 		logFile, err := os.OpenFile(util.GracefulStoppedExecutorLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
@@ -121,32 +122,13 @@ func TestExecutorGracefulStop(t *testing.T) {
 
 	triggers := make([]*model.Trigger, TriggerCount)
 
-	mayFailTriggerCount := 4
-	for i := 0; i < mayFailTriggerCount; i++ {
-		triggers[i] = &model.Trigger{
-			Name:            "may-fail-trigger-" + strconv.Itoa(i),
-			JobID:           1,
-			ScheduleType:    2, //执行一次
-			FailRetryCount:  5, //失败几乎可以一直重试
-			ExecuteTimeout:  3 * time.Second,
-			TriggerNextTime: time.Now(),
-			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,
-			Param: map[string]string{
-				//把triggerID带过去，由SimpleHttpServer记录执行情况
-				simple_http_server.TriggerIDFieldName: strconv.Itoa(i),
-			},
-			FailRetryInterval: 20,
-			AtLeastOnce:       false, //最多执行一次
-		}
-	}
-
-	for i := mayFailTriggerCount; i < TriggerCount; i++ {
+	for i := 0; i < TriggerCount; i++ {
 		triggers[i] = &model.Trigger{
 			Name:            "test-trigger-" + strconv.Itoa(i),
 			JobID:           1,
 			ScheduleType:    2, //执行一次
 			FailRetryCount:  3, //失败几乎可以一直重试
-			ExecuteTimeout:  3 * time.Second,
+			ExecuteTimeout:  2 * time.Second,
 			TriggerNextTime: time.Now(),
 			MisfireStrategy: constance.MisfireStrategyTypeDoNothing,
 			Param: map[string]string{

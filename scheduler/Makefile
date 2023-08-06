@@ -15,12 +15,15 @@ image-runnable:
 docker-build:
 	@echo "--------------------------------------Building docker image ${IMAGE_NAME}:${TAG}"
 	docker build -t ${IMAGE_NAME}:${TAG} .
+	- @docker rmi $(docker images --filter "dangling=true" -q)
 
 minikube-load:
 	@echo "--------------------------------------Load image to minikube: ${IMAGE_NAME}:${TAG}"
 	- minikube kubectl -- delete -f ${YAML}
-	minikube image load ${IMAGE_NAME}:${TAG} --overwrite=true
-	minikube kubectl -- apply -f ${YAML}
+# sleep 20
+# - minikube ssh docker rmi ${IMAGE_NAME}:${TAG}
+# minikube image load ${IMAGE_NAME}:${TAG} --overwrite=true
+# minikube kubectl -- apply -f ${YAML}
 
 all: build-binary
 

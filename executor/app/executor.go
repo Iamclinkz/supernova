@@ -172,7 +172,7 @@ func (e *Executor) GracefulStop() {
 	e.statisticsService.OnGracefulStop()
 
 	//4.等待一个服务发现周期
-	time.Sleep(conf.SchedulerMaxCheckHealthDuration + conf.DiscoveryMiddlewareCheckHeartBeatDuration)
+	time.Sleep(conf.SchedulerMaxCheckHealthDuration + conf.DiscoveryMiddlewareCheckHeartBeatDuration*2)
 
 	//5.等待所有任务处理结束
 	for {

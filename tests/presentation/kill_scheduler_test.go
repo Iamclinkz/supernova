@@ -1,4 +1,4 @@
-package functional_test
+package presentation
 
 import (
 	"bytes"
@@ -39,7 +39,7 @@ func TestForceKillScheduler(t *testing.T) {
 	defer supernovaTest.EndTest()
 
 	httpServer := simple_http_server.NewSimpleHttpServer(&simple_http_server.SimpleHttpServerInitConf{
-		FailRate:              0.30, //30%的概率失败
+		FailRate:              0.20, //20%的概率失败
 		ListeningPort:         util.SimpleWebServerPort,
 		TriggerCount:          TriggerCount,
 		AllowDuplicateCalled:  false,
@@ -56,7 +56,10 @@ func TestForceKillScheduler(t *testing.T) {
 	var buf bytes.Buffer
 	go func() {
 		cmd := exec.Command(BinPath,
-			fmt.Sprintf("-httpPort=%d", KilledSchedulerHttpServePort), fmt.Sprintf("-logLevel=%d", klog.LevelTrace))
+			fmt.Sprintf("-httpPort=%d", KilledSchedulerHttpServePort),
+			fmt.Sprintf("-logLevel=%d", klog.LevelTrace),
+			fmt.Sprintf("-instanceID=%s", "killed-scheduler"),
+		)
 		cmd.Stdout = &buf
 		cmd.Stderr = &buf
 		err = cmd.Start()

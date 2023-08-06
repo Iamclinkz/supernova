@@ -72,25 +72,27 @@ func (s *OnFireService) batchUpdateOnFireLogsSuccess() {
 			ID     uint
 			Result string
 		}, 0, 1024)
+
+		shutdown bool
 	)
+	defer s.wg.Done()
 	klog.Infof("[%v]batchUpdateOnFireLogsSuccess start", s.instanceID)
 
-	for {
+	for !shutdown {
 		timeout := time.NewTimer(maxBufferDuration)
 
 		timeoutCame := false
 		for len(buffer) < batchSize {
 			select {
 			case <-s.stopCh:
-				klog.Infof("[%v]batchUpdateOnFireLogsSuccess stop", s.instanceID)
-				s.wg.Done()
-				return
+				klog.Infof("[%v]batchUpdateOnFireLogsSuccess start to stop", s.instanceID)
+				shutdown = true
 			case log := <-s.updateCh:
 				buffer = append(buffer, log)
 			case <-timeout.C:
 				timeoutCame = true
 			}
-			if timeoutCame {
+			if timeoutCame || shutdown {
 				break
 			}
 		}

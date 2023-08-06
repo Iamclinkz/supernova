@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"supernova/pkg/util"
 	"supernova/scheduler/constance"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudwego/kitex/pkg/klog"
 	"gorm.io/gorm"
 )
 
@@ -33,6 +35,10 @@ var (
 )
 
 func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
+	var (
+		k8s = os.Getenv("env") == "k8s"
+	)
+
 	ret := &MysqlOperator{
 		db:             cli,
 		emptyOnFireLog: &dao.OnFireLog{},
@@ -41,31 +47,43 @@ func NewMysqlScheduleOperator(cli *dal.MysqlClient) (*MysqlOperator, error) {
 		emptyLock:      &dao.Lock{},
 	}
 
-	initTables := func() {
-		//todo 测试用，记得删掉
+	deleteTables := func() {
 		cli.DB().Migrator().DropTable(ret.emptyTrigger)
 		cli.DB().Migrator().DropTable(ret.emptyOnFireLog)
+		cli.DB().Migrator().DropTable(ret.emptyJob)
+		cli.DB().Migrator().DropTable(ret.emptyLock)
+	}
+
+	//todo 测试用，记得删掉
+	tryInitTables := func() {
 		if err := cli.DB().AutoMigrate(ret.emptyTrigger); err != nil {
-			panic(err)
+			klog.Errorf("create trigger table failed:%v", err)
 		}
 		if err := cli.DB().AutoMigrate(ret.emptyOnFireLog); err != nil {
-			panic(err)
+			klog.Errorf("create onFireLog table failed:%v", err)
 		}
 
-		cli.DB().Migrator().DropTable(ret.emptyJob)
-
-		cli.DB().Migrator().DropTable(ret.emptyLock)
 		if err := cli.DB().AutoMigrate(ret.emptyJob); err != nil {
-			panic(err)
+			klog.Errorf("create job table failed:%v", err)
 		}
 
 		if err := cli.DB().AutoMigrate(ret.emptyLock); err != nil {
-			panic(err)
+			klog.Errorf("create lock table failed:%v", err)
 		}
 		//初始化锁结构
 		cli.DB().Create(&dao.Lock{LockName: constance.FetchUpdateMarkTriggerLockName})
 	}
-	dropCreateTableOnce.Do(initTables)
+
+	if !k8s {
+		//测试环境下直接删表即可
+		dropCreateTableOnce.Do(func() {
+			deleteTables()
+			tryInitTables()
+		})
+	} else {
+		//k8s环境下，不删表，因为要演示重启。。
+		dropCreateTableOnce.Do(tryInitTables)
+	}
 	return ret, nil
 }
 

@@ -24,6 +24,6 @@ func GetRandomOffsetByNum(count int) time.Duration {
 	if count == 0 {
 		return time.Millisecond
 	}
-	var maxOffsetMicroSec int64 = int64(count) * 200
+	var maxOffsetMicroSec int64 = int64(count) * 100
 	return time.Duration(rand.Int63n(maxOffsetMicroSec)) * time.Microsecond
 }

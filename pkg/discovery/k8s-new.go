@@ -3,14 +3,15 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"sync"
+
 	"github.com/cloudwego/kitex/pkg/klog"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"net/http"
-	"sync"
 )
 
 // 给外部使用，用于指定k8s服务发现的初始化内容
@@ -78,7 +79,9 @@ func newK8sDiscoveryClient(middlewareConfig MiddlewareConfig, registerConfig Reg
 func (k *K8sDiscoveryClient) Register(instance *ServiceInstance) error {
 	klog.Infof("start register, instance:%+v", instance)
 	if k.registerConfig[K8sRegisterConfigHealthcheckPortFieldName] == "" {
-		panic("")
+		//panic("")
+		klog.Warnf("instance:%+v's healthCheckPort is empty", instance)
+		return nil
 	}
 	healthCheckPort := k.registerConfig[K8sRegisterConfigHealthcheckPortFieldName]
 
@@ -128,7 +131,7 @@ func (k *K8sDiscoveryClient) DeRegister(instanceId string) error {
 // 然后把其Endpoint中的所有pod的元信息（包括其提供服务的地址）封装成[]*ServiceInstance返回
 func (k *K8sDiscoveryClient) DiscoverServices(serviceName string) []*ServiceInstance {
 	labelName := serviceName
-	klog.Tracef("start to k8s DiscoverServices")
+	klog.Tracef("start to k8s DiscoverServices:%v", serviceName)
 	instanceList, ok := k.instancesMap.Load(labelName)
 	if ok {
 		return instanceList.([]*ServiceInstance)
@@ -146,13 +149,13 @@ func (k *K8sDiscoveryClient) DiscoverServices(serviceName string) []*ServiceInst
 			Watch: true,
 		})
 		if err != nil {
-			klog.Errorf("DiscoverServices watch error: %v", err)
+			klog.Errorf("DiscoverServices endpoint:%v watch error: %v", labelName, err)
 			return
 		}
 		defer watcher.Stop()
 
 		for event := range watcher.ResultChan() {
-			klog.Infof("discovery fetched event:%+v", event)
+			klog.Infof("discovery:%v, fetched event:%+v", labelName, event)
 
 			endpoints, ok := event.Object.(*corev1.Endpoints)
 			if !ok {
@@ -174,11 +177,11 @@ func (k *K8sDiscoveryClient) DiscoverServices(serviceName string) []*ServiceInst
 				instances := k.getInstancesFromEndpoints(serviceName, endpoints, svc.Labels)
 				k.k8sLabel2K8sService2ServiceInstance[serviceName][svc.Name] = instances
 				k.refreshServiceInstance2SyncMap(serviceName)
-				klog.Infof("discovery refreshServiceInstance2SyncMap:%v", k.k8sLabel2K8sService2ServiceInstance)
+				klog.Infof("[%v-ADD/MOD] discovery refreshServiceInstance2SyncMap:%v", serviceName, k.k8sLabel2K8sService2ServiceInstance)
 			case watch.Deleted:
 				delete(k.k8sLabel2K8sService2ServiceInstance[serviceName], svc.Name)
 				k.refreshServiceInstance2SyncMap(serviceName)
-				klog.Infof("discovery refreshServiceInstance2SyncMap:%v", k.k8sLabel2K8sService2ServiceInstance)
+				klog.Infof("[%v-DEL] discovery refreshServiceInstance2SyncMap:%v", serviceName, k.k8sLabel2K8sService2ServiceInstance)
 			default:
 				klog.Errorf("miss handle event type:%v", event.Type)
 			}

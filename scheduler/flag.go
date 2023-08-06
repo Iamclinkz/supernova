@@ -8,6 +8,7 @@ import (
 )
 
 type SetupConfig struct {
+	InstanceID    string
 	HttpPort      string
 	LogLevel      int
 	DiscoveryType string
@@ -22,8 +23,9 @@ type SetupConfig struct {
 var setupConfig SetupConfig
 
 func init() {
+	flag.StringVar(&setupConfig.InstanceID, "instanceID", "instance-unknown", "instance id")
 	flag.StringVar(&setupConfig.HttpPort, "httpPort", "8080", "http port")
-	flag.IntVar(&setupConfig.LogLevel, "logLevel", 1, "log level")
+	flag.IntVar(&setupConfig.LogLevel, "logLevel", 2, "log level")
 	flag.StringVar(&setupConfig.DiscoveryType, "discoveryType", "consul", "discovery type")
 	flag.StringVar(&setupConfig.ConsulHost, "consulHost", "9.134.5.191", "consul host")
 	flag.StringVar(&setupConfig.ConsulPort, "consulPort", "8500", "consul port")
@@ -36,6 +38,8 @@ func init() {
 	flag.IntVar(&setupConfig.MysqlConf.MaxIdleConnections, "mysqlMaxIdleConn", 16, "MySQL max idle connections")
 	flag.IntVar(&setupConfig.MysqlConf.MaxOpenConnections, "mysqlMaxOpenConn", 128, "MySQL max open connections")
 	flag.StringVar(&setupConfig.K8sNamespace, "k8sNamespace", "supernova", "k8s namespace")
+	flag.StringVar(&setupConfig.OTelConf.CollectorEndpointHost, "otelEndpointHost", "9.134.5.191", "otelCollectorHost")
+	flag.StringVar(&setupConfig.OTelConf.CollectorEndpointPort, "otelEndpointPort", "4317", "otelCollectorPort")
 	flag.Parse()
 	log.Infof("find configs: %+v", setupConfig)
 }
