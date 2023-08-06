@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: http-executor-tagb
+  namespace: supernova
+  labels:
+    #需要同discovery/k8s.go中对应上
+    SupernovaExecutor: "1"
+    SupernovaServiceProtoc: "Grpc"
+    SupernovaServiceExtraConfig: "X-Tag-Glue-Http.X-Tag-Res-TagB"  #对于executor，这里是其拥有的tags
+spec:
+  ports:
+    - protocol: TCP
+      name: grpc
+      port: 7070
+      targetPort: 7070
+  selector:
+    app: http-executor-tagb
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: http-executor-tagb
+  namespace: supernova
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: http-executor-tagb
+  template:
+    metadata:
+      labels:
+        app: http-executor-tagb
+    spec:
+      containers:
+      - name: http-executor-tagb
+        image: exiasun/http-executor-tagb:latest
+        imagePullPolicy: Never
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+          initialDelaySeconds: 5
+          periodSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
+          initialDelaySeconds: 3
+          periodSeconds: 3

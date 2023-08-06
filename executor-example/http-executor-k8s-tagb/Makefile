@@ -1,0 +1,26 @@
+RUN_NAME := http-executor
+IMAGE_NAME := exiasun/http-executor-tagb
+TAG := latest
+YAML := "../../deployment/executor-example/http-executor-tagb.yaml"
+
+image-runnable:
+	@echo "--------------------------------------Building ${RUN_NAME} binary..."
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/dockerBin/${RUN_NAME} *.go
+
+docker-build:
+	@echo "--------------------------------------Building docker image ${IMAGE_NAME}:${TAG}"
+	docker build -t ${IMAGE_NAME}:${TAG} .
+	- @docker rmi $(docker images --filter "dangling=true" -q)
+
+minikube-load:
+	@echo "--------------------------------------Load image to minikube: ${IMAGE_NAME}:${TAG}"
+	- minikube kubectl -- delete -f ${YAML}
+# sleep 20
+# - minikube ssh docker rmi ${IMAGE_NAME}:${TAG}
+# minikube image load ${IMAGE_NAME}:${TAG} --overwrite=true
+# minikube kubectl -- apply -f ${YAML}
+
+k8s: image-runnable docker-build minikube-load
+
+clean:
+	rm -rf build/*
