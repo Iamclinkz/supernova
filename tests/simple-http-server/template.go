@@ -52,7 +52,7 @@ const mainViewTemplate = `
 		<td>{{.ServeConfig.TriggerCount}}</td>
 	</tr>
 	<tr>
-		<td>允许任务成功后仍然请求</td>
+		<td>异常语义：最少执行一次</td>
 		<td>{{.ServeConfig.AllowDuplicateCalled}}</td>
 	</tr>
 	<tr>

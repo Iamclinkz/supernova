@@ -173,12 +173,12 @@ func (e *ExecuteService) work() {
 			after := func(request *api.RunJobRequest, response *api.RunJobResponse, executeTime time.Duration) {
 				e.statisticsService.RecordExecuteTime(executeTime)
 				ok := e.timeWheel.Remove(task)
-				//这里如果不ok，说明时间轮定时器中的内容没了，说明本次执行超时，定时器触发，且一定已经返回了一个超时错误。
-				//这种情况下，如果本次虽然超时，但是任务执行成功了，则扔回去一个成功回复。而如果执行失败，就不再扔回去失败回复了。
-				//反正已经是扣除失败次数了
 				if ok {
 					e.jobResponseCh <- response
 				} else {
+					//这里如果不ok，说明时间轮定时器中的内容没了，说明本次执行超时，定时器触发，且一定已经返回了一个超时错误。
+					//这种情况下，如果本次虽然超时，但是任务执行成功了，则扔回去一个成功回复。而如果执行失败，就不再扔回去失败回复了。
+					//反正已经是扣除失败次数了
 					if doTrace {
 						executeSpan.RecordError(errors.New("execute overtime"))
 						executeSpan.End()
@@ -191,6 +191,7 @@ func (e *ExecuteService) work() {
 				}
 				e.notifyOnFinishExecute(jobRequest, response)
 			}
+
 			param := &ProcessJobParam{
 				traceCtx:   workCtx,
 				jobRequest: jobRequest,
