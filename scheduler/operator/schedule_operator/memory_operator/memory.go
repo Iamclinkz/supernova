@@ -395,7 +395,7 @@ func (m *MemoryOperator) FetchRecentTriggers(ctx context.Context, maxCount int, 
 		return false
 	})
 
-	klog.Errorf("FetchRecentTriggers:%v", len(ret))
+	//klog.Errorf("FetchRecentTriggers:%v", len(ret))
 	return ret, nil
 }
 

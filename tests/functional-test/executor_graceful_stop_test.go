@@ -51,7 +51,7 @@ func TestExecutorGracefulStop(t *testing.T) {
 	defer supernovaTest.EndTest()
 
 	httpServer := simple_http_server.NewSimpleHttpServer(&simple_http_server.SimpleHttpServerInitConf{
-		FailRate:              0.00, //10%的概率失败
+		FailRate:              0.10, //10%的概率失败
 		ListeningPort:         util.SimpleWebServerPort,
 		TriggerCount:          TriggerCount,
 		AllowDuplicateCalled:  false,

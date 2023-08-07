@@ -25,14 +25,14 @@ func TestPureRun(t *testing.T) {
 			DoSleep:  true,
 			SleepMin: 50 * time.Millisecond,
 			SleepMax: 100 * time.Millisecond,
-			DoFail:   true,
-			FailRate: 0.5,
+			DoFail:   false,
+			FailRate: 0.0,
 		})
 	defer supernovaTest.EndTest()
 	start := time.Now()
 
 	//5000个Trigger，每个Trigger每隔5执行一次，相当于是每秒执行1000个trigger
-	var triggerCount = 5000
+	var triggerCount = 35000
 
 	//加一个任务
 	if err := util.RegisterJob(util.SchedulerAddress, &model.Job{
