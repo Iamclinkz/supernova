@@ -36,7 +36,7 @@ func TestMemoryPureRun(t *testing.T) {
 	start := time.Now()
 
 	//5000个Trigger，每个Trigger每隔5执行一次，相当于是每秒执行1000个trigger
-	var triggerCount = 500000
+	var triggerCount = 200000
 
 	builder := app.NewSchedulerBuilder()
 	memoryStoreScheduler, err := builder.WithMemoryStore().

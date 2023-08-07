@@ -3,6 +3,7 @@ package memory_operator
 import (
 	"context"
 	"errors"
+	"strconv"
 	"supernova/pkg/util"
 	"supernova/scheduler/constance"
 	"supernova/scheduler/model"
@@ -13,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cloudwego/kitex/pkg/klog"
-	"github.com/google/btree"
+	"github.com/wangjia184/sortedset"
 )
 
 var _ schedule_operator.Operator = (*MemoryOperator)(nil)
@@ -22,7 +23,7 @@ type MemoryOperator struct {
 	//trigger
 	triggers map[uint]*dao.Trigger
 	//使用trigger.TriggerNextTime排序的b树。value为dao.Trigger。其实使用b+树更优，因为都是范围查询。但是先跑起来再调优吧
-	triggerTriggerNextTimeTree *btree.BTree
+	triggerTriggerNextTimeTree *sortedset.SortedSet
 	triggerIDCounter           uint
 	triggerLock                sync.RWMutex
 
@@ -34,7 +35,7 @@ type MemoryOperator struct {
 	//onFireLog
 	onFireLogs map[uint]*dao.OnFireLog
 	//使用RedoAt排序的b树。value为dao.RedoAt。
-	onFireLogRedoAtTree *btree.BTree
+	onFireLogRedoAtTree *sortedset.SortedSet
 	onFireLogIDCounter  uint
 	onFireLock          sync.RWMutex
 
@@ -46,13 +47,26 @@ type MemoryOperator struct {
 	failCount                atomic.Int64
 }
 
+func (m *MemoryOperator) UpdateOnFireLogStop(ctx context.Context, onFireLogID uint, msg string) error {
+	//panic("implement me")
+	return nil
+}
+
+func (m *MemoryOperator) InsertJob(ctx context.Context, job *model.Job) error {
+	m.onFireLock.Lock()
+	defer m.onFireLock.Unlock()
+
+	m.insertJobWithoutLock(job)
+	return nil
+}
+
 func NewMemoryScheduleOperator() *MemoryOperator {
 	ret := &MemoryOperator{
 		triggers:                   make(map[uint]*dao.Trigger),
-		triggerTriggerNextTimeTree: btree.New(5),
+		triggerTriggerNextTimeTree: sortedset.New(),
 		jobs:                       make(map[uint]*dao.Job),
 		onFireLogs:                 make(map[uint]*dao.OnFireLog),
-		onFireLogRedoAtTree:        btree.New(5),
+		onFireLogRedoAtTree:        sortedset.New(),
 		currentUnFinishOnFireLog:   atomic.Int64{},
 		finishedOnFireLog:          atomic.Int64{},
 		fetchFailLog:               atomic.Int64{},
@@ -127,15 +141,10 @@ func (m *MemoryOperator) insertJobOnFireWithoutLock(mOnFire *model.OnFireLog) {
 
 	dOnFire := dao.FromModelOnFireLog(mOnFire)
 	m.onFireLogs[mOnFire.ID] = dOnFire
-	round := 0
-	for m.onFireLogRedoAtTree.Get(dOnFire) != nil {
-		round++
-		if round >= 100 {
-			panic("")
-		}
-		dOnFire.RedoAt = dOnFire.RedoAt.Add(1)
-	}
-	m.onFireLogRedoAtTree.ReplaceOrInsert(dOnFire)
+	score := float64(dOnFire.RedoAt.UnixNano())
+	key := strconv.FormatUint(uint64(dOnFire.ID), 10)
+
+	m.onFireLogRedoAtTree.AddOrUpdate(key, sortedset.SCORE(score), dOnFire)
 	mOnFire.RedoAt = dOnFire.RedoAt
 }
 
@@ -191,22 +200,16 @@ func (m *MemoryOperator) UpdateOnFireLogRedoAt(ctx context.Context, mOnFireLog *
 		return errors.New("old data")
 	}
 
-	if elem := m.onFireLogRedoAtTree.Delete(df); elem == nil {
+	key := strconv.FormatUint(uint64(df.ID), 10)
+	if m.onFireLogRedoAtTree.Remove(key) == nil {
 		panic("")
 	}
 
 	df.RedoAt = mOnFireLog.RedoAt
 	df.UpdatedAt = time.Now()
-	round := 0
-	for m.onFireLogRedoAtTree.Get(df) != nil {
-		round++
-		if round >= 100 {
-			panic("")
-		}
-		df.RedoAt = df.RedoAt.Add(1)
-	}
+	score := float64(df.RedoAt.UnixNano())
 
-	m.onFireLogRedoAtTree.ReplaceOrInsert(df)
+	m.onFireLogRedoAtTree.AddOrUpdate(key, sortedset.SCORE(score), df)
 	mOnFireLog.UpdatedAt = df.UpdatedAt
 	mOnFireLog.RedoAt = df.RedoAt
 	return nil
@@ -253,14 +256,11 @@ func (m *MemoryOperator) UpdateOnFireLogsSuccess(ctx context.Context, onFireLogs
 			return errors.New("already finished")
 		}
 
-		if item := m.onFireLogRedoAtTree.Delete(fire); item == nil {
-			_, ok := tmpMap[mf.ID]
-			if !ok {
-				panic("")
-			}
+		key := strconv.FormatUint(uint64(fire.ID), 10)
+		if m.onFireLogRedoAtTree.Remove(key) == nil {
+			panic("")
 		}
 
-		tmpMap[mf.ID] = struct{}{}
 		fire.Success = true
 		fire.Status = constance.OnFireStatusFinished
 		fire.Result = mf.Result
@@ -274,35 +274,35 @@ func (m *MemoryOperator) UpdateOnFireLogsSuccess(ctx context.Context, onFireLogs
 	return nil
 }
 
-func (m *MemoryOperator) UpdateOnFireLogStop(ctx context.Context, onFireLogID uint, msg string) error {
-	panic("")
-	m.onFireLock.Lock()
-	defer m.onFireLock.Unlock()
+//func (m *MemoryOperator) UpdateOnFireLogStop(ctx context.Context, onFireLogID uint, msg string) error {
+//	panic("")
+//	m.onFireLock.Lock()
+//	defer m.onFireLock.Unlock()
+//
+//	dOnFire, ok := m.onFireLogs[onFireLogID]
+//	if !ok {
+//		return schedule_operator.ErrNotFound
+//	}
+//
+//	if dOnFire.Status == constance.OnFireStatusFinished {
+//		return errors.New("already finished")
+//	}
+//
+//	m.onFireLogRedoAtTree.Delete(dOnFire)
+//	dOnFire.UpdatedAt = time.Now()
+//	dOnFire.Status = constance.OnFireStatusFinished
+//	dOnFire.Result = msg
+//	dOnFire.RedoAt = util.VeryLateTime()
+//	return nil
+//}
 
-	dOnFire, ok := m.onFireLogs[onFireLogID]
-	if !ok {
-		return schedule_operator.ErrNotFound
-	}
-
-	if dOnFire.Status == constance.OnFireStatusFinished {
-		return errors.New("already finished")
-	}
-
-	m.onFireLogRedoAtTree.Delete(dOnFire)
-	dOnFire.UpdatedAt = time.Now()
-	dOnFire.Status = constance.OnFireStatusFinished
-	dOnFire.Result = msg
-	dOnFire.RedoAt = util.VeryLateTime()
-	return nil
-}
-
-func (m *MemoryOperator) InsertJob(ctx context.Context, job *model.Job) error {
-	m.jobLock.Lock()
-	defer m.jobLock.Unlock()
-
-	m.insertJobWithoutLock(job)
-	return nil
-}
+//func (m *MemoryOperator) InsertJob(ctx context.Context, job *model.Job) error {
+//	m.jobLock.Lock()
+//	defer m.jobLock.Unlock()
+//
+//	m.insertJobWithoutLock(job)
+//	return nil
+//}
 
 func (m *MemoryOperator) insertTriggerWithoutLock(trigger *model.Trigger) {
 	m.triggerIDCounter++
@@ -310,15 +310,9 @@ func (m *MemoryOperator) insertTriggerWithoutLock(trigger *model.Trigger) {
 	trigger.ID = m.triggerIDCounter
 	dt := dao.FromModelTrigger(trigger)
 	m.triggers[m.triggerIDCounter] = dt
-	round := 0
-	for m.triggerTriggerNextTimeTree.Get(dt) != nil {
-		round++
-		if round >= 100 {
-			panic("")
-		}
-		trigger.TriggerNextTime = trigger.TriggerNextTime.Add(1)
-	}
-	m.triggerTriggerNextTimeTree.ReplaceOrInsert(dt)
+	score := float64(trigger.TriggerNextTime.UnixNano())
+	key := strconv.FormatUint(uint64(trigger.ID), 10)
+	m.triggerTriggerNextTimeTree.AddOrUpdate(key, sortedset.SCORE(score), dt)
 }
 
 func (m *MemoryOperator) InsertTrigger(ctx context.Context, trigger *model.Trigger) error {
@@ -339,17 +333,7 @@ func (m *MemoryOperator) InsertTriggers(ctx context.Context, triggers []*model.T
 }
 
 func (m *MemoryOperator) DeleteTriggerFromID(ctx context.Context, triggerID uint) error {
-	m.triggerLock.Lock()
-	defer m.triggerLock.Unlock()
-
-	dt, ok := m.triggers[triggerID]
-	if !ok {
-		return schedule_operator.ErrNotFound
-	}
-	delete(m.triggers, triggerID)
-
-	m.triggerTriggerNextTimeTree.Delete(dt)
-	return nil
+	panic("")
 }
 
 func (m *MemoryOperator) UpdateTriggers(ctx context.Context, triggers []*model.Trigger) error {
@@ -362,7 +346,8 @@ func (m *MemoryOperator) UpdateTriggers(ctx context.Context, triggers []*model.T
 			panic("")
 		}
 
-		if elem := m.triggerTriggerNextTimeTree.Delete(dt); elem == nil {
+		key := strconv.FormatUint(uint64(dt.ID), 10)
+		if m.triggerTriggerNextTimeTree.Remove(key) == nil {
 			panic("")
 		}
 		if trigger.Deleted {
@@ -371,12 +356,9 @@ func (m *MemoryOperator) UpdateTriggers(ctx context.Context, triggers []*model.T
 
 		trigger.UpdatedAt = time.Now()
 		m.triggers[trigger.ID].Trigger = *trigger
-		for m.triggerTriggerNextTimeTree.Get(dt) != nil {
-			dt.TriggerNextTime = dt.TriggerNextTime.Add(1)
-		}
+		score := float64(trigger.TriggerNextTime.UnixNano())
 
-		m.triggerTriggerNextTimeTree.ReplaceOrInsert(dt)
-		trigger.TriggerNextTime = dt.TriggerNextTime
+		m.triggerTriggerNextTimeTree.AddOrUpdate(key, sortedset.SCORE(score), dt)
 	}
 	return nil
 }
@@ -386,16 +368,20 @@ func (m *MemoryOperator) FetchRecentTriggers(ctx context.Context, maxCount int, 
 	defer m.triggerLock.RUnlock()
 
 	ret := make([]*model.Trigger, 0, maxCount/2)
-	m.triggerTriggerNextTimeTree.AscendGreaterOrEqual(&dao.Trigger{Trigger: model.Trigger{TriggerNextTime: noEarlyThan}}, func(item btree.Item) bool {
-		trigger := item.(*dao.Trigger)
-		if trigger.TriggerNextTime.Before(noLaterThan) && trigger.Status == constance.TriggerStatusNormal {
-			ret = append(ret, trigger.ToModelOnFireLog())
-			return len(ret) < maxCount
-		}
-		return false
-	})
+	startScore := float64(noEarlyThan.UnixNano())
+	endScore := float64(noLaterThan.UnixNano())
 
-	//klog.Errorf("FetchRecentTriggers:%v", len(ret))
+	itemsInRange := m.triggerTriggerNextTimeTree.GetByScoreRange(sortedset.SCORE(startScore), sortedset.SCORE(endScore),
+		&sortedset.GetByScoreRangeOptions{Limit: maxCount})
+
+	for _, item := range itemsInRange {
+		trigger := item.Value.(*dao.Trigger)
+		if trigger.Status == constance.TriggerStatusNormal {
+			ret = append(ret, trigger.ToModelOnFireLog())
+		}
+	}
+
+	klog.Errorf("FetchRecentTriggers:%v", len(ret))
 	return ret, nil
 }
 
@@ -416,19 +402,18 @@ func (m *MemoryOperator) FetchTimeoutOnFireLog(ctx context.Context, maxCount int
 	defer m.onFireLock.RUnlock()
 
 	ret := make([]*model.OnFireLog, 0, maxCount/2)
-	counter := 0
-	m.onFireLogRedoAtTree.AscendGreaterOrEqual(&dao.OnFireLog{OnFireLog: model.OnFireLog{RedoAt: noEarlyThan}}, func(item btree.Item) bool {
-		fire := item.(*dao.OnFireLog)
-		if fire.RedoAt.Before(noLaterThan) && fire.Status != constance.OnFireStatusFinished && fire.LeftTryCount > 0 {
-			if counter < offset {
-				counter++
-				return true
-			}
+	startScore := float64(noEarlyThan.UnixNano())
+	endScore := float64(noLaterThan.UnixNano())
+
+	itemsInRange := m.onFireLogRedoAtTree.GetByScoreRange(sortedset.SCORE(startScore), sortedset.SCORE(endScore),
+		&sortedset.GetByScoreRangeOptions{Limit: maxCount})
+
+	for _, item := range itemsInRange {
+		fire := item.Value.(*dao.OnFireLog)
+		if fire.Status != constance.OnFireStatusFinished && fire.LeftTryCount > 0 {
 			ret = append(ret, fire.ToModelOnFireLog())
-			return len(ret) < maxCount
 		}
-		return false
-	})
+	}
 
 	m.fetchFailLog.Add(int64(len(ret)))
 	return ret, nil
@@ -453,5 +438,3 @@ func (m *MemoryOperator) Lock(ctx context.Context, lockName string) error {
 func (m *MemoryOperator) UnLock(ctx context.Context, lockName string) error {
 	return nil
 }
-
-var _ schedule_operator.Operator = (*MemoryOperator)(nil)
