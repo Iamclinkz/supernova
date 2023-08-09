@@ -262,7 +262,7 @@ func (s *StatisticsService) RecordScheduleDelay(delay time.Duration) {
 
 // GetHandleTriggerMaxCount 获取本次最多获取多少条待触发的Trigger
 func (s *StatisticsService) GetHandleTriggerMaxCount() int {
-	return 50000
+	return 20000
 }
 
 // OnFireFail 任务扔给Executor执行失败

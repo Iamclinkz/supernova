@@ -23,7 +23,7 @@ func TestMemoryStore(t *testing.T) {
 
 	start := time.Now()
 
-	var triggerCount = 50000
+	var triggerCount = 500000
 
 	//只开3个Executor，Scheduler手动指定成memory版本的
 	supernovaTest := util.StartTest(0, 3, klog.LevelError, util.StartHttpExecutors, nil)

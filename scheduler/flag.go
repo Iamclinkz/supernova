@@ -2,7 +2,9 @@ package main
 
 import (
 	"flag"
+	"os"
 	"supernova/pkg/conf"
+	"supernova/pkg/util"
 
 	"github.com/cloudwego/kitex/tool/internal_pkg/log"
 )
@@ -41,5 +43,9 @@ func init() {
 	flag.StringVar(&setupConfig.OTelConf.CollectorEndpointHost, "otelEndpointHost", "9.134.5.191", "otelCollectorHost")
 	flag.StringVar(&setupConfig.OTelConf.CollectorEndpointPort, "otelEndpointPort", "4317", "otelCollectorPort")
 	flag.Parse()
+	if util.GetEnv() == "k8s" {
+		//来不及了，先这样吧
+		setupConfig.InstanceID = os.Getenv("HOSTNAME")
+	}
 	log.Infof("find configs: %+v", setupConfig)
 }

@@ -81,7 +81,7 @@ func TestForceKillScheduler(t *testing.T) {
 	}()
 
 	//等待SchedulerBin启动
-	time.Sleep(1 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	if err = util.RegisterJob(util.SchedulerAddress, &model.Job{
 		Name:                  "test-http-job",
